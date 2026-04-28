@@ -32,7 +32,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. `MIT` `LICENSE` file is present at the repo root
   5. Lint, type-check, and test scripts run from the repo root and pass on a clean checkout
 **Plans**: 3 plans
-- [ ] 01-01-PLAN.md — Repo bootstrap: pnpm workspace + tsconfig.base + Biome + Vitest + dependency-cruiser + LICENSE + per-package skeletons (FND-01, FND-02 staging, FND-03 staging, FND-05, FND-06)
+- [x] 01-01-PLAN.md — Repo bootstrap: pnpm workspace + tsconfig.base + Biome + Vitest + dependency-cruiser + LICENSE + per-package skeletons (FND-01, FND-02 staging, FND-03 staging, FND-05, FND-06)
 - [ ] 01-02-PLAN.md — DECISIONS.md draft + STOP / await user approval (PRD §16 process gate; PROC-01)
 - [ ] 01-03-PLAN.md — Core library code: NormalizedEvent, AdapterFn, DDL constants, resolveProject + tests (FND-02, FND-03, FND-04) — gated on Plan 02 approval
 
@@ -104,7 +104,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundations & Decisions Gate | 0/TBD | Not started | - |
+| 1. Foundations & Decisions Gate | 1/3 | In progress | - |
 | 2. Agent Adapters in `core` | 0/TBD | Not started | - |
 | 3. Hook Binary, Store & Install | 0/TBD | Not started | - |
 | 4. Desktop Shell, Today View & CLI | 0/TBD | Not started | - |

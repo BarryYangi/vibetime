@@ -17,12 +17,12 @@ Each requirement maps to exactly one roadmap phase. See `## Traceability` below.
 
 ### Foundation (Monorepo, `core` package, tooling)
 
-- [ ] **FND-01**: Monorepo with three packages — `core`, `hook`, `desktop` — established and resolvable from the repo root. `core` has zero UI / runtime / `fs` / DB-client dependencies (enforced by lint or test).
-- [ ] **FND-02**: `core` exports the locked `NormalizedEvent` interface and the adapter signature `(rawPayload, eventName) => NormalizedEvent | null` (pure, never throws).
-- [ ] **FND-03**: `core` exports SQL builders / DDL constants matching the locked schema (events + open_turns + indices) per PRD §6, with `schema_version` constant fixed at `1`.
+- [x] **FND-01**: Monorepo with three packages — `core`, `hook`, `desktop` — established and resolvable from the repo root. `core` has zero UI / runtime / `fs` / DB-client dependencies (enforced by lint or test).
+- [~] **FND-02**: `core` exports the locked `NormalizedEvent` interface and the adapter signature `(rawPayload, eventName) => NormalizedEvent | null` (pure, never throws). _(staged in Plan 01-01: zero-dep canvas ready; library code lands in Plan 01-03 after §16 gate.)_
+- [~] **FND-03**: `core` exports SQL builders / DDL constants matching the locked schema (events + open_turns + indices) per PRD §6, with `schema_version` constant fixed at `1`. _(staged in Plan 01-01: canvas ready; constants land in Plan 01-03.)_
 - [ ] **FND-04**: `core` exports a project-resolution function implementing first-match: user alias → git remote (owner/repo, both SSH and HTTPS, strip `.git`) → cwd basename → `"_unknown"` fallback. Function never throws.
-- [ ] **FND-05**: Lint, type-check, and test scripts run from the repo root and pass on a clean checkout.
-- [ ] **FND-06**: Repository ships an `MIT` `LICENSE` file at the root.
+- [x] **FND-05**: Lint, type-check, and test scripts run from the repo root and pass on a clean checkout.
+- [x] **FND-06**: Repository ships an `MIT` `LICENSE` file at the root.
 
 ### Adapters (in `core`)
 
@@ -168,12 +168,12 @@ Each v1 requirement maps to exactly one phase. Updated as roadmap evolves.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | PROC-01 | Phase 1 | Pending |
-| FND-01 | Phase 1 | Pending |
-| FND-02 | Phase 1 | Pending |
-| FND-03 | Phase 1 | Pending |
+| FND-01 | Phase 1 | Done (Plan 01-01) |
+| FND-02 | Phase 1 | Staged in 01-01; library code in 01-03 |
+| FND-03 | Phase 1 | Staged in 01-01; library code in 01-03 |
 | FND-04 | Phase 1 | Pending |
-| FND-05 | Phase 1 | Pending |
-| FND-06 | Phase 1 | Pending |
+| FND-05 | Phase 1 | Done (Plan 01-01) |
+| FND-06 | Phase 1 | Done (Plan 01-01) |
 | ADPT-01 | Phase 2 | Pending |
 | ADPT-02 | Phase 2 | Pending |
 | ADPT-03 | Phase 2 | Pending |
