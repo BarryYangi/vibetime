@@ -15,9 +15,7 @@ const EVENT_TYPES: Readonly<Record<string, EventType>> = {
 }
 
 // Required for turn events: conversation_id (session) + generation_id (turn).
-function hasRequiredTurn(
-  p: unknown,
-): p is { conversation_id: string; generation_id: string } {
+function hasRequiredTurn(p: unknown): p is { conversation_id: string; generation_id: string } {
   return (
     p !== null &&
     typeof p === 'object' &&
@@ -92,9 +90,13 @@ export const adaptCursor: AdapterFn = (rawPayload, eventName) => {
     const cwd = Array.isArray(ws) && typeof ws[0] === 'string' ? ws[0] : ''
 
     // session_id ← conversation_id; turn_id ← generation_id (turn-only).
+    // Two-step `unknown` cast on the generation_id branch so TS does not
+    // complain about the intersection with the session-narrowed
+    // `{ conversation_id }` shape — the runtime hasRequiredTurn guard above
+    // already proves the field is present.
     const session_id = (rawPayload as { conversation_id: string }).conversation_id
     const turn_id = isTurn
-      ? (rawPayload as { generation_id: string }).generation_id
+      ? (rawPayload as unknown as { generation_id: string }).generation_id
       : undefined
 
     // V0 meta whitelist (RESEARCH §G.8): model on session_start (per the

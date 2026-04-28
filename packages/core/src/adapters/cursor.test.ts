@@ -176,10 +176,7 @@ describe('adaptCursor — adversarial inputs (RESEARCH §B Tier-2 + §G)', () =>
 
   it('returns null when generation_id is missing on beforeSubmitPrompt (turn_id required)', () => {
     expect(
-      adaptCursor(
-        { conversation_id: 'abc', workspace_roots: ['/x'] },
-        'beforeSubmitPrompt',
-      ),
+      adaptCursor({ conversation_id: 'abc', workspace_roots: ['/x'] }, 'beforeSubmitPrompt'),
     ).toBeNull()
   })
 

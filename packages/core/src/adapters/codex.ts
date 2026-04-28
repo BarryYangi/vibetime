@@ -28,9 +28,7 @@ const EVENT_TYPES: Readonly<Record<string, EventType>> = {
 }
 
 // For turn-scoped events Codex requires session_id + turn_id + cwd.
-function hasRequiredTurn(
-  p: unknown,
-): p is { session_id: string; turn_id: string; cwd: string } {
+function hasRequiredTurn(p: unknown): p is { session_id: string; turn_id: string; cwd: string } {
   return (
     p !== null &&
     typeof p === 'object' &&
@@ -92,7 +90,10 @@ export const adaptCodex: AdapterFn = (rawPayload, eventName) => {
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
     // Codex turn_id is vendor-provided (NOT derived). Only present on turns.
-    const turn_id = isTurn ? (rawPayload as { turn_id: string }).turn_id : undefined
+    // Two-step `unknown` cast so TS does not complain about the intersection
+    // with the session-narrowed `{ session_id; cwd }` shape — the runtime
+    // hasRequiredTurn guard above already proves the field is present.
+    const turn_id = isTurn ? (rawPayload as unknown as { turn_id: string }).turn_id : undefined
 
     // V0 meta whitelist (RESEARCH §G.8): model + source on session_start.
     // No session_end branch — Codex doesn't emit it. Drop stop_hook_active /

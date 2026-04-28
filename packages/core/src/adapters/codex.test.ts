@@ -108,9 +108,7 @@ describe('adaptCodex — adversarial inputs (RESEARCH §B Tier-2 + §G)', () => 
   })
 
   it('returns null when session_id is wrong type', () => {
-    expect(
-      adaptCodex({ session_id: 42, turn_id: 't-1', cwd: '/x' }, 'UserPromptSubmit'),
-    ).toBeNull()
+    expect(adaptCodex({ session_id: 42, turn_id: 't-1', cwd: '/x' }, 'UserPromptSubmit')).toBeNull()
   })
 
   it('returns null when turn_id is missing on UserPromptSubmit (turn events require turn_id)', () => {
