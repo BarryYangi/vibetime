@@ -18,9 +18,9 @@ Each requirement maps to exactly one roadmap phase. See `## Traceability` below.
 ### Foundation (Monorepo, `core` package, tooling)
 
 - [x] **FND-01**: Monorepo with three packages — `core`, `hook`, `desktop` — established and resolvable from the repo root. `core` has zero UI / runtime / `fs` / DB-client dependencies (enforced by lint or test).
-- [~] **FND-02**: `core` exports the locked `NormalizedEvent` interface and the adapter signature `(rawPayload, eventName) => NormalizedEvent | null` (pure, never throws). _(staged in Plan 01-01: zero-dep canvas ready; library code lands in Plan 01-03 after §16 gate.)_
-- [~] **FND-03**: `core` exports SQL builders / DDL constants matching the locked schema (events + open_turns + indices) per PRD §6, with `schema_version` constant fixed at `1`. _(staged in Plan 01-01: canvas ready; constants land in Plan 01-03.)_
-- [ ] **FND-04**: `core` exports a project-resolution function implementing first-match: user alias → git remote (owner/repo, both SSH and HTTPS, strip `.git`) → cwd basename → `"_unknown"` fallback. Function never throws.
+- [x] **FND-02**: `core` exports the locked `NormalizedEvent` interface and the adapter signature `(rawPayload, eventName) => NormalizedEvent | null` (pure, never throws). _(shipped in Plan 01-03 commit `c0c8a60` — `packages/core/src/events.ts`.)_
+- [x] **FND-03**: `core` exports SQL builders / DDL constants matching the locked schema (events + open_turns + indices) per PRD §6, with `schema_version` constant fixed at `1`. _(shipped in Plan 01-03 commit `c0c8a60` — `packages/core/src/schema.ts`; byte-exact, no IF-NOT-EXISTS clause.)_
+- [x] **FND-04**: `core` exports a project-resolution function implementing first-match: user alias → git remote (owner/repo, both SSH and HTTPS, strip `.git`) → cwd basename → `"_unknown"` fallback. Function never throws. _(shipped in Plan 01-03 commit `988c553` — `packages/core/src/project.ts`; 13 parseGitRemoteUrl + 11 resolveProject specs all green.)_
 - [x] **FND-05**: Lint, type-check, and test scripts run from the repo root and pass on a clean checkout.
 - [x] **FND-06**: Repository ships an `MIT` `LICENSE` file at the root.
 
