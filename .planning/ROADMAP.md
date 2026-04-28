@@ -46,7 +46,8 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Calling the Cursor adapter likewise produces correct `NormalizedEvent`s using `conversation_id` (session), `generation_id` (turn), and `workspace_roots[0]` (cwd); the `workspace_roots[1..]` known-limitation is documented in adapter source
   4. Every adapter returns `null` (never throws) on malformed / unrelated payloads; an adversarial-input test suite covers missing fields, wrong types, and unknown event names
   5. Adapter unit tests use fixtures derived from the PRD Appendix payload examples and run in CI
-**Plans**: TBD
+**Plans**: 1 plan
+- [ ] 02-01-PLAN.md — Three adapters (Claude Code / Codex / Cursor) + adversarial fixtures + seeded property test + barrel + public API re-export (ADPT-01, ADPT-02, ADPT-03, ADPT-04)
 
 ### Phase 3: Hook Binary, Store & Install
 **Goal**: Close the data-capture loop — a real Claude Code / Codex / Cursor session writes correct `events` rows to `~/.vibetime/data.db`, with crash recovery, hook silence, and idempotent install commands.
