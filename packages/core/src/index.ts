@@ -1,3 +1,5 @@
-// Phase 1 placeholder. Real exports (NormalizedEvent, AdapterFn, DDL_*, resolveProject)
-// arrive in Plan 03 after the §16 DECISIONS.md gate clears.
-export {}
+// Public API of @vibetime/core. Imported by `hook` and `desktop` (Phase 3+).
+export type { AdapterFn, Agent, EventType, NormalizedEvent } from './events.js'
+export type { ResolveProjectInput } from './project.js'
+export { parseGitRemoteUrl, resolveProject } from './project.js'
+export { DDL_EVENTS, DDL_INDICES, DDL_OPEN_TURNS, SCHEMA_VERSION } from './schema.js'
