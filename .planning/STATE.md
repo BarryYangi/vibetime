@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-04-28)
 ## Current Position
 
 Phase: 1 of 6 (Foundations & Decisions Gate)
-Plan: 1 of 3 complete (01-01 done; 01-02 next — DECISIONS.md gate, autonomous: false)
-Status: Plan 01-01 shipped — monorepo + tooling green. Awaiting Plan 01-02 (DECISIONS.md draft + user approval).
-Last activity: 2026-04-28 — Plan 01-01 complete: pnpm 9.9.0 workspace + TS 6 project refs + Biome 2.4.13 + Vitest 3.2.4 (devition from RESEARCH §D's 4.1.5 — Node 22.7 require(esm) bridge) + dep-cruiser 17.3.10 + MIT LICENSE; pnpm run ci green; FND-01 / FND-05 / FND-06 satisfied; FND-02 / FND-03 staged.
+Plan: 2 of 3 complete (01-01 + 01-02 done; 01-03 next — core library code, gate cleared)
+Status: PRD §16 gate cleared. DECISIONS.md approved as-is (11 proposed → approved). Plan 01-03 unblocked.
+Last activity: 2026-04-28 — Plan 01-02 complete: DECISIONS.md drafted + user approved; PROC-01 satisfied. Plan 01-01 actuals reflected in D-TEST (Vitest 3.2.4 pin) / D-DEPCHECK (rule scoped to ^packages/core/src/) / D-CI (pnpm run ci) rationales.
 
 Progress: [█░░░░░░░░░] ~6% (1/16 plans estimated; tracked at phase granularity below)
 
