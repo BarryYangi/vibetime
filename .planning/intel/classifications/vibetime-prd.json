@@ -1,0 +1,38 @@
+{
+  "source_path": "/Users/barry/Documents/Project/i/vibetime/vibetime-prd.md",
+  "type": "PRD",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "vibetime — Product Requirements",
+  "summary": "Product requirements for vibetime, a local-first multi-agent coding-time tracker shipped as an Electron desktop app plus a Bun-compiled CLI hook binary for macOS arm64.",
+  "scope": [
+    "vibetime desktop application",
+    "vibetime-hook CLI binary",
+    "Claude Code adapter",
+    "Codex CLI adapter",
+    "Cursor adapter",
+    "SQLite local store (events, open_turns)",
+    "Today view",
+    "Live view",
+    "History view (calendar heatmap, project trends)",
+    "Menubar widget",
+    "CLI surface (install, today, project, export, version)",
+    "Project name resolution",
+    "Crash recovery / stale sweep",
+    "Configuration filesystem (~/.vibetime)",
+    "macOS signing and notarization",
+    "Monorepo packages: core / hook / desktop"
+  ],
+  "cross_refs": [
+    "https://coss.com/ui/docs",
+    "DECISIONS.md",
+    "desktop/src/charts/theme.ts",
+    "~/.codex/config.toml",
+    "~/.vibetime/config.toml",
+    "~/.vibetime/hook.log",
+    "~/.vibetime/data.db"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": "Manifest declared PRD; treated as authoritative. Document is hybrid in nature: contains a PRD core (§1-4 product/users/use-cases/scope, §14 acceptance criteria, §15 open decisions) plus heavy ADR-like locked decisions (§5), SPEC-like data model (§6), hook runtime constraints (§7), agent hook mappings (§8), and CLI surface (§11). Synthesizer should treat §5 locked technical decisions as locked decision candidates (highest precedence), §6/§7/§8/§12 as technical constraints, §14 as acceptance-criteria requirements, and §15/§16 as open questions / delegated decisions."
+}
