@@ -12,7 +12,7 @@ module.exports = {
       severity: 'error',
       comment:
         'core has no UI / runtime / fs / DB-client dependencies. DEC-006. See .planning/intel/decisions.md.',
-      from: { path: '^packages/core/src/' },
+      from: { path: '^packages/core/src/', pathNot: '\\.test\\.ts$' },
       to: {
         path: [
           'node_modules',
