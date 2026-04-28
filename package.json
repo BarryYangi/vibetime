@@ -13,7 +13,7 @@
     "typecheck": "tsc -b",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "test": "vitest run",
+    "test": "NODE_OPTIONS=--experimental-require-module vitest run",
     "depcheck": "depcruise --config .dependency-cruiser.cjs packages",
     "verify:core-zero-deps": "node -e \"const p=require('./packages/core/package.json');if(Object.keys(p.dependencies||{}).length){console.error('core must have empty dependencies');process.exit(1)}\"",
     "ci": "pnpm typecheck && pnpm lint && pnpm test && pnpm depcheck && pnpm verify:core-zero-deps"
@@ -21,7 +21,7 @@
   "devDependencies": {
     "typescript": "^6.0.3",
     "@biomejs/biome": "^2.4.13",
-    "vitest": "^4.1.5",
+    "vitest": "^3.2.4",
     "dependency-cruiser": "^17.3.10",
     "@types/node": "^22"
   }

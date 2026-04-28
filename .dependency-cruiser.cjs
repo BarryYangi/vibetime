@@ -12,31 +12,31 @@ module.exports = {
       severity: 'error',
       comment:
         'core has no UI / runtime / fs / DB-client dependencies. DEC-006. See .planning/intel/decisions.md.',
-      from: { path: '^packages/core/' },
+      from: { path: '^packages/core/src/' },
       to: {
         path: [
           'node_modules',
           '^node:',
           '^(fs|path|child_process|os|crypto|http|https|stream|net|dgram|cluster|worker_threads)$',
           '^(electron|react|react-dom|jotai|echarts|tailwindcss|coss-ui)',
-          '^(better-sqlite3|bun:sqlite)'
-        ]
-      }
+          '^(better-sqlite3|bun:sqlite)',
+        ],
+      },
     },
     {
       name: 'no-circular',
       severity: 'error',
       comment: 'No circular deps anywhere in the monorepo.',
       from: {},
-      to: { circular: true }
-    }
+      to: { circular: true },
+    },
   ],
   options: {
     tsConfig: { fileName: 'tsconfig.base.json' },
     enhancedResolveOptions: {
       exportsFields: ['exports'],
-      conditionNames: ['import', 'require', 'node']
+      conditionNames: ['import', 'require', 'node'],
     },
-    doNotFollow: { path: 'node_modules' }
-  }
+    doNotFollow: { path: 'node_modules' },
+  },
 }

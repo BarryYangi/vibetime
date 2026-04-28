@@ -15,7 +15,7 @@ Local-first macOS time tracker for AI coding agents (Claude Code / Codex / Curso
 - `pnpm test`
 - `pnpm depcheck`
 - `pnpm verify:core-zero-deps`
-- `pnpm ci` (all of the above)
+- `pnpm run ci` (all of the above — note: `pnpm ci` is reserved by pnpm itself, so use `pnpm run ci`)
 
 See `.planning/` for the full plan, requirements, and decisions.
 
