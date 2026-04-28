@@ -5,33 +5,34 @@
 See: .planning/PROJECT.md (updated 2026-04-28)
 
 **Core value:** Accurately and silently record agent coding time per project on the developer's machine, then surface it in a visual surface good enough to live on a livestream — with zero network calls.
-**Current focus:** Phase 1 — Foundations & Decisions Gate
+**Current focus:** Phase 2 — Agent Adapters in `core`
 
 ## Current Position
 
-Phase: 1 of 6 (Foundations & Decisions Gate)
-Plan: 3 of 3 complete (01-01 + 01-02 + 01-03 all done; phase implementation work complete — awaits verifier)
-Status: Phase 1 implementation complete. `@vibetime/core` ships locked NormalizedEvent / AdapterFn / DDL constants / resolveProject; pnpm run ci green; FND-01..06 + PROC-01 mechanically satisfied. Phase 2 (Agent Adapters) ready to begin.
-Last activity: 2026-04-28 — Plan 01-03 complete: core library code shipped in TDD mode; 31 tests green; 7 files (5 created + 2 modified); commits c0c8a60 (events+schema) and 988c553 (project+barrel).
+Phase: 2 of 6 (Agent Adapters in `core`)
+Plan: 1 of 1 complete (02-01 done; phase implementation work complete — awaits verifier)
+Status: Phase 2 implementation complete. `@vibetime/core` ships three pure-function vendor adapters (`adaptClaudeCode` / `adaptCodex` / `adaptCursor`) with locked DEC-011 signature, never-throws contract, and seeded mulberry32 property test (3600 mutations / CI run). `pnpm run ci` green; ADPT-01..04 mechanically satisfied. Phase 3 (Hook Binary, Store & Install) ready to begin.
+Last activity: 2026-04-28 — Plan 02-01 complete: three adapters + barrel + seeded property test shipped in TDD mode; 76 tests green (Phase 1 baseline 31 + Phase 2 new 45); 8 files created + 1 modified; commits b966ced (Claude Code), 24ba7aa (Codex), c7803a6 (Cursor), 98c6d7c (barrel + property + public API + CI gate).
 
-Progress: [██░░░░░░░░] ~19% (3/16 plans estimated; tracked at phase granularity below)
+Progress: [███░░░░░░░] ~25% (4/16 plans estimated; tracked at phase granularity below)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 3
+- Total plans completed: 4
 - Average duration: ~6.5 min
-- Total execution time: ~19 min
+- Total execution time: ~26 min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1. Foundations & Decisions Gate | 3 | ~19 min | ~6.5 min |
+| 2. Agent Adapters in `core`     | 1 | ~7 min  | ~7 min   |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (10 min, feat scaffold) → 01-02 (~3 min draft + user gate review, docs) → 01-03 (~6.5 min, feat core library — TDD with 31 tests)
-- Trend: on-track; Phase 1 closed in ~19 min vs 5w budget projection — significant headroom for Phase 2+
+- Last 5 plans: 01-01 (10 min, feat scaffold) → 01-02 (~3 min draft + user gate review, docs) → 01-03 (~6.5 min, feat core library — TDD with 31 tests) → 02-01 (~7 min, feat adapters — TDD with 4 commits, 76 tests)
+- Trend: on-track; Phase 2 closed in ~7 min vs 5w budget projection — significant headroom remains for Phase 3+
 
 *Updated after each plan completion*
 
@@ -55,6 +56,11 @@ Recent decisions affecting current work:
 - POSIX cwd-split (no node:path import; V0 macOS-only per A6)
 - belt-and-braces try/catch on resolveProject — intentional defensive coding for the never-throws contract, documented inline
 - dep-cruiser core-must-be-pure rule scoped to exclude *.test.ts (Plan 01-03 deviation #2 — same scope-narrowing pattern as Plan 01-01 deviation #2)
+- Three vendor adapters (Plan 02-01): per-adapter EVENT_TYPES tables; per-adapter type guards; outer try/catch belt-and-braces mirroring project.ts; project field set to raw cwd, hook layer (Phase 3) post-processes via resolveProject before SQLite insert (RESEARCH §D Option 3 — preserves DEC-011 locked signature)
+- Codex SessionEnd is BANNED at adapter level (Plan 02-01) — EVENT_TYPES omits the key; Phase 3 hook lifecycle synthesizes session_end via process-exit fallback (RESEARCH §G.5)
+- Cursor empty/missing/wrong-type workspace_roots ⇒ project='' (Plan 02-01) — Phase 3 resolveProject promotes to _unknown; preserves the event even when project is unknown
+- Property test uses inline mulberry32 seed=42 (Plan 02-01) — reproducible across runs; no fast-check dep needed for V0 fuzz scale
+- Two-step `as unknown as` cast on adapter turn_id branches (Plan 02-01 deviation) — TS2352 fix when both turn-narrowed and session-narrowed shapes converge after if/else; runtime guard already proves the field is present
 
 ### Pending Todos
 
@@ -78,6 +84,6 @@ None yet. (Phase 1 must produce DECISIONS.md before Phase 1 implementation can a
 
 ## Session Continuity
 
-Last session: 2026-04-28 (Plan 01-03 executed in sequential mode; commits c0c8a60 + 988c553)
-Stopped at: Phase 1 implementation complete. `pnpm run ci` exits 0; FND-01..06 + PROC-01 mechanically satisfied; @vibetime/core public API stable.
-Resume file: Phase 1 verifier (or directly Phase 2 — Agent Adapters in core)
+Last session: 2026-04-28 (Plan 02-01 executed in sequential mode; commits b966ced + 24ba7aa + c7803a6 + 98c6d7c)
+Stopped at: Phase 2 implementation complete. `pnpm run ci` exits 0; ADPT-01..04 mechanically satisfied; @vibetime/core public API now exports adaptClaudeCode / adaptCodex / adaptCursor.
+Resume file: Phase 2 verifier (or directly Phase 3 — Hook Binary, Store & Install)

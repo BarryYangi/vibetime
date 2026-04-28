@@ -26,10 +26,10 @@ Each requirement maps to exactly one roadmap phase. See `## Traceability` below.
 
 ### Adapters (in `core`)
 
-- [ ] **ADPT-01**: Claude Code adapter maps `UserPromptSubmit` / `Stop` / `SessionStart` / `SessionEnd` raw payloads to `NormalizedEvent | null` per the DEC-011 mapping. Pure; never throws. Returns `null` on unparseable payloads.
-- [ ] **ADPT-02**: Codex adapter maps `UserPromptSubmit` / `Stop` / `SessionStart` raw payloads (using process-exit fallback for session-end since Codex `SessionEnd` is not GA) per DEC-011. Pure; never throws.
-- [ ] **ADPT-03**: Cursor adapter maps `beforeSubmitPrompt` / `stop` / `sessionStart` / `sessionEnd` raw payloads using `workspace_roots[0]` for cwd, `conversation_id` for session, `generation_id` for turn. Pure; never throws.
-- [ ] **ADPT-04**: All three adapters covered by unit tests using fixtures based on PRD Appendix payload examples.
+- [x] **ADPT-01**: Claude Code adapter maps `UserPromptSubmit` / `Stop` / `SessionStart` / `SessionEnd` raw payloads to `NormalizedEvent | null` per the DEC-011 mapping. Pure; never throws. Returns `null` on unparseable payloads.
+- [x] **ADPT-02**: Codex adapter maps `UserPromptSubmit` / `Stop` / `SessionStart` raw payloads (using process-exit fallback for session-end since Codex `SessionEnd` is not GA) per DEC-011. Pure; never throws.
+- [x] **ADPT-03**: Cursor adapter maps `beforeSubmitPrompt` / `stop` / `sessionStart` / `sessionEnd` raw payloads using `workspace_roots[0]` for cwd, `conversation_id` for session, `generation_id` for turn. Pure; never throws.
+- [x] **ADPT-04**: All three adapters covered by unit tests using fixtures based on PRD Appendix payload examples.
 
 ### Local Store
 
@@ -174,10 +174,10 @@ Each v1 requirement maps to exactly one phase. Updated as roadmap evolves.
 | FND-04 | Phase 1 | Pending |
 | FND-05 | Phase 1 | Done (Plan 01-01) |
 | FND-06 | Phase 1 | Done (Plan 01-01) |
-| ADPT-01 | Phase 2 | Pending |
-| ADPT-02 | Phase 2 | Pending |
-| ADPT-03 | Phase 2 | Pending |
-| ADPT-04 | Phase 2 | Pending |
+| ADPT-01 | Phase 2 | Done (Plan 02-01) |
+| ADPT-02 | Phase 2 | Done (Plan 02-01) |
+| ADPT-03 | Phase 2 | Done (Plan 02-01) |
+| ADPT-04 | Phase 2 | Done (Plan 02-01) |
 | STORE-01 | Phase 3 | Pending |
 | STORE-02 | Phase 3 | Pending |
 | STORE-03 | Phase 3 | Pending |

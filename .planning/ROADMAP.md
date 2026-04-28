@@ -47,7 +47,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Every adapter returns `null` (never throws) on malformed / unrelated payloads; an adversarial-input test suite covers missing fields, wrong types, and unknown event names
   5. Adapter unit tests use fixtures derived from the PRD Appendix payload examples and run in CI
 **Plans**: 1 plan
-- [ ] 02-01-PLAN.md — Three adapters (Claude Code / Codex / Cursor) + adversarial fixtures + seeded property test + barrel + public API re-export (ADPT-01, ADPT-02, ADPT-03, ADPT-04)
+- [x] 02-01-PLAN.md — Three adapters (Claude Code / Codex / Cursor) + adversarial fixtures + seeded property test + barrel + public API re-export (ADPT-01, ADPT-02, ADPT-03, ADPT-04) — commits b966ced + 24ba7aa + c7803a6 + 98c6d7c
 
 ### Phase 3: Hook Binary, Store & Install
 **Goal**: Close the data-capture loop — a real Claude Code / Codex / Cursor session writes correct `events` rows to `~/.vibetime/data.db`, with crash recovery, hook silence, and idempotent install commands.
@@ -106,7 +106,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundations & Decisions Gate | 3/3 | Implementation complete (awaits verifier) | - |
-| 2. Agent Adapters in `core` | 0/TBD | Not started | - |
+| 2. Agent Adapters in `core` | 1/1 | Implementation complete (awaits verifier) | - |
 | 3. Hook Binary, Store & Install | 0/TBD | Not started | - |
 | 4. Desktop Shell, Today View & CLI | 0/TBD | Not started | - |
 | 5. Live, History, Menubar & Lifecycle | 0/TBD | Not started | - |
