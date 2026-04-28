@@ -31,7 +31,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. `core` exports the locked `NormalizedEvent` type, the adapter signature, the SQL DDL constants for `events` + `open_turns` (matching PRD §6 verbatim), and the project-resolution function (first-match: alias → git remote → cwd basename → `"_unknown"`); the resolution function is unit-tested for SSH and HTTPS git URL forms and for the `_unknown` fallback
   4. `MIT` `LICENSE` file is present at the repo root
   5. Lint, type-check, and test scripts run from the repo root and pass on a clean checkout
-**Plans**: TBD
+**Plans**: 3 plans
+- [ ] 01-01-PLAN.md — Repo bootstrap: pnpm workspace + tsconfig.base + Biome + Vitest + dependency-cruiser + LICENSE + per-package skeletons (FND-01, FND-02 staging, FND-03 staging, FND-05, FND-06)
+- [ ] 01-02-PLAN.md — DECISIONS.md draft + STOP / await user approval (PRD §16 process gate; PROC-01)
+- [ ] 01-03-PLAN.md — Core library code: NormalizedEvent, AdapterFn, DDL constants, resolveProject + tests (FND-02, FND-03, FND-04) — gated on Plan 02 approval
 
 ### Phase 2: Agent Adapters in `core`
 **Goal**: Three pure-function adapters that map vendor hook payloads to `NormalizedEvent` (or `null`), provably never throw, and are fully tested against fixtures.
