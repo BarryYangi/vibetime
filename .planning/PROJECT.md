@@ -20,7 +20,7 @@ Accurately and silently record agent coding time per project on the developer's 
 
 <!-- V0 scope. Source: vibetime-prd.md §4, §10, §11, §14, §16. Full traceable list in REQUIREMENTS.md. -->
 
-- [ ] Three agent adapters (Claude Code, Codex CLI, Cursor) producing `NormalizedEvent`s
+- [x] Three agent adapters (Claude Code, Codex CLI, Cursor) producing `NormalizedEvent`s — Phase 2 verified 2026-04-28
 - [ ] Local SQLite store (WAL) with concurrent multi-process writes
 - [ ] Crash recovery (orphan sweep on `session_start` + 6h stale sweep at every launch / CLI invocation)
 - [ ] Desktop app: Today / Live / History views + menubar widget + minimal Settings
@@ -120,4 +120,4 @@ Accurately and silently record agent coding time per project on the developer's 
 | Auto-launch default OFF | User-controlled; opt-in on first-launch prompt; respects user choice | — Pending |
 
 ---
-*Last updated: 2026-04-28 after roadmap creation*
+*Last updated: 2026-04-28 after Phase 2 verification (Agent Adapters in core)*

@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-04-28)
 
 **Core value:** Accurately and silently record agent coding time per project on the developer's machine, then surface it in a visual surface good enough to live on a livestream — with zero network calls.
-**Current focus:** Phase 2 — Agent Adapters in `core`
+**Current focus:** Phase 3 — Hook Binary, Store & Install
 
 ## Current Position
 
-Phase: 2 of 6 (Agent Adapters in `core`)
-Plan: 1 of 1 complete (02-01 done; phase implementation work complete — awaits verifier)
-Status: Phase 2 implementation complete. `@vibetime/core` ships three pure-function vendor adapters (`adaptClaudeCode` / `adaptCodex` / `adaptCursor`) with locked DEC-011 signature, never-throws contract, and seeded mulberry32 property test (3600 mutations / CI run). `pnpm run ci` green; ADPT-01..04 mechanically satisfied. Phase 3 (Hook Binary, Store & Install) ready to begin.
-Last activity: 2026-04-28 — Plan 02-01 complete: three adapters + barrel + seeded property test shipped in TDD mode; 76 tests green (Phase 1 baseline 31 + Phase 2 new 45); 8 files created + 1 modified; commits b966ced (Claude Code), 24ba7aa (Codex), c7803a6 (Cursor), 98c6d7c (barrel + property + public API + CI gate).
+Phase: 3 of 6 (Hook Binary, Store & Install) — ready to discuss/plan
+Plan: 0 of TBD (Phase 2 closed)
+Status: Phase 2 verified PASSED (14/14 must-haves). `@vibetime/core` ships three pure-function vendor adapters (`adaptClaudeCode` / `adaptCodex` / `adaptCursor`) with locked DEC-011 signature, never-throws contract, and seeded mulberry32 property test (3600 mutations / CI run). `pnpm run ci` green; ADPT-01..04 verified. Phase 3 (Hook Binary, Store & Install) ready to begin — `/gsd-discuss-phase 3` recommended next.
+Last activity: 2026-04-28 — Phase 2 verification PASSED; 02-VERIFICATION.md committed; ROADMAP/STATE marked complete.
 
 Progress: [███░░░░░░░] ~25% (4/16 plans estimated; tracked at phase granularity below)
 

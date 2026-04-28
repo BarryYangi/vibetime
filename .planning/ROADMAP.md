@@ -13,7 +13,7 @@ vibetime ships in six phases tracking the locked ~5-week budget (DEC-008): Phase
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Foundations & Decisions Gate** - DECISIONS.md approved, monorepo stood up, `core` package skeleton (types + SQL builders + project resolution) shippable in isolation
-- [ ] **Phase 2: Agent Adapters in `core`** - Three pure adapters (Claude Code / Codex / Cursor) with fixture-based tests covering `NormalizedEvent` mapping
+- [x] **Phase 2: Agent Adapters in `core`** - Three pure adapters (Claude Code / Codex / Cursor) with fixture-based tests covering `NormalizedEvent` mapping (completed 2026-04-28)
 - [ ] **Phase 3: Hook Binary, Store & Install** - Bun-compiled `vibetime-hook`, SQLite WAL store, crash-recovery rules, `~/.vibetime/` layout, `vibetime install <agent>` — first end-to-end agent capture works
 - [ ] **Phase 4: Desktop Shell, Today View & CLI** - Electron app with IPC, Today view as default landing, complete CLI surface (`today / project / export / version / install`) running headless, minimal Settings
 - [ ] **Phase 5: Live, History, Menubar & Lifecycle** - Live view content-asset quality (≥30fps), History view (heatmap + trends + table), persistent menubar widget, close-to-menubar + auto-launch toggle
@@ -106,7 +106,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundations & Decisions Gate | 3/3 | Implementation complete (awaits verifier) | - |
-| 2. Agent Adapters in `core` | 1/1 | Implementation complete (awaits verifier) | - |
+| 2. Agent Adapters in `core` | 1/1 | Complete | 2026-04-28 |
 | 3. Hook Binary, Store & Install | 0/TBD | Not started | - |
 | 4. Desktop Shell, Today View & CLI | 0/TBD | Not started | - |
 | 5. Live, History, Menubar & Lifecycle | 0/TBD | Not started | - |
