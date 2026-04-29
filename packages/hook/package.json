@@ -6,7 +6,9 @@
   "main": "./dist/index.js",
   "exports": {
     ".": "./dist/index.js",
-    "./cli": "./dist/cli.js"
+    "./cli": "./dist/cli.js",
+    "./config": "./dist/config.js",
+    "./install": "./dist/install.js"
   },
   "scripts": {
     "test": "bun test",
