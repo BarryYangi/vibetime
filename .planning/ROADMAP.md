@@ -78,7 +78,16 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. `vibetime today` prints the same per-project breakdown to stdout and exits; `vibetime project <name> [--days=N]` prints a per-day + per-agent drilldown with `--days=7` default; `vibetime export [--format=json|csv] [--out=<path>] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD]` produces well-formed JSON (default to stdout) or CSV, optionally bounded and written to a file; `vibetime version` prints version + `~/.vibetime/data.db` path
   4. Settings panel renders Connect Agents (per-agent install button + status indicator, idempotent and equivalent to `vibetime install <agent>`), Project Aliases editor (persists to `config.toml`), and About (version + `data.db` path + MIT license)
   5. Renderer applies the Tokyo Night palette, Inter (UI) and JetBrains Mono (numerics) typography, and a registered ECharts theme at `desktop/src/charts/theme.ts`
-**Plans**: TBD
+**Plans**: 6 plans in 3 waves
+- Wave 1 *(parallel — no dependencies)*:
+  - [ ] 04-01-PLAN.md — Electron scaffold: electron-vite config, shared IPC types, preload bridge, main process with CLI detection, better-sqlite3 wrapper (IPC-01, CLI-07)
+  - [ ] 04-02-PLAN.md — CLI enhancements: chalk formatting, today/project/export real output, CSV export (CLI-03, CLI-04, CLI-05, CLI-06)
+- Wave 2 *(blocked on Wave 1)*:
+  - [ ] 04-03-PLAN.md — IPC handlers: all 6 method implementations with real data aggregation, config management, agent status (IPC-01, TODAY-01, TODAY-02, TODAY-03, TODAY-04, SET-01, SET-02, SET-03)
+  - [ ] 04-04-PLAN.md — Renderer foundation: Jotai store, useIpcQuery hook, React Router + Sidebar, Tokyo Night Tailwind theme, ECharts theme (DESIGN-01, TODAY-01)
+- Wave 3 *(blocked on Wave 2)*:
+  - [ ] 04-05-PLAN.md — Today view: complete implementation with CSS bars, agent breakdown, footer, auto-refresh via push (TODAY-01, TODAY-02, TODAY-03, TODAY-04)
+  - [ ] 04-06-PLAN.md — Settings view: Connect Agents + Project Aliases + About (SET-01, SET-02, SET-03)
 **UI hint**: yes
 
 ### Phase 5: Live, History, Menubar & Lifecycle
@@ -113,7 +122,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Foundations & Decisions Gate | 3/3 | Implementation complete (awaits verifier) | - |
 | 2. Agent Adapters in `core` | 1/1 | Complete | 2026-04-28 |
-| 3. Hook Binary, Store & Install | 0/4 | Ready to execute | - |
-| 4. Desktop Shell, Today View & CLI | 0/TBD | Not started | - |
+| 3. Hook Binary, Store & Install | 4/4 | Complete | 2026-04-29 |
+| 4. Desktop Shell, Today View & CLI | 0/6 | Planned | - |
 | 5. Live, History, Menubar & Lifecycle | 0/TBD | Not started | - |
 | 6. Packaging & V0 Acceptance | 0/TBD | Not started | - |
