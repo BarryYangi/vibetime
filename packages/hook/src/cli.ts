@@ -22,7 +22,7 @@ Commands:
   install <agent>   Configure hooks for an agent (claude-code | codex | cursor)
   today             Show today's agent time breakdown
   project <name>    Show project details (default: --days=7)
-  export            Export events as JSON or CSV
+  export            Export events as JSON or CSV (--format=csv, --out=path)
   version           Show version and database path
   help              Show this help message
 
@@ -137,7 +137,7 @@ export async function runCli(): Promise<void> {
       case 'project': {
         const projectName = args[1]
         if (!projectName) {
-          console.error('Error: Project name required. Usage: vibetime project <name> [--days=N]')
+          console.error(chalk.red('Error: Project name required. Usage: vibetime project <name> [--days=N]'))
           process.exit(1)
         }
 
@@ -153,8 +153,49 @@ export async function runCli(): Promise<void> {
         const events = queryEvents(db, { from, to, project: projectName })
         closeDatabase(db)
 
-        // TODO: Phase 4 will implement proper Project view
-        console.log(`Project ${projectName} (last ${days} days): ${events.length} events`)
+        if (events.length === 0) {
+          console.log(chalk.dim(`No activity for project "${projectName}" in the last ${days} days.`))
+          break
+        }
+
+        // Aggregate by day
+        const dayMap = new Map<string, { total: number; agents: Map<string, number> }>()
+        for (const ev of events) {
+          const dayKey = new Date(ev.ts * 1000).toLocaleDateString('en-CA') // YYYY-MM-DD
+          let entry = dayMap.get(dayKey)
+          if (!entry) {
+            entry = { total: 0, agents: new Map() }
+            dayMap.set(dayKey, entry)
+          }
+          if (ev.duration_sec) entry.total += ev.duration_sec
+          const agentTotal = entry.agents.get(ev.agent) ?? 0
+          entry.agents.set(ev.agent, agentTotal + (ev.duration_sec ?? 0))
+        }
+
+        const sorted = [...dayMap.entries()].sort((a, b) => b[0].localeCompare(a[0]))
+        const totalAll = sorted.reduce((sum, [, v]) => sum + v.total, 0)
+
+        function fmtDuration(sec: number): string {
+          if (sec < 60) return `${Math.round(sec)}s`
+          if (sec < 3600) return `${Math.round(sec / 60)}m`
+          const h = Math.floor(sec / 3600)
+          const m = Math.round((sec % 3600) / 60)
+          return `${h}h ${m}m`
+        }
+
+        console.log(chalk.bold(`Project: ${projectName} (last ${days} days)`))
+        console.log(chalk.dim('─'.repeat(50)))
+        console.log(chalk.bold.cyan(`  Total: ${fmtDuration(totalAll)}`))
+        console.log()
+
+        for (const [day, data] of sorted) {
+          console.log(chalk.bold(`  ${day}`) + `  ${chalk.cyan(fmtDuration(data.total))}`)
+          for (const [agent, agentTotal] of data.agents) {
+            if (agentTotal > 0) {
+              console.log(`    ${chalk.dim(agent)}: ${chalk.dim(fmtDuration(agentTotal))}`)
+            }
+          }
+        }
         break
       }
 
@@ -182,18 +223,34 @@ export async function runCli(): Promise<void> {
         const events = queryEvents(db, options)
         closeDatabase(db)
 
-        // TODO: Phase 4 will implement proper Export
+        let output: string
+
         if (format === 'csv') {
-          console.log('CSV export not yet implemented')
-        } else {
-          const json = JSON.stringify(events, null, 2)
-          if (outPath) {
-            const { writeFileSync } = await import('node:fs')
-            writeFileSync(outPath, json)
-            console.log(`Exported ${events.length} events to ${outPath}`)
-          } else {
-            console.log(json)
+          // CSV with headers
+          const headers = ['schema_version', 'agent', 'event_type', 'project', 'session_id', 'turn_id', 'ts', 'timezone', 'duration_sec', 'meta']
+          const escapeCsv = (val: unknown): string => {
+            const str = val === null || val === undefined ? '' : String(val)
+            if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+              return `"${str.replace(/"/g, '""')}"`
+            }
+            return str
           }
+          const rows = events.map(ev => [
+            1, ev.agent, ev.event_type, ev.project, ev.session_id,
+            ev.turn_id ?? '', ev.ts, ev.timezone, ev.duration_sec ?? '',
+            ev.meta ? JSON.stringify(ev.meta) : ''
+          ].map(escapeCsv).join(','))
+          output = [headers.join(','), ...rows].join('\n')
+        } else {
+          output = JSON.stringify(events, null, 2)
+        }
+
+        if (outPath) {
+          const { writeFileSync } = await import('node:fs')
+          writeFileSync(outPath, output, 'utf-8')
+          console.log(chalk.dim(`Exported ${events.length} events to ${outPath}`))
+        } else {
+          console.log(output)
         }
         break
       }
