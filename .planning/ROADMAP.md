@@ -60,11 +60,13 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Two agents in different terminals running concurrent turns produce no DB corruption; both turns appear in `events` (concurrency stress test passes)
   5. Crash recovery: killing an agent mid-turn and starting a new session in the same `session_id` produces a synthetic `turn_end` row with `meta.abandoned = true` and `duration_sec = NULL`; an `open_turns` row older than 6 hours is converted to a synthetic `turn_end` with `meta.reason = "stale_sweep"` at the next CLI invocation
   6. First run creates `~/.vibetime/` at mode `0700` containing `config.toml` (with default `[projects]` empty + `[display].timezone` from system); `data.db` (+ WAL/SHM) and `hook.log` are created lazily on first write
-**Plans**: 4 plans
-- [ ] 03-01-PLAN.md — Infrastructure layer: constants, filesystem init, config read/write, log rotation (FS-01, FS-02, FS-03, HOOK-03)
-- [ ] 03-02-PLAN.md — SQLite store: openDatabase, PRAGMA setup, DDL init, event persistence (STORE-01, STORE-02, STORE-03)
-- [ ] 03-03-PLAN.md — Hook binary + crash recovery: stdin read, adapter dispatch, orphan sweep, stale sweep (REC-01, REC-02, HOOK-01, HOOK-02, HOOK-04)
-- [ ] 03-04-PLAN.md — CLI + install commands: subcommand parsing, agent config writers (CLI-01, CLI-02)
+**Plans**: 4 plans in 2 waves
+- Wave 1 *(parallel — no dependencies)*:
+  - [ ] 03-01-PLAN.md — Infrastructure layer: constants, filesystem init, config read/write, log rotation (FS-01, FS-02, FS-03, HOOK-03)
+  - [ ] 03-02-PLAN.md — SQLite store: openDatabase, PRAGMA setup, DDL init, event persistence (STORE-01, STORE-02, STORE-03)
+- Wave 2 *(blocked on Wave 1)*:
+  - [ ] 03-03-PLAN.md — Hook binary + crash recovery: stdin read, adapter dispatch, orphan sweep, stale sweep (REC-01, REC-02, HOOK-01, HOOK-02, HOOK-04)
+  - [ ] 03-04-PLAN.md — CLI + install commands: subcommand parsing, agent config writers (CLI-01, CLI-02)
 
 ### Phase 4: Desktop Shell, Today View & CLI
 **Goal**: Electron app launches with the Today view as default landing, all CLI subcommands work headless, and the renderer accesses data exclusively via typed IPC.
