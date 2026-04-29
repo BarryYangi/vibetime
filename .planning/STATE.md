@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-04-28)
 
 **Core value:** Accurately and silently record agent coding time per project on the developer's machine, then surface it in a visual surface good enough to live on a livestream — with zero network calls.
-**Current focus:** Phase 3 — Hook Binary, Store & Install
+**Current focus:** Phase 4 — Desktop Shell, Today View & CLI
 
 ## Current Position
 
-Phase: 3 of 6 (Hook Binary, Store & Install) — ready to execute
-Plan: 4 of 4 (Phase 3 planned)
-Status: Phase 3 execution complete. All 4 plans done (2 waves). Awaiting verification.
-Last activity: 2026-04-29 — Wave 2 merged: hook lifecycle + recovery + CLI + install.
+Phase: 4 of 6 (Desktop Shell, Today View & CLI) — not yet planned
+Plan: —
+Status: Phase 3 complete. 14/14 requirements verified. Binary cold start 10-20ms. Ready for Phase 4 discuss/planning.
+Last activity: 2026-04-29 — Phase 3 verification passed; roadmap updated.
 
-Progress: [████░░░░░░] ~40% (8/16 plans estimated; tracked at phase granularity below)
+Progress: [██████░░░░] ~50% (12/16 plans estimated; tracked at phase granularity below)
 
 ## Performance Metrics
 

@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Foundations & Decisions Gate** - DECISIONS.md approved, monorepo stood up, `core` package skeleton (types + SQL builders + project resolution) shippable in isolation
 - [x] **Phase 2: Agent Adapters in `core`** - Three pure adapters (Claude Code / Codex / Cursor) with fixture-based tests covering `NormalizedEvent` mapping (completed 2026-04-28)
-- [ ] **Phase 3: Hook Binary, Store & Install** - Bun-compiled `vibetime-hook`, SQLite WAL store, crash-recovery rules, `~/.vibetime/` layout, `vibetime install <agent>` — first end-to-end agent capture works
+- [x] **Phase 3: Hook Binary, Store & Install** - Bun-compiled `vibetime-hook`, SQLite WAL store, crash-recovery rules, `~/.vibetime/` layout, `vibetime install <agent>` — first end-to-end agent capture works (completed 2026-04-29)
 - [ ] **Phase 4: Desktop Shell, Today View & CLI** - Electron app with IPC, Today view as default landing, complete CLI surface (`today / project / export / version / install`) running headless, minimal Settings
 - [ ] **Phase 5: Live, History, Menubar & Lifecycle** - Live view content-asset quality (≥30fps), History view (heatmap + trends + table), persistent menubar widget, close-to-menubar + auto-launch toggle
 - [ ] **Phase 6: Packaging & V0 Acceptance** - macOS arm64 .app + .dmg, ad-hoc signing, first-launch self-auth documentation, every §14 acceptance criterion verified
