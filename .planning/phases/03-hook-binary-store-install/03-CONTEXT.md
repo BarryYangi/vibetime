@@ -160,11 +160,22 @@
 
 ---
 
-### 4. hook 热路径项目解析 — NOT STARTED
+### 4. hook 热路径项目解析 — RESOLVED
 
-（待讨论：git remote 调用 vs <50ms 启动预算）
+**Decision:** 保持 `resolveProject` 现有 first-match 逻辑不变，不做缓存优化。
+
+优先级链（已有实现）：
+1. 用户别名（`config.toml [projects]`）
+2. `git remote -v` → 提取 `owner/repo`（SSH/HTTPS，strip `.git`）
+3. `path.basename(cwd)`
+4. `"_unknown"` fallback
+
+**Rationale:**
+- `git remote -v` 通常 10-20ms，在 <50ms 启动预算内绰绰有余
+- 缓存引入失效策略复杂度（repo 重命名、remote 变更），收益不大
+- 这是 hook 层（Phase 3）在 SQLite 写入前调用，adapter 层（Phase 2）仍返回 raw cwd，符合 DEC-011 分层
 
 ## Next Steps
 
-1. 完成灰色区域 4 讨论（hook 热路径项目解析）
-2. 进入 03-PLAN.md 编写
+1. ~~完成灰色区域 4 讨论（hook 热路径项目解析）~~ ✓
+2. 进入 03-PLAN.md 编写（4/4 灰色区域已全部收敛）
