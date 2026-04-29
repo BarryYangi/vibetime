@@ -3,14 +3,31 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "main": "./dist/index.js",
+  "main": "./out/main/index.js",
   "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
     "test": "vitest run"
   },
   "dependencies": {
-    "@vibetime/core": "workspace:*"
+    "@vibetime/core": "workspace:*",
+    "@vibetime/hook": "workspace:*",
+    "better-sqlite3": "^12.9.0",
+    "electron": "^41.3.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "react-router-dom": "^7.14.2",
+    "jotai": "^2.19.1",
+    "echarts": "^6.0.0"
   },
   "devDependencies": {
+    "electron-vite": "^5.0.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^4",
+    "tailwindcss": "^4.2.4",
     "typescript": "^6.0.3",
     "vitest": "^3.2.4",
     "@types/node": "^22"
