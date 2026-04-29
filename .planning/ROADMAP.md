@@ -65,8 +65,8 @@ Decimal phases appear between their surrounding integers in numeric order.
   - [x] 03-01-PLAN.md — Infrastructure layer: constants, filesystem init, config read/write, log rotation (FS-01, FS-02, FS-03, HOOK-03) — commits 94ebbd7..ccafcf8
   - [x] 03-02-PLAN.md — SQLite store: openDatabase, PRAGMA setup, DDL init, event persistence (STORE-01, STORE-02, STORE-03) — commits 471ba6d..848d41e
 - Wave 2 *(blocked on Wave 1)*:
-  - [ ] 03-03-PLAN.md — Hook binary + crash recovery: stdin read, adapter dispatch, orphan sweep, stale sweep (REC-01, REC-02, HOOK-01, HOOK-02, HOOK-04)
-  - [ ] 03-04-PLAN.md — CLI + install commands: subcommand parsing, agent config writers (CLI-01, CLI-02)
+  - [x] 03-03-PLAN.md — Hook binary + crash recovery: stdin read, adapter dispatch, orphan sweep, stale sweep (REC-01, REC-02, HOOK-01, HOOK-02, HOOK-04) — commits 0c4fc9b..cd8e8a5
+  - [x] 03-04-PLAN.md — CLI + install commands: subcommand parsing, agent config writers (CLI-01, CLI-02) — commits 28e3e87..4832dc8
 
 ### Phase 4: Desktop Shell, Today View & CLI
 **Goal**: Electron app launches with the Today view as default landing, all CLI subcommands work headless, and the renderer accesses data exclusively via typed IPC.
