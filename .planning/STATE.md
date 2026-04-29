@@ -11,8 +11,8 @@ See: .planning/PROJECT.md (updated 2026-04-28)
 
 Phase: 4 of 6 (Desktop Shell, Today View & CLI) — not yet planned
 Plan: —
-Status: Phase 3 complete. 14/14 requirements verified. Binary cold start 10-20ms. Ready for Phase 4 discuss/planning.
-Last activity: 2026-04-29 — Phase 3 verification passed; roadmap updated.
+Status: Phase 4 context gathered. IPC/CLI/data-fetching/Electron decisions locked. Ready for Phase 4 planning.
+Last activity: 2026-04-29 — Phase 4 context captured (D-IPC resolved, electron-vite + updateHook + chalk confirmed).
 
 Progress: [██████░░░░] ~50% (12/16 plans estimated; tracked at phase granularity below)
 
@@ -84,6 +84,6 @@ None yet. (Phase 1 must produce DECISIONS.md before Phase 1 implementation can a
 
 ## Session Continuity
 
-Last session: 2026-04-28 (Plan 02-01 executed in sequential mode; commits b966ced + 24ba7aa + c7803a6 + 98c6d7c)
-Stopped at: Phase 2 implementation complete. `pnpm run ci` exits 0; ADPT-01..04 mechanically satisfied; @vibetime/core public API now exports adaptClaudeCode / adaptCodex / adaptCursor.
-Resume file: Phase 2 verifier (or directly Phase 3 — Hook Binary, Store & Install)
+Last session: 2026-04-29 (Phase 4 discuss-phase; commit 14e52d9)
+Stopped at: Phase 4 context gathered. D-IPC resolved (细粒度 + 共享类型 + Result 包装). electron-vite + updateHook 事件驱动 + chalk 确认.
+Resume file: .planning/phases/04-desktop-shell-today-cli/04-CONTEXT.md
