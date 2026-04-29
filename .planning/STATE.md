@@ -11,8 +11,8 @@ See: .planning/PROJECT.md (updated 2026-04-28)
 
 Phase: 3 of 6 (Hook Binary, Store & Install) — ready to execute
 Plan: 4 of 4 (Phase 3 planned)
-Status: Phase 3 planned. 4 PLAN.md files created (2 waves), 14/14 requirements covered. Plans verified PASSED by gsd-plan-checker. Ready for `/gsd-execute-phase 3`.
-Last activity: 2026-04-29 — Phase 3 planning complete; 03-01..04-PLAN.md committed.
+Status: Phase 3 executing. Wave 1 complete (03-01, 03-02). Wave 2 (03-03, 03-04) starting.
+Last activity: 2026-04-29 — Wave 1 merged: hook scaffold + SQLite store.
 
 Progress: [████░░░░░░] ~40% (8/16 plans estimated; tracked at phase granularity below)
 

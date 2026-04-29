@@ -62,8 +62,8 @@ Decimal phases appear between their surrounding integers in numeric order.
   6. First run creates `~/.vibetime/` at mode `0700` containing `config.toml` (with default `[projects]` empty + `[display].timezone` from system); `data.db` (+ WAL/SHM) and `hook.log` are created lazily on first write
 **Plans**: 4 plans in 2 waves
 - Wave 1 *(parallel — no dependencies)*:
-  - [ ] 03-01-PLAN.md — Infrastructure layer: constants, filesystem init, config read/write, log rotation (FS-01, FS-02, FS-03, HOOK-03)
-  - [ ] 03-02-PLAN.md — SQLite store: openDatabase, PRAGMA setup, DDL init, event persistence (STORE-01, STORE-02, STORE-03)
+  - [x] 03-01-PLAN.md — Infrastructure layer: constants, filesystem init, config read/write, log rotation (FS-01, FS-02, FS-03, HOOK-03) — commits 94ebbd7..ccafcf8
+  - [x] 03-02-PLAN.md — SQLite store: openDatabase, PRAGMA setup, DDL init, event persistence (STORE-01, STORE-02, STORE-03) — commits 471ba6d..848d41e
 - Wave 2 *(blocked on Wave 1)*:
   - [ ] 03-03-PLAN.md — Hook binary + crash recovery: stdin read, adapter dispatch, orphan sweep, stale sweep (REC-01, REC-02, HOOK-01, HOOK-02, HOOK-04)
   - [ ] 03-04-PLAN.md — CLI + install commands: subcommand parsing, agent config writers (CLI-01, CLI-02)
