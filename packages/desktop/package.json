@@ -14,22 +14,23 @@
     "@vibetime/core": "workspace:*",
     "@vibetime/hook": "workspace:*",
     "better-sqlite3": "^12.9.0",
+    "echarts": "^6.0.0",
     "electron": "^41.3.0",
+    "jotai": "^2.19.1",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "react-router-dom": "^7.14.2",
-    "jotai": "^2.19.1",
-    "echarts": "^6.0.0"
+    "react-router-dom": "^7.14.2"
   },
   "devDependencies": {
-    "electron-vite": "^5.0.0",
     "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^4",
+    "electron-vite": "^5.0.0",
     "tailwindcss": "^4.2.4",
     "typescript": "^6.0.3",
-    "vitest": "^3.2.4",
-    "@types/node": "^22"
+    "vite": "^8.0.10",
+    "vitest": "^3.2.4"
   }
 }
