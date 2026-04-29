@@ -2,7 +2,10 @@ import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
 import { registerIpcHandlers } from './ipc-handlers'
 
-const isCliMode = process.argv.length > 2
+// CLI subcommands that should run headless
+const CLI_COMMANDS = ['today', 'project', 'export', 'version', 'install', 'help']
+const cliCommand = process.argv.find((arg) => CLI_COMMANDS.includes(arg))
+const isCliMode = !!cliCommand && !process.argv.some((arg) => arg.includes('electron'))
 
 if (isCliMode) {
   const { runCli } = await import('@vibetime/hook/cli')
