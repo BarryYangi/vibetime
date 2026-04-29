@@ -436,22 +436,19 @@ export function installClaudeCode(): void {
 | A4 | Claude Code passes `--source claude` as a command argument to hooks | Pitfall 3 | Low — verified in CONTEXT.md research |
 | A5 | Codex `hooks.json` format matches CONTEXT.md specification | Install Command | Low — verified in CONTEXT.md research |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Agent detection mechanism**
-   - What we know: Claude Code supports `--source` argument. Codex and Cursor event names are distinct.
-   - What's unclear: Whether agents pass a reliable identifier in the payload or as an argument.
-   - Recommendation: Use event name matching as primary detection. Fall back to `--source` argument if available. Store agent type in a per-hook config or derive from the config file being modified during install.
+1. **Agent detection mechanism** RESOLVED
+   - Decision: Install commands append `--source <agent>` (claude-code/codex/cursor) to hook binary path. `detectAgent()` checks `--source` first, falls back to event name matching.
+   - Source: CONTEXT.md gray area 3 + Plan 04 Task 1 install commands
 
-2. **Duration computation for turn_end**
-   - What we know: `duration_sec` is only set on `turn_end` events. It's the difference between `turn_end.ts` and `turn_start.ts`.
-   - What's unclear: Whether to compute duration in the hook (requires reading open_turns) or in the query layer.
-   - Recommendation: Compute in the hook at turn_end time. Read `started_at` from `open_turns`, compute `duration_sec = ts - started_at`, write to events row, then delete from open_turns. This keeps the query layer simple.
+2. **Duration computation for turn_end** RESOLVED
+   - Decision: Compute in hook at turn_end time. Read `started_at` from `open_turns`, compute `duration_sec = ts - started_at`, write to events row, then delete from open_turns.
+   - Source: Plan 02 Task 1 store.ts + Plan 03 Task 2 hook.ts
 
-3. **Stale sweep timing**
-   - What we know: REC-02 says "at every desktop launch and every CLI invocation".
-   - What's unclear: Whether the hook itself should also do stale sweep, or only CLI/desktop.
-   - Recommendation: Hook does NOT do stale sweep (it's a hot path, keep it fast). CLI subcommands and desktop launch do stale sweep. This matches the PRD wording.
+3. **Stale sweep timing** RESOLVED
+   - Decision: Hook does NOT do stale sweep (hot path). CLI subcommands (`vibetime today/export/install`) and desktop launch do stale sweep via `sweepStale()`.
+   - Source: CONTEXT.md gray area 4 + Plan 03 Task 2 + Plan 04 Task 2
 
 ## Environment Availability
 
