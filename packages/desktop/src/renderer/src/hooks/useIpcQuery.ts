@@ -7,6 +7,8 @@ export function useIpcQuery<T>(channel: string, atom: Atom<T>): T {
   const data = useAtomValue(atom)
 
   useEffect(() => {
+    if (!window.api) return
+
     // Initial fetch
     window.api.invoke(channel as never).then((result) => {
       if (result.ok) {
