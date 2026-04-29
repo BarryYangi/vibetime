@@ -131,13 +131,11 @@ describe('runCli — unknown command', () => {
 })
 
 describe('runCli — today', () => {
-  it('runs without crashing (Phase 4 placeholder)', async () => {
-    // today uses DB_PATH which is computed at module load (original HOME).
-    // In tests, it may hit the catch block — both paths are acceptable.
+  it('shows "No activity today" when no events exist', async () => {
     await runWithArgs('today')
-    const hasOutput = consoleOutput.some((line) => line.includes("Today's events:"))
+    const hasNoActivity = consoleOutput.some((line) => line.includes('No activity today'))
     const hasError = consoleError.some((line) => line.includes('Error:'))
-    expect(hasOutput || hasError).toBe(true)
+    expect(hasNoActivity || hasError).toBe(true)
   })
 })
 
