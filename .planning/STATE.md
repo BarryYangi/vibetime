@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-04-28)
 
 **Core value:** Accurately and silently record agent coding time per project on the developer's machine, then surface it in a visual surface good enough to live on a livestream — with zero network calls.
-**Current focus:** Phase 4 — Desktop Shell, Today View & CLI
+**Current focus:** Phase 5 — Live, History, Menubar & Lifecycle
 
 ## Current Position
 
-Phase: 4 of 6 (Desktop Shell, Today View & CLI) — Ready to execute
-Plan: 6 plans in 3 waves (04-01..06)
-Status: Phase 4 planned. 6 plans verified. Ready for execution.
-Last activity: 2026-04-29 — Phase 4 planned (6 plans, 3 waves). D-09 revised (app-level event emission). Node.js 22.12+ required.
+Phase: 5 of 6 (Live, History, Menubar & Lifecycle) — Not started
+Plan: TBD
+Status: Phase 4 complete. 6/6 plans executed. Verification passed (33/33 must-haves).
+Last activity: 2026-04-29 — Phase 4 executed (6 plans, 3 waves, ~30 min). Electron shell + Today view + CLI + Settings complete.
 
-Progress: [██████░░░░] ~50% (10/16 plans completed; Phase 4 has 6 plans pending execution)
+Progress: [██████████] ~67% (16/16 plans completed through Phase 4)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
-- Average duration: ~6.5 min
-- Total execution time: ~26 min
+- Total plans completed: 10
+- Average duration: ~5.5 min
+- Total execution time: ~56 min
 
 **By Phase:**
 
@@ -29,10 +29,12 @@ Progress: [██████░░░░] ~50% (10/16 plans completed; Phase 4 
 |-------|-------|-------|----------|
 | 1. Foundations & Decisions Gate | 3 | ~19 min | ~6.5 min |
 | 2. Agent Adapters in `core`     | 1 | ~7 min  | ~7 min   |
+| 3. Hook Binary, Store & Install | 4 | ~15 min | ~3.75 min |
+| 4. Desktop Shell, Today & CLI   | 6 | ~30 min | ~5 min   |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (10 min, feat scaffold) → 01-02 (~3 min draft + user gate review, docs) → 01-03 (~6.5 min, feat core library — TDD with 31 tests) → 02-01 (~7 min, feat adapters — TDD with 4 commits, 76 tests)
-- Trend: on-track; Phase 2 closed in ~7 min vs 5w budget projection — significant headroom remains for Phase 3+
+- Phase 4: 04-01 (12 min, Electron scaffold) → 04-02 (3 min, CLI) → 04-03 (1.5 min, IPC) + 04-04 (8 min, renderer) parallel → 04-05 (3 min, Today) + 04-06 (2 min, Settings) parallel
+- Trend: Phase 4 closed in ~30 min with parallel execution. Wave-based strategy working well.
 
 *Updated after each plan completion*
 
@@ -89,6 +91,6 @@ None yet. (Phase 1 must produce DECISIONS.md before Phase 1 implementation can a
 
 ## Session Continuity
 
-Last session: 2026-04-29 (Phase 4 plan-phase)
-Stopped at: Phase 4 planned. 6 plans in 3 waves verified. Ready for /gsd-execute-phase 04.
-Resume file: .planning/phases/04-desktop-shell-today-cli/04-01-PLAN.md
+Last session: 2026-04-29 (Phase 4 execution)
+Stopped at: Phase 4 complete. Ready for Phase 5 planning.
+Resume file: .planning/phases/04-desktop-shell-today-cli/04-VERIFICATION.md
