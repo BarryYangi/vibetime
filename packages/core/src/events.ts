@@ -15,6 +15,7 @@ export interface NormalizedEvent {
   turn_id?: string
   ts: number
   timezone: string
+  duration_sec?: number
   meta?: Record<string, unknown>
 }
 
