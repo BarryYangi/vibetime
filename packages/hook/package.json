@@ -5,14 +5,14 @@
   "type": "module",
   "main": "./dist/index.js",
   "scripts": {
-    "test": "vitest run"
+    "test": "bun test",
+    "build": "bun build --compile --minify --bytecode src/index.ts --outfile vibetime-hook"
   },
   "dependencies": {
     "@vibetime/core": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^6.0.3",
-    "vitest": "^3.2.4",
     "@types/node": "^22"
   }
 }
