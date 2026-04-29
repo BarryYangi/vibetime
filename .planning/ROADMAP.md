@@ -113,7 +113,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 |-------|----------------|--------|-----------|
 | 1. Foundations & Decisions Gate | 3/3 | Implementation complete (awaits verifier) | - |
 | 2. Agent Adapters in `core` | 1/1 | Complete | 2026-04-28 |
-| 3. Hook Binary, Store & Install | 0/4 | Planning complete | - |
+| 3. Hook Binary, Store & Install | 0/4 | Ready to execute | - |
 | 4. Desktop Shell, Today View & CLI | 0/TBD | Not started | - |
 | 5. Live, History, Menubar & Lifecycle | 0/TBD | Not started | - |
 | 6. Packaging & V0 Acceptance | 0/TBD | Not started | - |
