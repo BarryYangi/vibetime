@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./cli": "./dist/cli.js"
+  },
   "scripts": {
     "test": "bun test",
     "build": "bun build --compile --minify --bytecode src/index.ts --outfile vibetime-hook"
