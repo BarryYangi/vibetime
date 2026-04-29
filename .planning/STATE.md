@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-04-28)
 
 ## Current Position
 
-Phase: 4 of 6 (Desktop Shell, Today View & CLI) — not yet planned
-Plan: —
-Status: Phase 4 context gathered. IPC/CLI/data-fetching/Electron decisions locked. Ready for Phase 4 planning.
-Last activity: 2026-04-29 — Phase 4 context captured (D-IPC resolved, electron-vite + updateHook + chalk confirmed).
+Phase: 4 of 6 (Desktop Shell, Today View & CLI) — Ready to execute
+Plan: 6 plans in 3 waves (04-01..06)
+Status: Phase 4 planned. 6 plans verified. Ready for execution.
+Last activity: 2026-04-29 — Phase 4 planned (6 plans, 3 waves). D-09 revised (app-level event emission). Node.js 22.12+ required.
 
-Progress: [██████░░░░] ~50% (12/16 plans estimated; tracked at phase granularity below)
+Progress: [██████░░░░] ~50% (10/16 plans completed; Phase 4 has 6 plans pending execution)
 
 ## Performance Metrics
 
@@ -61,6 +61,11 @@ Recent decisions affecting current work:
 - Cursor empty/missing/wrong-type workspace_roots ⇒ project='' (Plan 02-01) — Phase 3 resolveProject promotes to _unknown; preserves the event even when project is unknown
 - Property test uses inline mulberry32 seed=42 (Plan 02-01) — reproducible across runs; no fast-check dep needed for V0 fuzz scale
 - Two-step `as unknown as` cast on adapter turn_id branches (Plan 02-01 deviation) — TS2352 fix when both turn-narrowed and session-narrowed shapes converge after if/else; runtime guard already proves the field is present
+- D-09 revised (Phase 4 research): better-sqlite3 v12.9.0 does NOT expose `updateHook()`. Use application-level event emission: main process wraps DB writes with `writeAndNotify()` → `webContents.send('push', { type: 'db-changed' })`. Same zero-polling goal achieved.
+- Node.js 22.12+ required for electron-vite v5.0.0 (Phase 4 prerequisite). Current 22.7.0 incompatible.
+- coss ui is a copy-paste component registry (not npm). For Phase 4, use basic Tailwind-styled HTML elements.
+- Hook package needs `exports` field in package.json for desktop subpath imports (./cli, ./config, ./install)
+- CSS bars for Today view (lighter than ECharts for simple horizontal bars); ECharts reserved for Phase 5 History view
 
 ### Pending Todos
 
@@ -84,6 +89,6 @@ None yet. (Phase 1 must produce DECISIONS.md before Phase 1 implementation can a
 
 ## Session Continuity
 
-Last session: 2026-04-29 (Phase 4 discuss-phase; commit 14e52d9)
-Stopped at: Phase 4 context gathered. D-IPC resolved (细粒度 + 共享类型 + Result 包装). electron-vite + updateHook 事件驱动 + chalk 确认.
-Resume file: .planning/phases/04-desktop-shell-today-cli/04-CONTEXT.md
+Last session: 2026-04-29 (Phase 4 plan-phase)
+Stopped at: Phase 4 planned. 6 plans in 3 waves verified. Ready for /gsd-execute-phase 04.
+Resume file: .planning/phases/04-desktop-shell-today-cli/04-01-PLAN.md
