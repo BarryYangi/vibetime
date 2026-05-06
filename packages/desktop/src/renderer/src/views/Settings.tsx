@@ -1,8 +1,11 @@
-import { useState, useEffect } from 'react'
-import { useAtomValue } from 'jotai'
-import { store, configAtom } from '../store'
+import { useCallback, useEffect, useState } from 'react'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { PageShell } from '@/components/PageShell'
+import { configAtom, store } from '../store'
 
-// Agent display info
 const AGENTS = [
   { id: 'claude-code', name: 'Claude Code', description: 'Anthropic Claude Code CLI' },
   { id: 'codex', name: 'Codex', description: 'OpenAI Codex CLI' },
@@ -11,68 +14,118 @@ const AGENTS = [
 
 function ConnectAgents() {
   const [statuses, setStatuses] = useState<Array<{ agent: string; installed: boolean }>>([])
-  const [installing, setInstalling] = useState<string | null>(null)
+  const [activeAction, setActiveAction] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    window.api.invoke('getAgentStatus').then((result) => {
-      if (result.ok) setStatuses(result.data)
-    })
+  const refreshStatuses = useCallback(async () => {
+    const result = await window.api.invoke('getAgentStatus')
+    if (result.ok) setStatuses(result.data)
   }, [])
 
+  useEffect(() => {
+    refreshStatuses()
+  }, [refreshStatuses])
+
   const handleInstall = async (agent: string) => {
-    setInstalling(agent)
+    setActiveAction(`${agent}:install`)
+    setError(null)
     const result = await window.api.invoke('installAgent', { agent })
     if (result.ok) {
-      // Refresh status
-      const statusResult = await window.api.invoke('getAgentStatus')
-      if (statusResult.ok) setStatuses(statusResult.data)
+      await refreshStatuses()
+    } else {
+      setError(result.error)
     }
-    setInstalling(null)
+    setActiveAction(null)
+  }
+
+  const handleUninstall = async (agent: string) => {
+    setActiveAction(`${agent}:uninstall`)
+    setError(null)
+    const result = await window.api.invoke('uninstallAgent', { agent })
+    if (result.ok) {
+      await refreshStatuses()
+    } else {
+      setError(result.error)
+    }
+    setActiveAction(null)
   }
 
   return (
-    <section className="mb-8">
-      <h3 className="text-lg font-semibold text-tn-fg mb-4">Connect Agents</h3>
-      <div className="space-y-3">
-        {AGENTS.map(({ id, name, description }) => {
-          const status = statuses.find(s => s.agent === id)
-          const isInstalled = status?.installed ?? false
-          const isInstalling = installing === id
+    <section className="space-y-3">
+      <h2 className="font-heading font-semibold text-[13px] tracking-[-0.01em] text-foreground">
+        Connect agents
+      </h2>
+      <Card>
+        <CardHeader>
+          <CardTitle>Hooks</CardTitle>
+          <CardDescription>
+            Manage vibetime hooks without touching other agent hooks.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2">
+          {AGENTS.map(({ id, name, description }) => {
+            const status = statuses.find((s) => s.agent === id)
+            const isInstalled = status?.installed ?? false
+            const isInstalling = activeAction === `${id}:install`
+            const isUninstalling = activeAction === `${id}:uninstall`
+            const isBusy = isInstalling || isUninstalling
 
-          return (
-            <div key={id} className="flex items-center justify-between p-3 bg-tn-surface rounded-lg">
-              <div>
-                <div className="font-medium text-tn-fg">{name}</div>
-                <div className="text-sm text-tn-muted">{description}</div>
+            return (
+              <div
+                key={id}
+                className="flex flex-col gap-3 rounded-xl bg-muted/35 p-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      aria-hidden="true"
+                      className={`size-2 shrink-0 rounded-full ${isInstalled ? 'bg-success' : 'bg-muted-foreground'}`}
+                    />
+                    <div className="text-[15px] font-medium leading-snug">{name}</div>
+                    <span className="text-[11px] text-muted-foreground leading-snug">
+                      {isInstalled ? 'Hook installed' : 'Not installed'}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-[13px] text-muted-foreground leading-snug">{description}</div>
+                </div>
+                <div className="flex shrink-0 items-center justify-end gap-2">
+                  {isInstalled ? (
+                    <Button
+                      onClick={() => handleUninstall(id)}
+                      disabled={isBusy}
+                      loading={isUninstalling}
+                      size="sm"
+                      variant="ghost"
+                      className="text-destructive-foreground"
+                    >
+                      Uninstall Hook
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={() => handleInstall(id)}
+                      disabled={isBusy}
+                      loading={isInstalling}
+                      size="sm"
+                    >
+                      Install
+                    </Button>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-3">
-                <span className={`text-xs px-2 py-1 rounded ${isInstalled ? 'bg-tn-success/20 text-tn-success' : 'bg-tn-muted/20 text-tn-muted'}`}>
-                  {isInstalled ? 'Connected' : 'Not connected'}
-                </span>
-                <button
-                  onClick={() => handleInstall(id)}
-                  disabled={isInstalling}
-                  className={`px-3 py-1.5 text-sm rounded font-medium transition-colors ${
-                    isInstalling
-                      ? 'bg-tn-muted/20 text-tn-muted cursor-not-allowed'
-                      : isInstalled
-                        ? 'bg-tn-surface border border-tn-border text-tn-fg hover:bg-tn-border'
-                        : 'bg-tn-primary text-tn-bg hover:bg-tn-primary/80'
-                  }`}
-                >
-                  {isInstalling ? 'Installing...' : isInstalled ? 'Reinstall' : 'Install'}
-                </button>
-              </div>
+            )
+          })}
+          {error && (
+            <div className="rounded-lg bg-destructive/8 px-3 py-2 text-[13px] text-destructive-foreground leading-snug">
+              {error}
             </div>
-          )
-        })}
-      </div>
+          )}
+        </CardContent>
+      </Card>
     </section>
   )
 }
 
 function ProjectAliases() {
-  const config = useAtomValue(configAtom)
   const [aliases, setAliases] = useState<Record<string, string>>({})
   const [newKey, setNewKey] = useState('')
   const [newValue, setNewValue] = useState('')
@@ -91,7 +144,6 @@ function ProjectAliases() {
     setSaving(true)
     const result = await window.api.invoke('updateConfig', { projects: aliases })
     if (result.ok) {
-      // Refresh config
       const configResult = await window.api.invoke('getConfig')
       if (configResult.ok) store.set(configAtom, configResult.data)
     }
@@ -100,14 +152,14 @@ function ProjectAliases() {
 
   const handleAdd = () => {
     if (newKey.trim() && newValue.trim()) {
-      setAliases(prev => ({ ...prev, [newKey.trim()]: newValue.trim() }))
+      setAliases((prev) => ({ ...prev, [newKey.trim()]: newValue.trim() }))
       setNewKey('')
       setNewValue('')
     }
   }
 
   const handleRemove = (key: string) => {
-    setAliases(prev => {
+    setAliases((prev) => {
       const next = { ...prev }
       delete next[key]
       return next
@@ -115,65 +167,74 @@ function ProjectAliases() {
   }
 
   return (
-    <section className="mb-8">
-      <h3 className="text-lg font-semibold text-tn-fg mb-4">Project Aliases</h3>
-      <p className="text-sm text-tn-muted mb-4">
-        Map project directory names to display names. Changes are saved to config.toml.
-      </p>
-
-      {/* Existing aliases */}
-      <div className="space-y-2 mb-4">
-        {Object.entries(aliases).map(([key, value]) => (
-          <div key={key} className="flex items-center gap-2">
-            <span className="text-sm font-mono text-tn-accent bg-tn-surface px-2 py-1 rounded flex-shrink-0">{key}</span>
-            <span className="text-tn-muted">&rarr;</span>
-            <span className="text-sm text-tn-fg flex-1">{value}</span>
-            <button
-              onClick={() => handleRemove(key)}
-              className="text-tn-error hover:text-tn-error/80 text-sm px-2"
-            >
-              Remove
-            </button>
+    <section className="space-y-3">
+      <h2 className="font-heading font-semibold text-[13px] tracking-[-0.01em] text-foreground">
+        Project aliases
+      </h2>
+      <Card>
+        <CardHeader>
+          <CardTitle>Directory names</CardTitle>
+          <CardDescription>
+            Map project directory names to display names. Changes are saved to config.toml.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            {Object.entries(aliases).map(([key, value]) => (
+              <div
+                key={key}
+                className="flex min-w-0 flex-col gap-2 rounded-xl bg-muted/35 p-2 sm:flex-row sm:items-center"
+              >
+                <Badge variant="outline" className="w-fit shrink-0 font-mono">
+                  {key}
+                </Badge>
+                <span className="hidden text-muted-foreground sm:inline">&rarr;</span>
+                <span className="min-w-0 flex-1 text-[13px] leading-snug">{value}</span>
+                <Button
+                  onClick={() => handleRemove(key)}
+                  size="xs"
+                  variant="ghost"
+                  className="self-start text-destructive-foreground sm:self-center"
+                >
+                  Remove
+                </Button>
+              </div>
+            ))}
+            {Object.keys(aliases).length === 0 && (
+              <p className="text-[13px] text-muted-foreground italic leading-snug">No aliases configured.</p>
+            )}
           </div>
-        ))}
-        {Object.keys(aliases).length === 0 && (
-          <p className="text-sm text-tn-muted italic">No aliases configured.</p>
-        )}
-      </div>
 
-      {/* Add new alias */}
-      <div className="flex gap-2 mb-4">
-        <input
-          type="text"
-          placeholder="Directory name"
-          value={newKey}
-          onChange={e => setNewKey(e.target.value)}
-          className="flex-1 bg-tn-surface border border-tn-border rounded px-3 py-1.5 text-sm text-tn-fg placeholder-tn-muted focus:outline-none focus:border-tn-primary"
-        />
-        <input
-          type="text"
-          placeholder="Display name"
-          value={newValue}
-          onChange={e => setNewValue(e.target.value)}
-          className="flex-1 bg-tn-surface border border-tn-border rounded px-3 py-1.5 text-sm text-tn-fg placeholder-tn-muted focus:outline-none focus:border-tn-primary"
-        />
-        <button
-          onClick={handleAdd}
-          disabled={!newKey.trim() || !newValue.trim()}
-          className="px-3 py-1.5 text-sm rounded font-medium bg-tn-accent text-tn-bg hover:bg-tn-accent/80 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Add
-        </button>
-      </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <Input
+              type="text"
+              placeholder="Directory name"
+              value={newKey}
+              onChange={(e) => setNewKey(e.target.value)}
+              className="min-w-0 sm:min-w-[8rem] sm:flex-1"
+            />
+            <Input
+              type="text"
+              placeholder="Display name"
+              value={newValue}
+              onChange={(e) => setNewValue(e.target.value)}
+              className="min-w-0 sm:min-w-[8rem] sm:flex-1"
+            />
+            <Button
+              onClick={handleAdd}
+              disabled={!newKey.trim() || !newValue.trim()}
+              variant="secondary"
+              className="w-full sm:w-auto"
+            >
+              Add
+            </Button>
+          </div>
 
-      {/* Save button */}
-      <button
-        onClick={handleSave}
-        disabled={saving}
-        className="px-4 py-2 text-sm rounded font-medium bg-tn-primary text-tn-bg hover:bg-tn-primary/80 disabled:opacity-50"
-      >
-        {saving ? 'Saving...' : 'Save Changes'}
-      </button>
+          <Button onClick={handleSave} disabled={saving} loading={saving} className="self-start">
+            Save changes
+          </Button>
+        </CardContent>
+      </Card>
     </section>
   )
 }
@@ -185,8 +246,6 @@ function About() {
   useEffect(() => {
     window.api.invoke('getConfig').then((result) => {
       if (result.ok) {
-        // Version comes from the main process; for now use a placeholder
-        // The main process will inject this via a getVersion IPC or static value
         setVersion('0.0.0-dev')
         setDbPath('~/.vibetime/data.db')
       }
@@ -194,33 +253,41 @@ function About() {
   }, [])
 
   return (
-    <section>
-      <h3 className="text-lg font-semibold text-tn-fg mb-4">About</h3>
-      <div className="bg-tn-surface rounded-lg p-4 space-y-2">
-        <div className="flex justify-between">
-          <span className="text-tn-muted">Version</span>
-          <span className="font-mono text-tn-fg">{version}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-tn-muted">Database</span>
-          <span className="font-mono text-sm text-tn-accent">{dbPath}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-tn-muted">License</span>
-          <span className="text-tn-fg">MIT</span>
-        </div>
+    <section className="space-y-4 border-border/55 border-t pt-10">
+      <div>
+        <h2 className="font-heading font-semibold text-[13px] tracking-[-0.01em] text-foreground">
+          About
+        </h2>
+        <p className="mt-0.5 text-[13px] text-muted-foreground leading-snug">Build and local data</p>
       </div>
+      <dl className="grid max-w-lg gap-x-8 gap-y-3 text-[13px] leading-snug sm:grid-cols-[7rem_1fr]">
+        <dt className="text-muted-foreground">Version</dt>
+        <dd className="min-w-0 font-mono">{version}</dd>
+        <dt className="text-muted-foreground">Database</dt>
+        <dd className="min-w-0 break-all font-mono text-muted-foreground">{dbPath}</dd>
+        <dt className="text-muted-foreground">License</dt>
+        <dd>MIT</dd>
+      </dl>
     </section>
   )
 }
 
 export default function Settings() {
   return (
-    <div className="p-8 max-w-2xl">
-      <h2 className="text-2xl font-bold text-tn-fg mb-6">Settings</h2>
-      <ConnectAgents />
-      <ProjectAliases />
-      <About />
-    </div>
+    <PageShell prose className="space-y-12 pb-12">
+      <header>
+        <h1 className="font-heading font-semibold text-2xl tracking-[-0.02em] text-foreground">
+          Settings
+        </h1>
+        <p className="mt-1.5 text-[13px] text-muted-foreground leading-snug">
+          Hooks, project names, and app info
+        </p>
+      </header>
+      <div className="flex flex-col gap-12">
+        <ConnectAgents />
+        <ProjectAliases />
+        <About />
+      </div>
+    </PageShell>
   )
 }

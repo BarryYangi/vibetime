@@ -8,7 +8,8 @@
 import { adaptClaudeCode, adaptCodex, adaptCursor, resolveProject } from '@vibetime/core'
 import type { Agent, NormalizedEvent } from '@vibetime/core'
 import { openDatabase, persistEvent, closeDatabase } from './store.js'
-import { recoverOrphans } from './recovery.js'
+import { notifyDesktop } from './notify.js'
+import { reconcileCodexCompletedTurns, recoverOrphans } from './recovery.js'
 import { readConfig } from './config.js'
 import { appendLog } from './log.js'
 
@@ -115,6 +116,11 @@ export async function runHook(): Promise<void> {
     const event = adapter(payload, eventName)
 
     if (!event) {
+      if (agent === 'codex' && (eventName === 'Stop' || eventName === 'UserPromptSubmit')) {
+        appendLog(
+          `Dropped codex hook event=${eventName} session_id_type=${typeof payload.session_id} turn_id_type=${typeof payload.turn_id} cwd_type=${typeof payload.cwd}`,
+        )
+      }
       // Adapter returned null — no-op event, silently exit
       process.exit(0)
     }
@@ -130,12 +136,25 @@ export async function runHook(): Promise<void> {
 
     // 6. Persist to SQLite
     db = openDatabase()
+    if (agent === 'codex') {
+      reconcileCodexCompletedTurns(db, event.session_id)
+    }
     persistEvent(db, event)
 
     // 7. Crash recovery on session_start (REC-01)
     if (event.event_type === 'session_start') {
       recoverOrphans(db, event.session_id)
     }
+
+    // 8. Notify the desktop app after the write transaction is complete.
+    await notifyDesktop({
+      type: 'db-changed',
+      agent: event.agent,
+      event_type: event.event_type,
+      session_id: event.session_id,
+      project: event.project,
+      ts: event.ts,
+    })
   } catch (err) {
     // Last line of defense — never throw (HOOK-02)
     appendLog(`Unhandled error in hook: ${err}`)

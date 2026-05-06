@@ -12,7 +12,8 @@
     }
   },
   "scripts": {
-    "test": "vitest run"
+    "build": "../../node_modules/.bin/tsc -b",
+    "test": "../../node_modules/.bin/vitest run"
   },
   "dependencies": {},
   "devDependencies": {

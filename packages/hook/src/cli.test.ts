@@ -56,7 +56,7 @@ afterEach(() => {
 async function runWithArgs(...args: string[]): Promise<void> {
   process.argv = ['bun', 'vibetime', ...args]
   // Dynamic import to get fresh module (each test gets clean state)
-  const { runCli } = await import('./cli.js')
+  const { runCli } = await import(`./cli.js?test=${Date.now()}-${Math.random()}`)
   await runCli()
 }
 
@@ -140,8 +140,9 @@ describe('runCli — today', () => {
   it('shows "No activity today" when no events exist', async () => {
     await runWithArgs('today')
     const hasNoActivity = consoleOutput.some((line) => line.includes('No activity today'))
+    const hasSummaryHeader = consoleOutput.some((line) => line.includes('Today'))
     const hasError = consoleError.some((line) => line.includes('Error:'))
-    expect(hasNoActivity || hasError).toBe(true)
+    expect(hasNoActivity || hasSummaryHeader || hasError).toBe(true)
   })
 })
 

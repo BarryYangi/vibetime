@@ -3,14 +3,65 @@
 // CLI-02: Codex requires [features] codex_hooks = true in config.toml.
 // All operations backed up before modification; existing hooks preserved.
 
-import { readFileSync, writeFileSync, copyFileSync, existsSync, mkdirSync } from 'node:fs'
-import { dirname } from 'node:path'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { appendLog } from './log.js'
 
-// Hook binary path — resolved from process.execPath (for compiled binary) or import.meta.dir (for dev)
-const HOOK_BINARY_PATH = process.execPath.includes('vibetime')
-  ? process.execPath
-  : `${import.meta.dir}/../vibetime-hook`
+function resolveHookBinaryPath(): string {
+  if (process.env.VIBETIME_HOOK_BINARY) return process.env.VIBETIME_HOOK_BINARY
+
+  const moduleDir = dirname(fileURLToPath(import.meta.url))
+  const localBinaryPath = join(moduleDir, '..', 'vibetime-hook')
+  if (existsSync(localBinaryPath)) return localBinaryPath
+
+  return localBinaryPath
+}
+
+const HOOK_BINARY_PATH = resolveHookBinaryPath()
+const CODEX_FEATURE_MARKER = '# vibetime-managed'
+const CODEX_MANAGED_SECTION_MARKER = '# vibetime-managed-section'
+
+function isVibetimeCommand(command: unknown): command is string {
+  return typeof command === 'string' && command.includes('vibetime-hook')
+}
+
+function ensureCodexHooksEnabled(configContent: string): string {
+  if (/^\s*codex_hooks\s*=\s*true\b/m.test(configContent)) return configContent
+
+  const managedTrueLine = `codex_hooks = true ${CODEX_FEATURE_MARKER}`
+  const falseFlagPattern = /^(\s*)codex_hooks\s*=\s*false\b.*$/m
+  if (falseFlagPattern.test(configContent)) {
+    return configContent.replace(
+      falseFlagPattern,
+      `$1${managedTrueLine}: previous=false`,
+    )
+  }
+
+  if (configContent.includes('[features]')) {
+    return configContent.replace(/\[features\]/, `[features]\n${managedTrueLine}`)
+  }
+
+  const prefix = configContent.length > 0 && !configContent.endsWith('\n') ? '\n' : ''
+  return `${configContent}${prefix}\n[features]\n${CODEX_MANAGED_SECTION_MARKER}\n${managedTrueLine}\n`
+}
+
+function removeManagedCodexHooksFlag(configContent: string): string {
+  const managedSectionPattern =
+    /\n?\[features\]\n# vibetime-managed-section\n\s*codex_hooks\s*=\s*true\s*# vibetime-managed[^\n]*(?:\n|$)/m
+  if (managedSectionPattern.test(configContent)) {
+    return configContent.replace(managedSectionPattern, '')
+  }
+
+  const previousFalsePattern =
+    /^(\s*)codex_hooks\s*=\s*true\s*#\s*vibetime-managed:\s*previous=false[^\n]*$/m
+  if (previousFalsePattern.test(configContent)) {
+    return configContent.replace(previousFalsePattern, '$1codex_hooks = false')
+  }
+
+  const managedLinePattern = /^\s*codex_hooks\s*=\s*true\s*#\s*vibetime-managed[^\n]*(?:\n|$)/m
+  return configContent.replace(managedLinePattern, '')
+}
 
 /**
  * Install hooks for Claude Code.
@@ -51,7 +102,7 @@ export function installClaudeCode(): void {
       }>
 
       // Find or create matcher group with matcher: "*"
-      let existing = arr.find((g) => g.matcher === '*')
+      const existing = arr.find((g) => g.matcher === '*')
       if (existing) {
         // Check if vibetime hook already exists (idempotent)
         const hasVibetime = existing.hooks?.some((h) => h.command.includes('vibetime-hook'))
@@ -59,7 +110,10 @@ export function installClaudeCode(): void {
 
         // Add vibetime hook to existing group
         existing.hooks = existing.hooks ?? []
-        existing.hooks.push({ type: 'command', command: `${HOOK_BINARY_PATH} --source claude-code` })
+        existing.hooks.push({
+          type: 'command',
+          command: `${HOOK_BINARY_PATH} --source claude-code`,
+        })
       } else {
         // Create new matcher group
         arr.push({
@@ -100,19 +154,9 @@ export function installCodex(): void {
       copyFileSync(configPath, `${configPath}.backup`)
     }
 
-    // Check if codex_hooks = true already exists
-    if (!configContent.includes('codex_hooks = true')) {
-      // Add or update [features] section
-      if (configContent.includes('[features]')) {
-        // Add codex_hooks under existing [features]
-        configContent = configContent.replace(
-          /\[features\]/,
-          '[features]\ncodex_hooks = true',
-        )
-      } else {
-        // Add [features] section at end
-        configContent += '\n[features]\ncodex_hooks = true\n'
-      }
+    const nextConfigContent = ensureCodexHooksEnabled(configContent)
+    if (nextConfigContent !== configContent) {
+      configContent = nextConfigContent
       writeFileSync(configPath, configContent)
     }
 
@@ -142,9 +186,7 @@ export function installCodex(): void {
       }>
 
       // Check if vibetime hook already exists (idempotent)
-      const hasVibetime = arr.some((g) =>
-        g.hooks?.some((h) => h.command.includes('vibetime-hook')),
-      )
+      const hasVibetime = arr.some((g) => g.hooks?.some((h) => h.command.includes('vibetime-hook')))
       if (hasVibetime) continue
 
       // Add vibetime hook
@@ -230,6 +272,160 @@ export function installAgent(agent: string): void {
       break
     case 'cursor':
       installCursor()
+      break
+    default:
+      throw new Error(`Unknown agent: ${agent}. Supported: claude-code, codex, cursor`)
+  }
+}
+
+/**
+ * Uninstall vibetime hooks for Claude Code.
+ * Preserves unrelated user hooks and only removes commands containing vibetime-hook.
+ */
+export function uninstallClaudeCode(): void {
+  const settingsPath = `${process.env.HOME}/.claude/settings.json`
+
+  try {
+    if (!existsSync(settingsPath)) return
+
+    copyFileSync(settingsPath, `${settingsPath}.backup`)
+
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>
+    const hooks = (settings.hooks ?? {}) as Record<string, unknown[]>
+
+    for (const event of ['UserPromptSubmit', 'Stop', 'SessionStart', 'SessionEnd']) {
+      const arr = (hooks[event] ?? []) as Array<{
+        matcher?: string
+        hooks?: Array<{ type: string; command: string }>
+      }>
+
+      const next = arr
+        .map((group) => ({
+          ...group,
+          hooks: group.hooks?.filter((hook) => !isVibetimeCommand(hook.command)),
+        }))
+        .filter((group) => (group.hooks?.length ?? 0) > 0)
+
+      if (next.length > 0) {
+        hooks[event] = next
+      } else {
+        delete hooks[event]
+      }
+    }
+
+    if (Object.keys(hooks).length > 0) {
+      settings.hooks = hooks
+    } else {
+      delete settings.hooks
+    }
+
+    writeFileSync(settingsPath, JSON.stringify(settings, null, 2))
+  } catch (err) {
+    appendLog(`Error uninstalling Claude Code hooks: ${err}`)
+    throw err
+  }
+}
+
+/**
+ * Uninstall vibetime hooks for Codex CLI.
+ * Preserves unrelated hooks and only restores codex_hooks when Vibetime
+ * marked the feature flag as one it changed during install.
+ */
+export function uninstallCodex(): void {
+  const hooksPath = `${process.env.HOME}/.codex/hooks.json`
+  const configPath = `${process.env.HOME}/.codex/config.toml`
+
+  try {
+    if (existsSync(hooksPath)) {
+      copyFileSync(hooksPath, `${hooksPath}.backup`)
+
+      const hooksData = JSON.parse(readFileSync(hooksPath, 'utf-8')) as Record<string, unknown>
+      const hooks = (hooksData.hooks ?? {}) as Record<string, unknown[]>
+
+      for (const event of Object.keys(hooks)) {
+        const arr = (hooks[event] ?? []) as Array<{
+          hooks?: Array<{ type: string; command: string; timeout?: number }>
+        }>
+
+        const next = arr
+          .map((group) => ({
+            ...group,
+            hooks: group.hooks?.filter((hook) => !isVibetimeCommand(hook.command)),
+          }))
+          .filter((group) => (group.hooks?.length ?? 0) > 0)
+
+        if (next.length > 0) {
+          hooks[event] = next
+        } else {
+          delete hooks[event]
+        }
+      }
+
+      hooksData.hooks = hooks
+      writeFileSync(hooksPath, JSON.stringify(hooksData, null, 2))
+    }
+
+    if (existsSync(configPath)) {
+      const configContent = readFileSync(configPath, 'utf-8')
+      const nextConfigContent = removeManagedCodexHooksFlag(configContent)
+      if (nextConfigContent !== configContent) {
+        copyFileSync(configPath, `${configPath}.backup`)
+        writeFileSync(configPath, nextConfigContent)
+      }
+    }
+  } catch (err) {
+    appendLog(`Error uninstalling Codex hooks: ${err}`)
+    throw err
+  }
+}
+
+/**
+ * Uninstall vibetime hooks for Cursor.
+ * Preserves unrelated Cursor hooks.
+ */
+export function uninstallCursor(): void {
+  const hooksPath = `${process.env.HOME}/.cursor/hooks.json`
+
+  try {
+    if (!existsSync(hooksPath)) return
+
+    copyFileSync(hooksPath, `${hooksPath}.backup`)
+
+    const hooksData = JSON.parse(readFileSync(hooksPath, 'utf-8')) as Record<string, unknown>
+    const hooks = (hooksData.hooks ?? {}) as Record<string, unknown[]>
+
+    for (const event of Object.keys(hooks)) {
+      const arr = (hooks[event] ?? []) as Array<{ command: string }>
+      const next = arr.filter((hook) => !isVibetimeCommand(hook.command))
+
+      if (next.length > 0) {
+        hooks[event] = next
+      } else {
+        delete hooks[event]
+      }
+    }
+
+    hooksData.hooks = hooks
+    writeFileSync(hooksPath, JSON.stringify(hooksData, null, 2))
+  } catch (err) {
+    appendLog(`Error uninstalling Cursor hooks: ${err}`)
+    throw err
+  }
+}
+
+/**
+ * Uninstall vibetime hooks for the specified agent.
+ */
+export function uninstallAgent(agent: string): void {
+  switch (agent) {
+    case 'claude-code':
+      uninstallClaudeCode()
+      break
+    case 'codex':
+      uninstallCodex()
+      break
+    case 'cursor':
+      uninstallCursor()
       break
     default:
       throw new Error(`Unknown agent: ${agent}. Supported: claude-code, codex, cursor`)

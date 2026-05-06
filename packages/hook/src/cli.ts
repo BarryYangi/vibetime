@@ -1,13 +1,13 @@
 // CLI mode: parse subcommands and dispatch to handlers.
 // Hand-rolled argv parsing — no CLI library (CONTEXT.md gray area 1).
-// Subcommands: install, today, project, export, version, help.
+// Subcommands: install, uninstall, today, project, export, version, help.
 
 import chalk from 'chalk'
-import { installAgent } from './install.js'
-import { openDatabase, closeDatabase, queryEvents } from './store.js'
-import { sweepStale } from './recovery.js'
-import { VERSION, DB_PATH } from './constants.js'
+import { DB_PATH, VERSION } from './constants.js'
+import { installAgent, uninstallAgent } from './install.js'
 import { appendLog } from './log.js'
+import { reconcileCodexCompletedTurns, sweepStale } from './recovery.js'
+import { closeDatabase, openDatabase, queryEvents } from './store.js'
 
 /**
  * Print help message.
@@ -20,6 +20,7 @@ Usage:
 
 Commands:
   install <agent>   Configure hooks for an agent (claude-code | codex | cursor)
+  uninstall <agent> Remove vibetime hooks for an agent (claude-code | codex | cursor)
   today             Show today's agent time breakdown
   project <name>    Show project details (default: --days=7)
   export            Export events as JSON or CSV (--format=csv, --out=path)
@@ -28,6 +29,7 @@ Commands:
 
 Examples:
   vibetime install claude-code
+  vibetime uninstall claude-code
   vibetime install codex
   vibetime install cursor
   vibetime today
@@ -58,8 +60,21 @@ export async function runCli(): Promise<void> {
         break
       }
 
+      case 'uninstall': {
+        const agent = args[1]
+        if (!agent) {
+          console.error('Error: Agent name required. Usage: vibetime uninstall <agent>')
+          console.error('Supported agents: claude-code, codex, cursor')
+          process.exit(1)
+        }
+        uninstallAgent(agent)
+        console.log(`Uninstalled vibetime hooks for ${agent}`)
+        break
+      }
+
       case 'today': {
         const db = openDatabase()
+        reconcileCodexCompletedTurns(db)
         sweepStale(db) // REC-02: sweep stale turns on CLI invocation
 
         const now = new Date()
@@ -76,7 +91,10 @@ export async function runCli(): Promise<void> {
         }
 
         // Aggregate by project
-        const projectMap = new Map<string, { total: number; agents: Map<string, number>; turns: number }>()
+        const projectMap = new Map<
+          string,
+          { total: number; agents: Map<string, number>; turns: number }
+        >()
         for (const ev of events) {
           let entry = projectMap.get(ev.project)
           if (!entry) {
@@ -103,7 +121,11 @@ export async function runCli(): Promise<void> {
         }
 
         // Print header
-        const dateStr = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+        const dateStr = now.toLocaleDateString('en-US', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+        })
         console.log(chalk.bold(`Today — ${dateStr}`))
         console.log(chalk.dim('─'.repeat(40)))
 
@@ -116,28 +138,38 @@ export async function runCli(): Promise<void> {
         for (const [name, data] of sorted) {
           const pct = grandTotal > 0 ? Math.round((data.total / grandTotal) * 100) : 0
           const bar = '█'.repeat(Math.round(pct / 5)) + '░'.repeat(20 - Math.round(pct / 5))
-          console.log(`  ${chalk.bold(name.padEnd(maxNameLen))}  ${chalk.cyan(fmtDuration(data.total).padStart(8))}  ${chalk.dim(bar)} ${chalk.dim(`${pct}%`)}`)
+          console.log(
+            `  ${chalk.bold(name.padEnd(maxNameLen))}  ${chalk.cyan(fmtDuration(data.total).padStart(8))}  ${chalk.dim(bar)} ${chalk.dim(`${pct}%`)}`,
+          )
 
           // Agent breakdown
           for (const [agent, agentTotal] of data.agents) {
             if (agentTotal > 0) {
-              console.log(`  ${' '.repeat(maxNameLen)}  ${chalk.dim(agent)}: ${chalk.dim(fmtDuration(agentTotal))}`)
+              console.log(
+                `  ${' '.repeat(maxNameLen)}  ${chalk.dim(agent)}: ${chalk.dim(fmtDuration(agentTotal))}`,
+              )
             }
           }
         }
 
         // Print footer
-        const turnCount = events.filter(e => e.event_type === 'turn_start').length
+        const turnCount = events.filter((e) => e.event_type === 'turn_start').length
         const activeProjects = projectMap.size
         console.log()
-        console.log(chalk.dim(`  ${turnCount} turns across ${activeProjects} project${activeProjects !== 1 ? 's' : ''}`))
+        console.log(
+          chalk.dim(
+            `  ${turnCount} turns across ${activeProjects} project${activeProjects !== 1 ? 's' : ''}`,
+          ),
+        )
         break
       }
 
       case 'project': {
         const projectName = args[1]
         if (!projectName) {
-          console.error(chalk.red('Error: Project name required. Usage: vibetime project <name> [--days=N]'))
+          console.error(
+            chalk.red('Error: Project name required. Usage: vibetime project <name> [--days=N]'),
+          )
           process.exit(1)
         }
 
@@ -145,6 +177,7 @@ export async function runCli(): Promise<void> {
         const days = daysArg ? parseInt(daysArg.split('=')[1], 10) : 7
 
         const db = openDatabase()
+        reconcileCodexCompletedTurns(db)
         sweepStale(db) // REC-02: sweep stale turns on CLI invocation
 
         const to = Math.floor(Date.now() / 1000)
@@ -154,7 +187,9 @@ export async function runCli(): Promise<void> {
         closeDatabase(db)
 
         if (events.length === 0) {
-          console.log(chalk.dim(`No activity for project "${projectName}" in the last ${days} days.`))
+          console.log(
+            chalk.dim(`No activity for project "${projectName}" in the last ${days} days.`),
+          )
           break
         }
 
@@ -210,6 +245,7 @@ export async function runCli(): Promise<void> {
         const toArg = args.find((a) => a.startsWith('--to='))
 
         const db = openDatabase()
+        reconcileCodexCompletedTurns(db)
         sweepStale(db) // REC-02: sweep stale turns on CLI invocation
 
         const options: { from?: number; to?: number } = {}
@@ -227,7 +263,18 @@ export async function runCli(): Promise<void> {
 
         if (format === 'csv') {
           // CSV with headers
-          const headers = ['schema_version', 'agent', 'event_type', 'project', 'session_id', 'turn_id', 'ts', 'timezone', 'duration_sec', 'meta']
+          const headers = [
+            'schema_version',
+            'agent',
+            'event_type',
+            'project',
+            'session_id',
+            'turn_id',
+            'ts',
+            'timezone',
+            'duration_sec',
+            'meta',
+          ]
           const escapeCsv = (val: unknown): string => {
             const str = val === null || val === undefined ? '' : String(val)
             if (str.includes(',') || str.includes('"') || str.includes('\n')) {
@@ -235,11 +282,22 @@ export async function runCli(): Promise<void> {
             }
             return str
           }
-          const rows = events.map(ev => [
-            1, ev.agent, ev.event_type, ev.project, ev.session_id,
-            ev.turn_id ?? '', ev.ts, ev.timezone, ev.duration_sec ?? '',
-            ev.meta ? JSON.stringify(ev.meta) : ''
-          ].map(escapeCsv).join(','))
+          const rows = events.map((ev) =>
+            [
+              1,
+              ev.agent,
+              ev.event_type,
+              ev.project,
+              ev.session_id,
+              ev.turn_id ?? '',
+              ev.ts,
+              ev.timezone,
+              ev.duration_sec ?? '',
+              ev.meta ? JSON.stringify(ev.meta) : '',
+            ]
+              .map(escapeCsv)
+              .join(','),
+          )
           output = [headers.join(','), ...rows].join('\n')
         } else {
           output = JSON.stringify(events, null, 2)

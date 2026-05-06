@@ -7,14 +7,17 @@ import { basename } from 'node:path'
  * - vibetime (no args) → CLI mode special (launch Electron app)
  */
 async function main(): Promise<void> {
-  const self = basename(process.argv[1] ?? '')
+  const argvNames = [process.argv[0], process.argv[1]].map((arg) => basename(arg ?? ''))
+  const isHookMode = argvNames.includes('vibetime-hook') || process.argv.includes('--source')
 
-  if (self === 'vibetime-hook') {
+  if (isHookMode) {
     // HOOK mode: stdin → adapter → SQLite
-    await import('./hook.js')
+    const { runHook } = await import('./hook.js')
+    await runHook()
   } else {
     // CLI mode: parse subcommands
-    await import('./cli.js')
+    const { runCli } = await import('./cli.js')
+    await runCli()
   }
 }
 

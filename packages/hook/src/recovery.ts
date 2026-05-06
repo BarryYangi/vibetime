@@ -4,6 +4,7 @@
 // Both never throw (PRD §7).
 
 import type { Database } from 'bun:sqlite'
+import { findCodexTaskCompletion } from '@vibetime/core'
 import type { NormalizedEvent } from '@vibetime/core'
 import { queryOpenTurns, deleteOpenTurn, persistEvent } from './store.js'
 import { appendLog } from './log.js'
@@ -94,5 +95,52 @@ export function sweepStale(db: Database): void {
   } catch (err) {
     // Sweep failure should not block CLI/desktop
     appendLog(`Error in sweepStale: ${err}`)
+  }
+}
+
+/**
+ * Reconcile Codex open turns using the local Codex session transcript.
+ * This closes turns that already emitted `task_complete` in the transcript
+ * even when the Stop hook did not fire.
+ */
+export function reconcileCodexCompletedTurns(db: Database, sessionId?: string): void {
+  try {
+    const openTurns = queryOpenTurns(db, sessionId).filter((turn) => turn.agent === 'codex')
+
+    for (const turn of openTurns) {
+      const completion = findCodexTaskCompletion({
+        sessionId: turn.session_id,
+        turnId: turn.turn_id,
+        startedAt: turn.started_at,
+      })
+      if (!completion) continue
+
+      const alreadyEnded = db
+        .query("SELECT 1 FROM events WHERE turn_id = ? AND event_type = 'turn_end' LIMIT 1")
+        .get(turn.turn_id)
+
+      if (alreadyEnded) {
+        deleteOpenTurn(db, turn.turn_id)
+        continue
+      }
+
+      persistEvent(db, {
+        agent: 'codex',
+        event_type: 'turn_end',
+        project: turn.project,
+        session_id: turn.session_id,
+        turn_id: turn.turn_id,
+        ts: completion.completedAt,
+        timezone: turn.timezone,
+        meta: {
+          reason: 'codex_task_complete_fallback',
+          transcript_path: completion.transcriptPath,
+        },
+      })
+
+      appendLog(`Reconciled codex turn ${turn.turn_id} via transcript fallback`)
+    }
+  } catch (err) {
+    appendLog(`Error in reconcileCodexCompletedTurns: ${err}`)
   }
 }

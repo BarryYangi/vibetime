@@ -1,30 +1,34 @@
 import * as echarts from 'echarts'
 
-const tokyoNightTheme = {
-  color: ['#bb9af7', '#7aa2f7', '#9ece6a', '#e0af68', '#f7768e', '#ff9e64', '#2ac3de', '#7dcfff'],
+const cossNeutralTheme = {
+  color: ['#262626', '#737373', '#3b82f6', '#10b981', '#f59e0b', '#ef4444'],
   backgroundColor: 'transparent',
-  textStyle: { color: '#c0caf5', fontFamily: 'Inter, system-ui, sans-serif' },
-  title: { textStyle: { color: '#c0caf5' }, subtextStyle: { color: '#565f89' } },
-  legend: { textStyle: { color: '#a9b1d6' } },
+  textStyle: {
+    color: '#262626',
+    fontFamily:
+      '"SN Pro", -apple-system, BlinkMacSystemFont, system-ui, ui-sans-serif, sans-serif',
+  },
+  title: { textStyle: { color: '#262626' }, subtextStyle: { color: '#737373' } },
+  legend: { textStyle: { color: '#737373' } },
   tooltip: {
-    backgroundColor: '#24283b',
-    borderColor: '#3b4261',
-    textStyle: { color: '#c0caf5' },
+    backgroundColor: '#ffffff',
+    borderColor: '#00000014',
+    textStyle: { color: '#262626' },
   },
   categoryAxis: {
-    axisLine: { lineStyle: { color: '#3b4261' } },
-    axisTick: { lineStyle: { color: '#3b4261' } },
-    axisLabel: { color: '#565f89' },
-    splitLine: { lineStyle: { color: '#1a1b26' } },
+    axisLine: { lineStyle: { color: '#00000014' } },
+    axisTick: { lineStyle: { color: '#00000014' } },
+    axisLabel: { color: '#737373' },
+    splitLine: { lineStyle: { color: '#0000000a' } },
   },
   valueAxis: {
-    axisLine: { lineStyle: { color: '#3b4261' } },
-    axisTick: { lineStyle: { color: '#3b4261' } },
-    axisLabel: { color: '#565f89' },
-    splitLine: { lineStyle: { color: '#3b4261' } },
+    axisLine: { lineStyle: { color: '#00000014' } },
+    axisTick: { lineStyle: { color: '#00000014' } },
+    axisLabel: { color: '#737373' },
+    splitLine: { lineStyle: { color: '#00000014' } },
   },
 }
 
-echarts.registerTheme('tokyoNight', tokyoNightTheme)
+echarts.registerTheme('cossNeutral', cossNeutralTheme)
 
-export { tokyoNightTheme }
+export { cossNeutralTheme }

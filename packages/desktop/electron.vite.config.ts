@@ -1,14 +1,26 @@
 import { resolve } from 'node:path'
-import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
-import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import react from '@vitejs/plugin-react'
+import { defineConfig } from 'electron-vite'
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    build: {
+      externalizeDeps: {
+        exclude: ['@vibetime/hook/config', '@vibetime/hook/install'],
+      },
+    },
+    resolve: {
+      alias: {
+        '@vibetime/hook/config': resolve('../hook/src/config.ts'),
+        '@vibetime/hook/install': resolve('../hook/src/install.ts'),
+      },
+    },
   },
   preload: {
-    plugins: [externalizeDepsPlugin()],
+    build: {
+      externalizeDeps: true,
+    },
   },
   renderer: {
     resolve: {

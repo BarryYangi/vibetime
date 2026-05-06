@@ -52,6 +52,16 @@ export function closeDatabase(db: Database): void {
  */
 export function persistEvent(db: Database, event: NormalizedEvent): void {
   try {
+    if (event.event_type === 'turn_start' && event.turn_id) {
+      const existingOpenTurn = db
+        .query('SELECT 1 FROM open_turns WHERE turn_id = ? LIMIT 1')
+        .get(event.turn_id)
+      if (existingOpenTurn) {
+        appendLog(`Skipped duplicate turn_start for ${event.agent}:${event.turn_id}`)
+        return
+      }
+    }
+
     // Insert event — prepared statement with parameter binding (T-03-04)
     const insertEvent = db.query(`
       INSERT INTO events (schema_version, agent, event_type, project, session_id, turn_id, ts, timezone, duration_sec, meta)

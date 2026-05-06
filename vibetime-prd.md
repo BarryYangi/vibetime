@@ -42,8 +42,8 @@ Primary user: the developer building this (single-developer V0). The shape gener
   - **Live** view: real-time visualization of currently-active turns
   - **History** view: 7/30/90/365-day trends including a calendar heatmap
   - **Menubar widget**: persistent OS-level indicator showing today's cumulative agent time
-- CLI mode for headless use: install hooks, query today's data, export raw events
-- One-command hook installation per agent (idempotent)
+- CLI mode for headless use: install/uninstall hooks, query today's data, export raw events
+- One-command hook installation and uninstallation per agent. Install is idempotent; uninstall removes only vibetime-managed hook commands and preserves unrelated user hooks.
 - macOS arm64 distribution as a signed, notarized application
 
 ### Must Not Have (defer to V0.1+)
@@ -273,7 +273,7 @@ When multiple turns are concurrent: stacked vertically.
 
 ### 10.3 Settings (minimal V0)
 
-- Connect Agents: per-agent install button + status indicator
+- Connect Agents: per-agent install button + status indicator. When a hook is already installed, the primary action is **Uninstall Hook**; V0 does not show a separate reinstall action.
 - Project aliases: view/edit `cwd → name` mappings
 - About: version, data file location, license
 
@@ -284,17 +284,18 @@ When multiple turns are concurrent: stacked vertically.
 
 ### 10.5 Design system
 
-- Color palette: Tokyo Night-inspired (primary `#bb9af7`, accent `#7aa2f7`, success `#9ece6a`, muted `#565f89`, foreground `#c0caf5`, background `#1a1b26`)
-- Typography: Inter for UI, JetBrains Mono for numbers/code
-- coss ui as component baseline; customize via Tailwind tokens
-- ECharts charts themed to the same palette via a custom theme registered in `desktop/src/charts/theme.ts`
-- Rounded borders, generous line-height
+- Use coss ui's default neutral light/dark theme (`@coss/colors-neutral`) as the visual baseline. Do not apply a Tokyo Night palette or a custom high-contrast color theme in V0.
+- Typography: coss-compatible `--font-sans`, `--font-heading`, and `--font-mono` variables. Prefer local/system fonts in Electron; no runtime network font loading.
+- coss ui is the component baseline. Keep coss semantic tokens (`background`, `foreground`, `card`, `muted`, `primary`, `border`, etc.) intact instead of adding raw color classes or app-specific token families.
+- ECharts charts should derive colors from the same coss semantic tokens. Use restrained contrast, minimal gridlines, and avoid decorative gradients unless they encode data.
+- UI density should feel like a quiet macOS utility: subtle cards, soft separators only where needed, no nested cards, no heavy outlines, no loud status badges for normal states.
 
 ## 11. CLI Surface
 
 The desktop binary, when invoked with CLI subcommands, runs headless and exits.
 
 - `vibetime install <agent>` — configure hooks for one agent. Idempotent.
+- `vibetime uninstall <agent>` — remove vibetime-managed hooks for one agent. Preserve unrelated user-defined hooks.
 - `vibetime today` — plain-text breakdown of today's agent time.
 - `vibetime project <name> [--days=N]` — drilldown for one project, default 7 days.
 - `vibetime export [--format=json|csv] [--out=<path>] [--from=<date>] [--to=<date>]` — raw event export. Default JSON to stdout. Date format: `YYYY-MM-DD`.
@@ -344,6 +345,7 @@ Explicit non-goals — must not be implemented in V0:
 V0 is complete when **all** of the following pass:
 
 - [ ] `vibetime install claude-code` configures hooks. Running it twice does not duplicate. Existing user-defined hooks preserved.
+- [ ] `vibetime uninstall claude-code` removes only vibetime-managed hook entries. Existing user-defined hooks preserved.
 - [ ] After a real Claude Code session, `vibetime today` shows the correct project name and elapsed time.
 - [ ] Same for Codex (with feature flag set) and Cursor.
 - [ ] Two agents in different terminals concurrently → no DB corruption, both turns recorded.

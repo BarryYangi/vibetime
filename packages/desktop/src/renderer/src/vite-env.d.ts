@@ -3,6 +3,7 @@
 import type { IpcChannel, IpcPushEvent, IpcMethods, IpcResult } from '../../shared/ipc-types'
 
 interface VibetimeApi {
+  platform: NodeJS.Platform
   invoke<T extends IpcChannel>(
     channel: T,
     ...args: IpcMethods[T]['args'] extends void ? [] : [IpcMethods[T]['args']]

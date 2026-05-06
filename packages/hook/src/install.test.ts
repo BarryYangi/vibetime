@@ -1,9 +1,18 @@
 // Tests for install.ts — agent hook installation.
 // CLI-01: idempotency. CLI-02: Codex features flag.
 
-import { describe, expect, it, beforeEach, afterEach } from 'bun:test'
-import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs'
-import { installClaudeCode, installCodex, installCursor, installAgent } from './install.js'
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  installAgent,
+  installClaudeCode,
+  installCodex,
+  installCursor,
+  uninstallAgent,
+  uninstallClaudeCode,
+  uninstallCodex,
+  uninstallCursor,
+} from './install.js'
 
 let testHome: string
 let originalHome: string
@@ -39,7 +48,9 @@ describe('installClaudeCode — happy paths', () => {
       expect(Array.isArray(settings.hooks[event])).toBe(true)
       const group = settings.hooks[event].find((g: { matcher?: string }) => g.matcher === '*')
       expect(group).toBeDefined()
-      expect(group.hooks.some((h: { command: string }) => h.command.includes('vibetime-hook'))).toBe(true)
+      expect(
+        group.hooks.some((h: { command: string }) => h.command.includes('vibetime-hook')),
+      ).toBe(true)
     }
   })
 
@@ -52,7 +63,9 @@ describe('installClaudeCode — happy paths', () => {
 
     for (const event of ['UserPromptSubmit', 'Stop', 'SessionStart', 'SessionEnd']) {
       const group = settings.hooks[event].find((g: { matcher?: string }) => g.matcher === '*')
-      const vibetimeHooks = group.hooks.filter((h: { command: string }) => h.command.includes('vibetime-hook'))
+      const vibetimeHooks = group.hooks.filter((h: { command: string }) =>
+        h.command.includes('vibetime-hook'),
+      )
       expect(vibetimeHooks.length).toBe(1)
     }
   })
@@ -60,23 +73,32 @@ describe('installClaudeCode — happy paths', () => {
   it('preserves existing hooks', () => {
     const settingsPath = `${testHome}/.claude/settings.json`
     mkdirSync(`${testHome}/.claude`, { recursive: true })
-    writeFileSync(settingsPath, JSON.stringify({
-      hooks: {
-        UserPromptSubmit: [{
-          matcher: '*',
-          hooks: [{ type: 'command', command: 'existing-hook' }],
-        }],
-      },
-      otherSetting: 'preserved',
-    }))
+    writeFileSync(
+      settingsPath,
+      JSON.stringify({
+        hooks: {
+          UserPromptSubmit: [
+            {
+              matcher: '*',
+              hooks: [{ type: 'command', command: 'existing-hook' }],
+            },
+          ],
+        },
+        otherSetting: 'preserved',
+      }),
+    )
 
     installClaudeCode()
 
     const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'))
     expect(settings.otherSetting).toBe('preserved')
-    const group = settings.hooks.UserPromptSubmit.find((g: { matcher?: string }) => g.matcher === '*')
+    const group = settings.hooks.UserPromptSubmit.find(
+      (g: { matcher?: string }) => g.matcher === '*',
+    )
     expect(group.hooks.some((h: { command: string }) => h.command === 'existing-hook')).toBe(true)
-    expect(group.hooks.some((h: { command: string }) => h.command.includes('vibetime-hook'))).toBe(true)
+    expect(group.hooks.some((h: { command: string }) => h.command.includes('vibetime-hook'))).toBe(
+      true,
+    )
   })
 
   it('creates backup before modification', () => {
@@ -96,7 +118,9 @@ describe('installClaudeCode — happy paths', () => {
 
     const settingsPath = `${testHome}/.claude/settings.json`
     const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'))
-    const group = settings.hooks.UserPromptSubmit.find((g: { matcher?: string }) => g.matcher === '*')
+    const group = settings.hooks.UserPromptSubmit.find(
+      (g: { matcher?: string }) => g.matcher === '*',
+    )
     expect(group.hooks[0].command).toContain('--source claude-code')
   })
 })
@@ -135,8 +159,9 @@ describe('installCodex — happy paths', () => {
     const hooksData = JSON.parse(readFileSync(hooksPath, 'utf-8'))
 
     for (const event of ['SessionStart', 'UserPromptSubmit', 'Stop']) {
-      const vibetimeEntries = hooksData.hooks[event].filter((g: { hooks?: Array<{ command: string }> }) =>
-        g.hooks?.some((h) => h.command.includes('vibetime-hook')),
+      const vibetimeEntries = hooksData.hooks[event].filter(
+        (g: { hooks?: Array<{ command: string }> }) =>
+          g.hooks?.some((h) => h.command.includes('vibetime-hook')),
       )
       expect(vibetimeEntries.length).toBe(1)
     }
@@ -151,6 +176,18 @@ describe('installCodex — happy paths', () => {
 
     const content = readFileSync(configPath, 'utf-8')
     expect(content).toContain('codex_hooks = true')
+    expect(content).toContain('other_flag = false')
+  })
+
+  it('marks codex_hooks changes when enabling a previous false flag', () => {
+    const configPath = `${testHome}/.codex/config.toml`
+    mkdirSync(`${testHome}/.codex`, { recursive: true })
+    writeFileSync(configPath, '[features]\ncodex_hooks = false\nother_flag = false\n')
+
+    installCodex()
+
+    const content = readFileSync(configPath, 'utf-8')
+    expect(content).toContain('codex_hooks = true # vibetime-managed: previous=false')
     expect(content).toContain('other_flag = false')
   })
 
@@ -179,7 +216,11 @@ describe('installCursor — happy paths', () => {
     for (const event of events) {
       expect(hooksData.hooks[event]).toBeDefined()
       expect(Array.isArray(hooksData.hooks[event])).toBe(true)
-      expect(hooksData.hooks[event].some((h: { command: string }) => h.command.includes('vibetime-hook'))).toBe(true)
+      expect(
+        hooksData.hooks[event].some((h: { command: string }) =>
+          h.command.includes('vibetime-hook'),
+        ),
+      ).toBe(true)
     }
   })
 
@@ -201,19 +242,30 @@ describe('installCursor — happy paths', () => {
   it('preserves existing hooks', () => {
     const hooksPath = `${testHome}/.cursor/hooks.json`
     mkdirSync(`${testHome}/.cursor`, { recursive: true })
-    writeFileSync(hooksPath, JSON.stringify({
-      version: 1,
-      hooks: {
-        beforeSubmitPrompt: [{ command: 'existing-hook' }],
-      },
-    }))
+    writeFileSync(
+      hooksPath,
+      JSON.stringify({
+        version: 1,
+        hooks: {
+          beforeSubmitPrompt: [{ command: 'existing-hook' }],
+        },
+      }),
+    )
 
     installCursor()
 
     const hooksData = JSON.parse(readFileSync(hooksPath, 'utf-8'))
     expect(hooksData.version).toBe(1)
-    expect(hooksData.hooks.beforeSubmitPrompt.some((h: { command: string }) => h.command === 'existing-hook')).toBe(true)
-    expect(hooksData.hooks.beforeSubmitPrompt.some((h: { command: string }) => h.command.includes('vibetime-hook'))).toBe(true)
+    expect(
+      hooksData.hooks.beforeSubmitPrompt.some(
+        (h: { command: string }) => h.command === 'existing-hook',
+      ),
+    ).toBe(true)
+    expect(
+      hooksData.hooks.beforeSubmitPrompt.some((h: { command: string }) =>
+        h.command.includes('vibetime-hook'),
+      ),
+    ).toBe(true)
   })
 
   it('creates backup before modification', () => {
@@ -246,13 +298,136 @@ describe('installAgent — dispatch', () => {
   it('throws on unknown agent', () => {
     expect(() => installAgent('unknown')).toThrow('Unknown agent')
   })
+
+  it('writes commands that point to an existing vibetime-hook binary', () => {
+    installAgent('claude-code')
+    installAgent('codex')
+    installAgent('cursor')
+
+    const claudeSettings = JSON.parse(readFileSync(`${testHome}/.claude/settings.json`, 'utf-8'))
+    const codexHooks = JSON.parse(readFileSync(`${testHome}/.codex/hooks.json`, 'utf-8'))
+    const cursorHooks = JSON.parse(readFileSync(`${testHome}/.cursor/hooks.json`, 'utf-8'))
+
+    const commands = [
+      claudeSettings.hooks.UserPromptSubmit[0].hooks[0].command,
+      codexHooks.hooks.UserPromptSubmit[0].hooks[0].command,
+      cursorHooks.hooks.beforeSubmitPrompt[0].command,
+    ]
+
+    for (const command of commands) {
+      const binaryPath = command.replace(/\s+--source.*$/, '')
+      expect(binaryPath).toContain('vibetime-hook')
+      expect(existsSync(binaryPath)).toBe(true)
+    }
+  })
+})
+
+describe('uninstall — removes only vibetime hooks', () => {
+  it('removes Claude Code vibetime hooks and preserves unrelated hooks', () => {
+    const settingsPath = `${testHome}/.claude/settings.json`
+    mkdirSync(`${testHome}/.claude`, { recursive: true })
+    writeFileSync(
+      settingsPath,
+      JSON.stringify({
+        hooks: {
+          UserPromptSubmit: [
+            {
+              matcher: '*',
+              hooks: [
+                { type: 'command', command: 'existing-hook' },
+                { type: 'command', command: 'vibetime-hook --source claude-code' },
+              ],
+            },
+          ],
+        },
+      }),
+    )
+
+    uninstallClaudeCode()
+
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'))
+    const group = settings.hooks.UserPromptSubmit.find(
+      (g: { matcher?: string }) => g.matcher === '*',
+    )
+    expect(group.hooks.some((h: { command: string }) => h.command === 'existing-hook')).toBe(true)
+    expect(group.hooks.some((h: { command: string }) => h.command.includes('vibetime-hook'))).toBe(
+      false,
+    )
+    expect(existsSync(`${settingsPath}.backup`)).toBe(true)
+  })
+
+  it('removes Codex vibetime hooks and restores managed codex_hooks false flag', () => {
+    const configPath = `${testHome}/.codex/config.toml`
+    mkdirSync(`${testHome}/.codex`, { recursive: true })
+    writeFileSync(configPath, '[features]\ncodex_hooks = false\nother_flag = false\n')
+
+    installCodex()
+    uninstallCodex()
+
+    const hooksPath = `${testHome}/.codex/hooks.json`
+    const hooksData = JSON.parse(readFileSync(hooksPath, 'utf-8'))
+    const hasVibetime = Object.values(hooksData.hooks as Record<string, unknown[]>).some((groups) =>
+      groups.some((group) =>
+        ((group as { hooks?: Array<{ command: string }> }).hooks ?? []).some((hook) =>
+          hook.command.includes('vibetime-hook'),
+        ),
+      ),
+    )
+
+    expect(hasVibetime).toBe(false)
+    expect(readFileSync(configPath, 'utf-8')).toBe(
+      '[features]\ncodex_hooks = false\nother_flag = false\n',
+    )
+    expect(existsSync(`${hooksPath}.backup`)).toBe(true)
+  })
+
+  it('removes Cursor vibetime hooks and preserves unrelated hooks', () => {
+    const hooksPath = `${testHome}/.cursor/hooks.json`
+    mkdirSync(`${testHome}/.cursor`, { recursive: true })
+    writeFileSync(
+      hooksPath,
+      JSON.stringify({
+        version: 1,
+        hooks: {
+          beforeSubmitPrompt: [
+            { command: 'existing-hook' },
+            { command: 'vibetime-hook --source cursor' },
+          ],
+        },
+      }),
+    )
+
+    uninstallCursor()
+
+    const hooksData = JSON.parse(readFileSync(hooksPath, 'utf-8'))
+    expect(
+      hooksData.hooks.beforeSubmitPrompt.some(
+        (h: { command: string }) => h.command === 'existing-hook',
+      ),
+    ).toBe(true)
+    expect(
+      hooksData.hooks.beforeSubmitPrompt.some((h: { command: string }) =>
+        h.command.includes('vibetime-hook'),
+      ),
+    ).toBe(false)
+    expect(existsSync(`${hooksPath}.backup`)).toBe(true)
+  })
+
+  it('dispatches uninstallAgent by agent id', () => {
+    installAgent('claude-code')
+    uninstallAgent('claude-code')
+
+    const settingsPath = `${testHome}/.claude/settings.json`
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'))
+    expect(settings.hooks).toBeUndefined()
+  })
 })
 
 describe('install — adversarial inputs', () => {
   it('handles corrupted settings.json gracefully', () => {
     const settingsPath = `${testHome}/.claude/settings.json`
     mkdirSync(`${testHome}/.claude`, { recursive: true })
-    writeFileSync(settingsPath, 'not valid json{{{'  )
+    writeFileSync(settingsPath, 'not valid json{{{')
 
     installClaudeCode()
 

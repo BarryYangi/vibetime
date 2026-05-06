@@ -1,9 +1,21 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Provider } from 'jotai'
+import { styles as numberFlowStyles } from '@number-flow/react'
+import '@fontsource/sn-pro/400.css'
+import '@fontsource/sn-pro/500.css'
+import '@fontsource/sn-pro/600.css'
+import '@fontsource/sn-pro/700.css'
 import { store } from './store'
 import App from './App'
 import './index.css'
+
+if (!document.querySelector('style[data-number-flow]')) {
+  const el = document.createElement('style')
+  el.dataset.numberFlow = ''
+  el.textContent = numberFlowStyles.join('\n')
+  document.head.appendChild(el)
+}
 
 const root = document.getElementById('root')
 if (root) {

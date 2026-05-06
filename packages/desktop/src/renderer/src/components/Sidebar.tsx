@@ -1,30 +1,36 @@
+import { BarChart3Icon, SettingsIcon } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
+import { buttonVariants } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 
 const navItems = [
-  { to: '/', label: 'Today', icon: '📊' },
-  { to: '/settings', label: 'Settings', icon: '⚙' },
+  { to: '/', label: 'Today', icon: BarChart3Icon },
+  { to: '/settings', label: 'Settings', icon: SettingsIcon },
 ]
 
 export default function Sidebar() {
   return (
-    <aside className="w-48 bg-tn-bg-dark border-r border-tn-border flex flex-col py-4">
-      <div className="px-4 mb-6">
-        <h1 className="text-lg font-bold text-tn-primary font-mono">vibetime</h1>
+    <aside className="flex w-[14rem] shrink-0 flex-col items-stretch py-3 text-left">
+      <div className="mb-4 w-full pl-0 pr-1">
+        <p className="w-full text-left font-logo text-[2.35rem] font-bold leading-[0.92] tracking-tight text-foreground">
+          vibetime
+        </p>
       </div>
-      <nav className="flex-1">
-        {navItems.map(({ to, label, icon }) => (
+      <nav className="electron-no-drag flex flex-1 flex-col gap-1 pl-0 pr-1">
+        {navItems.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
             className={({ isActive }) =>
-              `flex items-center gap-2 px-4 py-2 text-sm transition-colors ${
-                isActive
-                  ? 'text-tn-primary bg-tn-surface'
-                  : 'text-tn-muted hover:text-tn-fg hover:bg-tn-surface/50'
-              }`
+              cn(
+                buttonVariants({ variant: 'ghost', size: 'sm' }),
+                'w-full justify-start',
+                isActive && 'bg-accent text-foreground',
+                !isActive && 'text-muted-foreground',
+              )
             }
           >
-            <span>{icon}</span>
+            <Icon aria-hidden="true" />
             <span>{label}</span>
           </NavLink>
         ))}

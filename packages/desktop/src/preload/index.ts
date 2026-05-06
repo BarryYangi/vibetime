@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { IpcChannel, IpcPushEvent, IpcMethods, IpcResult } from '../shared/ipc-types'
 
 const api = {
+  platform: process.platform as NodeJS.Platform,
   invoke<T extends IpcChannel>(
     channel: T,
     ...args: IpcMethods[T]['args'] extends void ? [] : [IpcMethods[T]['args']]

@@ -1,6 +1,4 @@
-export type IpcResult<T> =
-  | { ok: true; data: T }
-  | { ok: false; error: string }
+export type IpcResult<T> = { ok: true; data: T } | { ok: false; error: string }
 
 export interface TodaySummary {
   date: string
@@ -41,9 +39,17 @@ export interface IpcMethods {
   getConfig: { args: void; result: VibetimeConfig }
   updateConfig: { args: Partial<VibetimeConfig>; result: void }
   installAgent: { args: { agent: string }; result: void }
+  uninstallAgent: { args: { agent: string }; result: void }
 }
 
 export type IpcChannel = keyof IpcMethods
 
 export type IpcPushEvent =
-  | { type: 'db-changed' }
+  | {
+      type: 'db-changed'
+      agent?: string
+      event_type?: string
+      session_id?: string
+      project?: string
+      ts?: number
+    }

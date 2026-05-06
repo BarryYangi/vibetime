@@ -190,6 +190,23 @@ describe('persistEvent — event insertion', () => {
     }
   })
 
+  it('ignores duplicate turn_start for the same open turn_id', () => {
+    const db = openDatabase(dbPath)
+    try {
+      persistEvent(db, makeEvent({ event_type: 'turn_start', turn_id: 'turn-dup', ts: 1000 }))
+      persistEvent(db, makeEvent({ event_type: 'turn_start', turn_id: 'turn-dup', ts: 1010 }))
+
+      const events = db.query("SELECT * FROM events WHERE turn_id = 'turn-dup'").all()
+      const openTurns = queryOpenTurns(db)
+
+      expect(events).toHaveLength(1)
+      expect(openTurns).toHaveLength(1)
+      expect(openTurns[0].started_at).toBe(1000)
+    } finally {
+      closeDatabase(db)
+    }
+  })
+
   it('computes duration_sec on turn_end and removes from open_turns', () => {
     const db = openDatabase(dbPath)
     try {
