@@ -23,13 +23,6 @@ const githubHeatmapPalette = ['#ebedf0', '#9be9a8', '#40c463', '#30a14e', '#216e
 const axisLabelStyle = { color: '#737373', fontSize: 11, fontFamily: 'SN Pro' }
 const splitLineStyle = { color: '#0000000f', width: 1 }
 const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-const flatHeatmapEmphasis = {
-  itemStyle: {
-    borderColor: '#262626',
-    borderWidth: 1,
-    shadowBlur: 0,
-  },
-} as const
 
 function formatDuration(seconds: number): string {
   const whole = Math.max(0, Math.floor(seconds))
@@ -154,7 +147,14 @@ function CalendarHeatmap({ summary }: { summary: HistorySummary }) {
           type: 'heatmap',
           coordinateSystem: 'calendar',
           data: values,
-          emphasis: flatHeatmapEmphasis,
+          emphasis: {
+            itemStyle: {
+              borderColor: '#262626',
+              borderWidth: 1,
+              shadowBlur: 8,
+              shadowColor: 'rgba(0,0,0,0.14)',
+            },
+          },
         },
       ],
     }),
@@ -337,7 +337,14 @@ function HourlyActivityHeatmap({ summary }: { summary: HistorySummary }) {
         {
           type: 'heatmap',
           data: summary.hourlyMatrix.map((cell) => [cell.hour, cell.weekday, cell.total]),
-          emphasis: flatHeatmapEmphasis,
+          emphasis: {
+            itemStyle: {
+              borderColor: '#262626',
+              borderWidth: 1,
+              shadowBlur: 8,
+              shadowColor: 'rgba(0,0,0,0.12)',
+            },
+          },
           itemStyle: { borderColor: '#ffffff', borderRadius: 3, borderWidth: 2 },
         },
       ],
