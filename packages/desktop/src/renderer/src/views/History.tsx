@@ -151,8 +151,6 @@ function CalendarHeatmap({ summary }: { summary: HistorySummary }) {
             itemStyle: {
               borderColor: '#262626',
               borderWidth: 1,
-              shadowBlur: 8,
-              shadowColor: 'rgba(0,0,0,0.14)',
             },
           },
         },
@@ -341,8 +339,6 @@ function HourlyActivityHeatmap({ summary }: { summary: HistorySummary }) {
             itemStyle: {
               borderColor: '#262626',
               borderWidth: 1,
-              shadowBlur: 8,
-              shadowColor: 'rgba(0,0,0,0.12)',
             },
           },
           itemStyle: { borderColor: '#ffffff', borderRadius: 3, borderWidth: 2 },
