@@ -132,28 +132,28 @@ function CalendarHeatmap({ summary }: { summary: HistorySummary }) {
         inRange: { color: githubHeatmapPalette },
       },
       calendar: {
-        top: 22,
-        left: 36,
-        right: 8,
-        bottom: 4,
-        cellSize: [11, 11],
+        top: 24,
+        left: 44,
+        right: 10,
+        bottom: 6,
+        cellSize: [13, 13],
         range: [
           summary.calendar[0]?.date,
           summary.calendar[summary.calendar.length - 1]?.date,
         ],
         splitLine: { show: false },
         itemStyle: {
-          borderWidth: 2,
+          borderWidth: 3,
           borderColor: '#ffffff',
-          borderRadius: 2,
+          borderRadius: 3,
         },
         yearLabel: { show: false },
-        monthLabel: { color: '#737373', fontSize: 11, margin: 7 },
+        monthLabel: { color: '#737373', fontSize: 12, margin: 8 },
         dayLabel: {
           color: '#a3a3a3',
           firstDay: 1,
-          fontSize: 10,
-          margin: 7,
+          fontSize: 11,
+          margin: 8,
           nameMap: ['S', 'M', 'T', 'W', 'T', 'F', 'S'],
         },
       },
@@ -163,14 +163,14 @@ function CalendarHeatmap({ summary }: { summary: HistorySummary }) {
           coordinateSystem: 'calendar',
           data: values,
           emphasis: heatmapHoverEmphasis,
-          itemStyle: { borderRadius: 2 },
+          itemStyle: { borderRadius: 3 },
         },
       ],
     }),
     [max, summary.calendar, values],
   )
   useChart(ref, option)
-  return <div ref={ref} className="h-[138px] w-full" />
+  return <div ref={ref} className="h-[156px] w-full" />
 }
 
 function TrendChart({ summary }: { summary: HistorySummary }) {
