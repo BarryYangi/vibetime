@@ -23,6 +23,14 @@ const githubHeatmapPalette = ['#ebedf0', '#9be9a8', '#40c463', '#30a14e', '#216e
 const axisLabelStyle = { color: '#737373', fontSize: 11, fontFamily: 'SN Pro' }
 const splitLineStyle = { color: '#0000000f', width: 1 }
 const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const stableTooltip = {
+  borderWidth: 0,
+  confine: true,
+  displayTransition: false,
+  hideDelay: 0,
+  transitionDuration: 0,
+  extraCssText: 'box-shadow: 0 8px 24px rgba(0,0,0,0.10); border-radius: 8px;',
+} as const
 
 function formatDuration(seconds: number): string {
   const whole = Math.max(0, Math.floor(seconds))
@@ -104,9 +112,7 @@ function CalendarHeatmap({ summary }: { summary: HistorySummary }) {
   const option = useMemo<echarts.EChartsCoreOption>(
     () => ({
       tooltip: {
-        borderWidth: 0,
-        confine: true,
-        extraCssText: 'box-shadow: 0 8px 24px rgba(0,0,0,0.10); border-radius: 8px;',
+        ...stableTooltip,
         formatter: (params: { value: [string, number] }) =>
           `<div style="font-size:12px;color:#737373">${params.value[0]}</div><div style="margin-top:2px;font-size:13px;font-weight:600;color:#262626">${formatTooltipDuration(params.value[1])}</div>`,
       },
@@ -170,10 +176,8 @@ function TrendChart({ summary }: { summary: HistorySummary }) {
     () => ({
       color: chartPalette,
       tooltip: {
+        ...stableTooltip,
         trigger: 'axis',
-        borderWidth: 0,
-        confine: true,
-        extraCssText: 'box-shadow: 0 8px 24px rgba(0,0,0,0.10); border-radius: 8px;',
         axisPointer: { type: 'shadow', shadowStyle: { color: '#0000000a' } },
         formatter: (params: Array<{ marker: string; seriesName: string; value: number; axisValue: string }>) => {
           const rows = params
@@ -254,11 +258,9 @@ function ProjectShareChart({ summary }: { summary: HistorySummary }) {
     () => ({
       color: ['#262626'],
       tooltip: {
+        ...stableTooltip,
         trigger: 'axis',
         axisPointer: { type: 'shadow', shadowStyle: { color: '#0000000a' } },
-        borderWidth: 0,
-        confine: true,
-        extraCssText: 'box-shadow: 0 8px 24px rgba(0,0,0,0.10); border-radius: 8px;',
         formatter: (params: Array<{ name: string; value: number }>) => {
           const item = params[0]
           if (!item) return ''
@@ -304,9 +306,7 @@ function HourlyActivityHeatmap({ summary }: { summary: HistorySummary }) {
   const option = useMemo<echarts.EChartsCoreOption>(
     () => ({
       tooltip: {
-        borderWidth: 0,
-        confine: true,
-        extraCssText: 'box-shadow: 0 8px 24px rgba(0,0,0,0.10); border-radius: 8px;',
+        ...stableTooltip,
         formatter: (params: { value: [number, number, number] }) => {
           const [hour, weekday, total] = params.value
           return `<div style="font-size:12px;color:#737373">${weekdayLabels[weekday]} · ${String(hour).padStart(2, '0')}:00</div><div style="margin-top:2px;font-size:13px;font-weight:600;color:#262626">${formatTooltipDuration(total)}</div>`
@@ -381,11 +381,9 @@ function TurnLengthBuckets({ summary }: { summary: HistorySummary }) {
     () => ({
       color: ['#2563eb'],
       tooltip: {
+        ...stableTooltip,
         trigger: 'axis',
         axisPointer: { type: 'shadow', shadowStyle: { color: '#0000000a' } },
-        borderWidth: 0,
-        confine: true,
-        extraCssText: 'box-shadow: 0 8px 24px rgba(0,0,0,0.10); border-radius: 8px;',
         formatter: (params: Array<{ dataIndex: number; name: string }>) => {
           const item = params[0]
           const bucket = item ? buckets[item.dataIndex] : undefined
