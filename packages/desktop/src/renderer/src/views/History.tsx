@@ -818,53 +818,6 @@ export default function History() {
         </section>
       )}
 
-      {stats && insights && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle>Readout</CardTitle>
-            <CardDescription>Current period signals distilled from the charts below</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3 pt-0 md:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-lg border border-border/45 px-4 py-3">
-              <p className="text-[11px] font-medium text-muted-foreground">Allocation</p>
-              <p className="mt-2 truncate text-[14px] font-medium">
-                {stats.topProject?.project ?? 'No project'} owns {formatPercent(stats.topProjectShare)}
-              </p>
-              <p className="mt-1 text-[12px] text-muted-foreground">
-                {formatDuration(stats.topProject?.total ?? 0)} of tracked time
-              </p>
-            </div>
-            <div className="rounded-lg border border-border/45 px-4 py-3">
-              <p className="text-[11px] font-medium text-muted-foreground">Work shape</p>
-              <p className="mt-2 text-[14px] font-medium">
-                {formatPercent(insights.focusShare)} focus, {formatPercent(stats.shortTurnRate)} fragmented
-              </p>
-              <p className="mt-1 text-[12px] text-muted-foreground">
-                {stats.focusTurns} turns at 25m+
-              </p>
-            </div>
-            <div className="rounded-lg border border-border/45 px-4 py-3">
-              <p className="text-[11px] font-medium text-muted-foreground">Rhythm</p>
-              <p className="mt-2 text-[14px] font-medium">
-                Peak at {formatHourWindow(stats.peakHour.weekday, stats.peakHour.hour)}
-              </p>
-              <p className="mt-1 text-[12px] text-muted-foreground">
-                {formatDuration(stats.peakHour.total)} in that slot
-              </p>
-            </div>
-            <div className="rounded-lg border border-border/45 px-4 py-3">
-              <p className="text-[11px] font-medium text-muted-foreground">Agent</p>
-              <p className="mt-2 truncate text-[14px] font-medium">
-                {insights.topAgentName} handles {formatPercent(insights.topAgentShare)}
-              </p>
-              <p className="mt-1 text-[12px] text-muted-foreground">
-                {formatDuration(insights.topAgentTotal)} total
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       <Card className="overflow-hidden">
         <CardHeader className="pb-1">
           <CardTitle>Contribution heatmap</CardTitle>
