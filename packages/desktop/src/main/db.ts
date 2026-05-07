@@ -273,8 +273,19 @@ function startOfLocalDay(date: Date): number {
   return Math.floor(new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime() / 1000)
 }
 
+function startOfLocalHour(date: Date): number {
+  return Math.floor(
+    new Date(date.getFullYear(), date.getMonth(), date.getDate(), date.getHours()).getTime() / 1000,
+  )
+}
+
 function toDateKey(ts: number): string {
   return new Date(ts * 1000).toLocaleDateString('en-CA')
+}
+
+function weekdayIndex(ts: number): number {
+  const day = new Date(ts * 1000).getDay()
+  return day === 0 ? 6 : day - 1
 }
 
 function denseDateKeys(days: number, endDate: Date): string[] {
@@ -304,6 +315,34 @@ function completedTurnEventsInWindow(events: DbEvent[], from: number, to: number
   return events.filter((ev) => ev.event_type === 'turn_end' && ev.ts >= from && ev.ts < to)
 }
 
+function allocateDurationByLocalHour(input: {
+  endTs: number
+  durationSec: number | null
+  startTs?: number
+  rangeStart: number
+  rangeEnd: number
+}): Array<{ hourStart: number; duration: number }> {
+  const rawStart = input.startTs ?? (
+    input.durationSec === null ? input.endTs : input.endTs - input.durationSec
+  )
+  const start = Math.max(rawStart, input.rangeStart)
+  const end = Math.min(input.endTs, input.rangeEnd)
+  if (end <= start) return []
+
+  const allocations: Array<{ hourStart: number; duration: number }> = []
+  let cursor = start
+
+  while (cursor < end) {
+    const hourStart = startOfLocalHour(new Date(cursor * 1000))
+    const nextHour = hourStart + 3600
+    const segmentEnd = Math.min(end, nextHour)
+    allocations.push({ hourStart, duration: segmentEnd - cursor })
+    cursor = segmentEnd
+  }
+
+  return allocations
+}
+
 export function buildHistorySummaryFromEvents(
   events: DbEvent[],
   options: { periodDays: PeriodDays; now?: Date },
@@ -317,10 +356,26 @@ export function buildHistorySummaryFromEvents(
   const calendarTotals = new Map(denseDateKeys(365, now).map((date) => [date, 0]))
   const periodProjectTotals = new Map<string, number>()
   const trendProjectDayTotals = new Map<string, Map<string, number>>()
+  const hourlyTotals = new Map<string, number>()
+  const projectAgentTotals = new Map<
+    string,
+    { project: string; total: number; agents: Map<string, { total: number; turns: Set<string> }> }
+  >()
+  const turnDurations: Array<{
+    project: string
+    agent: string
+    turnId: string | null
+    startedAt: number
+    endedAt: number
+    duration: number
+  }> = []
   const topProjectRows = new Map<
     string,
     { project: string; total: number; turns: Set<string>; lastActive: number | null }
   >()
+  let currentPeriodTotal = 0
+  let previousPeriodTotal = 0
+  const previousPeriodStart = periodStart - options.periodDays * 86400
 
   for (const ev of completedTurnEventsInWindow(events, calendarStart, rangeEnd)) {
     if (isUnknownDurationEnd(ev)) continue
@@ -343,6 +398,7 @@ export function buildHistorySummaryFromEvents(
     const periodDuration = completedDuration(ev, turnStarts, periodStart, rangeEnd)
     if (periodDuration === null || periodDuration <= 0) continue
 
+    currentPeriodTotal += periodDuration
     periodProjectTotals.set(ev.project, (periodProjectTotals.get(ev.project) ?? 0) + periodDuration)
 
     let row = topProjectRows.get(ev.project)
@@ -353,6 +409,46 @@ export function buildHistorySummaryFromEvents(
     row.total += periodDuration
     if (ev.turn_id) row.turns.add(ev.turn_id)
     row.lastActive = Math.max(row.lastActive ?? 0, ev.ts)
+
+    let projectAgent = projectAgentTotals.get(ev.project)
+    if (!projectAgent) {
+      projectAgent = { project: ev.project, total: 0, agents: new Map() }
+      projectAgentTotals.set(ev.project, projectAgent)
+    }
+    projectAgent.total += periodDuration
+    const agent = projectAgent.agents.get(ev.agent) ?? { total: 0, turns: new Set<string>() }
+    agent.total += periodDuration
+    if (ev.turn_id) agent.turns.add(ev.turn_id)
+    projectAgent.agents.set(ev.agent, agent)
+
+    const startedAt = ev.turn_id
+      ? (turnStarts.get(ev.turn_id)?.ts ?? ev.ts - periodDuration)
+      : ev.ts - periodDuration
+    turnDurations.push({
+      project: ev.project,
+      agent: ev.agent,
+      turnId: ev.turn_id,
+      startedAt,
+      endedAt: ev.ts,
+      duration: periodDuration,
+    })
+
+    for (const allocation of allocateDurationByLocalHour({
+      endTs: ev.ts,
+      durationSec: ev.duration_sec,
+      startTs: ev.turn_id ? turnStarts.get(ev.turn_id)?.ts : undefined,
+      rangeStart: periodStart,
+      rangeEnd,
+    })) {
+      const key = `${weekdayIndex(allocation.hourStart)}:${new Date(allocation.hourStart * 1000).getHours()}`
+      hourlyTotals.set(key, (hourlyTotals.get(key) ?? 0) + allocation.duration)
+    }
+  }
+
+  for (const ev of completedTurnEventsInWindow(events, previousPeriodStart, periodStart)) {
+    const duration = completedDuration(ev, turnStarts, previousPeriodStart, periodStart)
+    if (duration === null || duration <= 0) continue
+    previousPeriodTotal += duration
   }
 
   const topProjects = [...periodProjectTotals.entries()]
@@ -403,6 +499,38 @@ export function buildHistorySummaryFromEvents(
         turns: row.turns.size,
         lastActive: row.lastActive,
       })),
+    hourlyMatrix: Array.from({ length: 7 }, (_, weekday) =>
+      Array.from({ length: 24 }, (_, hour) => ({
+        weekday,
+        hour,
+        total: hourlyTotals.get(`${weekday}:${hour}`) ?? 0,
+      })),
+    ).flat(),
+    turnDurations: turnDurations
+      .sort((a, b) => a.endedAt - b.endedAt)
+      .slice(-500),
+    projectAgentTotals: [...projectAgentTotals.values()]
+      .sort((a, b) => b.total - a.total || a.project.localeCompare(b.project))
+      .map((project) => ({
+        project: project.project,
+        total: project.total,
+        agents: [...project.agents.entries()]
+          .sort((a, b) => b[1].total - a[1].total || a[0].localeCompare(b[0]))
+          .map(([agent, data]) => ({
+            agent,
+            total: data.total,
+            turns: data.turns.size,
+          })),
+      })),
+    periodCompare: {
+      currentTotal: currentPeriodTotal,
+      previousTotal: previousPeriodTotal,
+      delta: currentPeriodTotal - previousPeriodTotal,
+      deltaRatio:
+        previousPeriodTotal > 0
+          ? (currentPeriodTotal - previousPeriodTotal) / previousPeriodTotal
+          : null,
+    },
   }
 }
 

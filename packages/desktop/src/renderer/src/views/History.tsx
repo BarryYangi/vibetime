@@ -42,6 +42,12 @@ function formatTooltipDuration(seconds: number): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`
 }
 
+function formatDelta(ratio: number | null): string {
+  if (ratio === null) return 'no prior period'
+  const pct = Math.round(ratio * 100)
+  return `${pct >= 0 ? '+' : ''}${pct}% vs previous`
+}
+
 function formatLastActive(ts: number | null): string {
   if (!ts) return '-'
   return new Date(ts * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -54,6 +60,16 @@ function sumTrendDay(day: HistorySummary['trends'][number]): number {
 function weekdayIndex(date: string): number {
   const day = new Date(`${date}T00:00:00`).getDay()
   return day === 0 ? 6 : day - 1
+}
+
+function quantile(values: number[], q: number): number {
+  if (values.length === 0) return 0
+  const pos = (values.length - 1) * q
+  const base = Math.floor(pos)
+  const rest = pos - base
+  const next = values[base + 1]
+  if (next === undefined) return values[base] ?? 0
+  return (values[base] ?? 0) + rest * (next - (values[base] ?? 0))
 }
 
 function useChart(
@@ -274,38 +290,179 @@ function ProjectShareChart({ summary }: { summary: HistorySummary }) {
   return <div ref={ref} className="h-[220px] w-full" />
 }
 
-function WeekdayRhythmChart({ summary }: { summary: HistorySummary }) {
+function HourlyActivityHeatmap({ summary }: { summary: HistorySummary }) {
   const ref = useRef<HTMLDivElement>(null)
-  const values = useMemo(() => {
-    const totals = Array.from({ length: 7 }, () => 0)
-    for (const day of summary.trends) {
-      totals[weekdayIndex(day.date)] += sumTrendDay(day)
-    }
-    return totals
-  }, [summary.trends])
+  const max = Math.max(1, ...summary.hourlyMatrix.map((cell) => cell.total))
   const option = useMemo<echarts.EChartsCoreOption>(
     () => ({
-      color: ['#216e39'],
       tooltip: {
-        trigger: 'axis',
-        axisPointer: { type: 'shadow', shadowStyle: { color: '#0000000a' } },
         borderWidth: 0,
         confine: true,
         extraCssText: 'box-shadow: 0 8px 24px rgba(0,0,0,0.10); border-radius: 8px;',
-        formatter: (params: Array<{ name: string; value: number }>) => {
-          const item = params[0]
-          return item
-            ? `<div style="font-size:12px;color:#737373">${item.name}</div><div style="margin-top:2px;font-size:13px;font-weight:600;color:#262626">${formatTooltipDuration(item.value)}</div>`
-            : ''
+        formatter: (params: { value: [number, number, number] }) => {
+          const [hour, weekday, total] = params.value
+          return `<div style="font-size:12px;color:#737373">${weekdayLabels[weekday]} · ${String(hour).padStart(2, '0')}:00</div><div style="margin-top:2px;font-size:13px;font-weight:600;color:#262626">${formatTooltipDuration(total)}</div>`
         },
       },
-      grid: { left: 34, right: 12, top: 10, bottom: 26 },
+      grid: { left: 34, right: 14, top: 10, bottom: 28 },
       xAxis: {
+        type: 'category',
+        data: Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, '0')),
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { ...axisLabelStyle, interval: 2 },
+      },
+      yAxis: {
         type: 'category',
         data: weekdayLabels,
         axisLine: { show: false },
         axisTick: { show: false },
         axisLabel: axisLabelStyle,
+      },
+      visualMap: {
+        min: 0,
+        max,
+        show: false,
+        inRange: { color: ['#f7f7f7', '#dbeafe', '#93c5fd', '#3b82f6', '#1e3a8a'] },
+      },
+      series: [
+        {
+          type: 'heatmap',
+          data: summary.hourlyMatrix.map((cell) => [cell.hour, cell.weekday, cell.total]),
+          emphasis: {
+            itemStyle: {
+              borderColor: '#262626',
+              borderWidth: 1,
+              shadowBlur: 8,
+              shadowColor: 'rgba(0,0,0,0.12)',
+            },
+          },
+          itemStyle: { borderColor: '#ffffff', borderRadius: 3, borderWidth: 2 },
+        },
+      ],
+    }),
+    [max, summary.hourlyMatrix],
+  )
+  useChart(ref, option)
+  return <div ref={ref} className="h-[220px] w-full" />
+}
+
+function AgentMixTreemap({ summary }: { summary: HistorySummary }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const data = useMemo(
+    () =>
+      summary.projectAgentTotals.slice(0, 8).map((project, index) => ({
+        name: project.project,
+        value: project.total,
+        itemStyle: { color: chartPalette[index % chartPalette.length] },
+        children: project.agents.map((agent) => ({
+          name: agent.agent,
+          value: agent.total,
+        })),
+      })),
+    [summary.projectAgentTotals],
+  )
+  const option = useMemo<echarts.EChartsCoreOption>(
+    () => ({
+      tooltip: {
+        borderWidth: 0,
+        confine: true,
+        extraCssText: 'box-shadow: 0 8px 24px rgba(0,0,0,0.10); border-radius: 8px;',
+        formatter: (params: { name: string; value: number; treePathInfo?: Array<{ name: string }> }) => {
+          const path = params.treePathInfo?.map((item) => item.name).filter(Boolean).join(' / ')
+          return `<div style="font-size:12px;color:#737373">${path || params.name}</div><div style="margin-top:2px;font-size:13px;font-weight:600;color:#262626">${formatTooltipDuration(params.value)}</div>`
+        },
+      },
+      series: [
+        {
+          type: 'treemap',
+          data,
+          roam: false,
+          nodeClick: false,
+          breadcrumb: { show: false },
+          left: 0,
+          right: 0,
+          top: 4,
+          bottom: 0,
+          label: { color: '#ffffff', fontSize: 12, overflow: 'truncate' },
+          upperLabel: { show: true, height: 22, color: '#ffffff', fontSize: 12 },
+          itemStyle: { borderColor: '#ffffff', borderRadius: 5, borderWidth: 2, gapWidth: 2 },
+          levels: [
+            { itemStyle: { borderWidth: 2, gapWidth: 2 } },
+            { itemStyle: { borderWidth: 1, gapWidth: 1, opacity: 0.82 } },
+          ],
+        },
+      ],
+    }),
+    [data],
+  )
+  useChart(ref, option)
+  return <div ref={ref} className="h-[260px] w-full" />
+}
+
+function TurnDurationChart({ summary }: { summary: HistorySummary }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const grouped = useMemo(() => {
+    const groups = new Map<string, number[]>()
+    for (const turn of summary.turnDurations) {
+      const values = groups.get(turn.project) ?? []
+      values.push(turn.duration)
+      groups.set(turn.project, values)
+    }
+    return [...groups.entries()]
+      .map(([project, values]) => ({ project, values: values.sort((a, b) => a - b) }))
+      .sort((a, b) => b.values.length - a.values.length || a.project.localeCompare(b.project))
+      .slice(0, 6)
+  }, [summary.turnDurations])
+  const categories = grouped.map((group) => group.project)
+  const boxData = grouped.map((group) => {
+    const q1 = quantile(group.values, 0.25)
+    const median = quantile(group.values, 0.5)
+    const q3 = quantile(group.values, 0.75)
+    const iqr = q3 - q1
+    const lowFence = q1 - 1.5 * iqr
+    const highFence = q3 + 1.5 * iqr
+    const whiskerLow = group.values.find((value) => value >= lowFence) ?? group.values[0] ?? 0
+    const whiskerHigh =
+      [...group.values].reverse().find((value) => value <= highFence) ??
+      group.values[group.values.length - 1] ??
+      0
+    return [whiskerLow, q1, median, q3, whiskerHigh]
+  })
+  const outliers = grouped.flatMap((group, index) => {
+    const box = boxData[index]
+    if (!box) return []
+    const [, q1, , q3] = box
+    const iqr = q3 - q1
+    const lowFence = q1 - 1.5 * iqr
+    const highFence = q3 + 1.5 * iqr
+    return group.values
+      .filter((value) => value < lowFence || value > highFence)
+      .map((value) => [index, value])
+  })
+  const option = useMemo<echarts.EChartsCoreOption>(
+    () => ({
+      color: ['#262626', '#e11d48'],
+      tooltip: {
+        trigger: 'item',
+        borderWidth: 0,
+        confine: true,
+        extraCssText: 'box-shadow: 0 8px 24px rgba(0,0,0,0.10); border-radius: 8px;',
+        formatter: (params: { seriesType: string; name: string; value: number[] }) => {
+          if (params.seriesType === 'boxplot') {
+            const [low = 0, q1 = 0, median = 0, q3 = 0, high = 0] = params.value.slice(-5)
+            return `<div style="font-size:12px;color:#737373">${params.name}</div><div style="margin-top:4px;color:#262626">median ${formatTooltipDuration(median)}</div><div style="margin-top:2px;color:#737373">p25 ${formatTooltipDuration(q1)} · p75 ${formatTooltipDuration(q3)}</div><div style="margin-top:2px;color:#737373">range ${formatTooltipDuration(low)}-${formatTooltipDuration(high)}</div>`
+          }
+          return `<div style="font-size:12px;color:#737373">${params.name}</div><div style="margin-top:2px;font-size:13px;font-weight:600;color:#262626">${formatTooltipDuration(params.value[1])}</div>`
+        },
+      },
+      grid: { left: 42, right: 14, top: 20, bottom: 42 },
+      xAxis: {
+        type: 'category',
+        data: categories,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { ...axisLabelStyle, interval: 0, width: 82, overflow: 'truncate' },
       },
       yAxis: {
         type: 'value',
@@ -316,19 +473,24 @@ function WeekdayRhythmChart({ summary }: { summary: HistorySummary }) {
       },
       series: [
         {
-          type: 'bar',
-          data: values.map((value) => ({
-            value,
-            itemStyle: { borderRadius: [4, 4, 0, 0] },
-          })),
-          barWidth: 18,
+          name: 'Turn duration',
+          type: 'boxplot',
+          data: boxData,
+          itemStyle: { borderColor: '#262626', color: '#f5f5f5' },
+        },
+        {
+          name: 'Outlier',
+          type: 'scatter',
+          data: outliers,
+          symbolSize: 6,
+          itemStyle: { color: '#e11d48' },
         },
       ],
     }),
-    [values],
+    [boxData, categories, outliers],
   )
   useChart(ref, option)
-  return <div ref={ref} className="h-[220px] w-full" />
+  return <div ref={ref} className="h-[260px] w-full" />
 }
 
 function SortIcon({ active, asc }: { active: boolean; asc: boolean }) {
@@ -462,7 +624,7 @@ export default function History() {
       {stats && (
         <section className="grid gap-3 md:grid-cols-4">
           <StatTile
-            detail={`${stats.turnCount} completed turns`}
+            detail={formatDelta(summary.periodCompare.deltaRatio)}
             label={`${summary.periodDays}-day total`}
             value={formatDuration(stats.periodTotal)}
           />
@@ -517,11 +679,33 @@ export default function History() {
 
         <Card className="overflow-hidden">
           <CardHeader className="pb-1">
-            <CardTitle>Weekday rhythm</CardTitle>
-            <CardDescription>Distribution across the selected period</CardDescription>
+            <CardTitle>Hourly rhythm</CardTitle>
+            <CardDescription>Weekday x hour intensity</CardDescription>
           </CardHeader>
           <CardContent className="pt-0">
-            <WeekdayRhythmChart summary={summary} />
+            <HourlyActivityHeatmap summary={summary} />
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-2">
+        <Card className="overflow-hidden">
+          <CardHeader className="pb-1">
+            <CardTitle>Turn duration</CardTitle>
+            <CardDescription>Distribution and outliers by project</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <TurnDurationChart summary={summary} />
+          </CardContent>
+        </Card>
+
+        <Card className="overflow-hidden">
+          <CardHeader className="pb-1">
+            <CardTitle>Project / agent mix</CardTitle>
+            <CardDescription>Nested time allocation</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <AgentMixTreemap summary={summary} />
           </CardContent>
         </Card>
       </section>

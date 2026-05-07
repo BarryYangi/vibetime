@@ -61,12 +61,44 @@ export interface TopProjectRow {
   lastActive: number | null
 }
 
+export interface HistoryHourlyCell {
+  weekday: number
+  hour: number
+  total: number
+}
+
+export interface HistoryTurnDuration {
+  project: string
+  agent: string
+  turnId: string | null
+  startedAt: number
+  endedAt: number
+  duration: number
+}
+
+export interface HistoryProjectAgentTotal {
+  project: string
+  total: number
+  agents: Array<{ agent: string; total: number; turns: number }>
+}
+
+export interface HistoryPeriodCompare {
+  currentTotal: number
+  previousTotal: number
+  delta: number
+  deltaRatio: number | null
+}
+
 export interface HistorySummary {
   periodDays: 7 | 30 | 90 | 365
   calendar: HistoryCalendarDay[]
   trendProjects: string[]
   trends: HistoryTrendDay[]
   topProjects: TopProjectRow[]
+  hourlyMatrix: HistoryHourlyCell[]
+  turnDurations: HistoryTurnDuration[]
+  projectAgentTotals: HistoryProjectAgentTotal[]
+  periodCompare: HistoryPeriodCompare
 }
 
 export interface MenubarState {

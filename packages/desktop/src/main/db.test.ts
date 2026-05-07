@@ -57,6 +57,11 @@ describe('queryHistorySummary', () => {
 
     expect(summary.calendar).toHaveLength(365)
     expect(summary.calendar.some((day) => day.total > 0)).toBe(true)
+    expect(summary.hourlyMatrix).toHaveLength(7 * 24)
+    expect(summary.hourlyMatrix.some((cell) => cell.total > 0)).toBe(true)
+    expect(summary.turnDurations).toHaveLength(1)
+    expect(summary.projectAgentTotals[0]?.project).toBe('alpha')
+    expect(summary.periodCompare.currentTotal).toBeGreaterThan(0)
   })
 
   it('groups trend data into Top 5 plus Others', async () => {
