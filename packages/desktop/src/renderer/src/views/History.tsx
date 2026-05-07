@@ -19,8 +19,10 @@ const PERIODS = [7, 30, 90, 365] as const
 type SortKey = 'project' | 'total' | 'turns' | 'lastActive'
 
 const chartPalette = ['#2563eb', '#10b981', '#f59e0b', '#e11d48', '#7c3aed', '#737373']
+const githubHeatmapPalette = ['#ebedf0', '#9be9a8', '#40c463', '#30a14e', '#216e39']
 const axisLabelStyle = { color: '#737373', fontSize: 11, fontFamily: 'SN Pro' }
 const splitLineStyle = { color: '#0000000f', width: 1 }
+const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 function formatDuration(seconds: number): string {
   const whole = Math.max(0, Math.floor(seconds))
@@ -43,6 +45,15 @@ function formatTooltipDuration(seconds: number): string {
 function formatLastActive(ts: number | null): string {
   if (!ts) return '-'
   return new Date(ts * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+function sumTrendDay(day: HistorySummary['trends'][number]): number {
+  return Object.values(day.projects).reduce((sum, value) => sum + value, 0)
+}
+
+function weekdayIndex(date: string): number {
+  const day = new Date(`${date}T00:00:00`).getDay()
+  return day === 0 ? 6 : day - 1
 }
 
 function useChart(
@@ -79,14 +90,14 @@ function CalendarHeatmap({ summary }: { summary: HistorySummary }) {
         min: 0,
         max,
         show: false,
-        inRange: { color: ['#f7f7f7', '#dbeafe', '#60a5fa', '#2563eb', '#172554'] },
+        inRange: { color: githubHeatmapPalette },
       },
       calendar: {
-        top: 20,
-        left: 34,
+        top: 22,
+        left: 36,
         right: 8,
         bottom: 4,
-        cellSize: ['auto', 13],
+        cellSize: [11, 11],
         range: [
           summary.calendar[0]?.date,
           summary.calendar[summary.calendar.length - 1]?.date,
@@ -95,14 +106,15 @@ function CalendarHeatmap({ summary }: { summary: HistorySummary }) {
         itemStyle: {
           borderWidth: 2,
           borderColor: '#ffffff',
-          borderRadius: 3,
+          borderRadius: 2,
         },
         yearLabel: { show: false },
-        monthLabel: { color: '#737373', fontSize: 11, margin: 8 },
+        monthLabel: { color: '#737373', fontSize: 11, margin: 7 },
         dayLabel: {
           color: '#a3a3a3',
           firstDay: 1,
           fontSize: 10,
+          margin: 7,
           nameMap: ['S', 'M', 'T', 'W', 'T', 'F', 'S'],
         },
       },
@@ -125,7 +137,7 @@ function CalendarHeatmap({ summary }: { summary: HistorySummary }) {
     [max, summary.calendar, values],
   )
   useChart(ref, option)
-  return <div ref={ref} className="h-[176px] w-full" />
+  return <div ref={ref} className="h-[138px] w-full" />
 }
 
 function TrendChart({ summary }: { summary: HistorySummary }) {
@@ -138,7 +150,7 @@ function TrendChart({ summary }: { summary: HistorySummary }) {
         borderWidth: 0,
         confine: true,
         extraCssText: 'box-shadow: 0 8px 24px rgba(0,0,0,0.10); border-radius: 8px;',
-        axisPointer: { type: 'line', lineStyle: { color: '#a3a3a3', width: 1 } },
+        axisPointer: { type: 'shadow', shadowStyle: { color: '#0000000a' } },
         formatter: (params: Array<{ marker: string; seriesName: string; value: number; axisValue: string }>) => {
           const rows = params
             .filter((item) => item.value > 0)
@@ -161,7 +173,7 @@ function TrendChart({ summary }: { summary: HistorySummary }) {
       grid: { left: 34, right: 10, top: 34, bottom: 26 },
       xAxis: {
         type: 'category',
-        boundaryGap: false,
+        boundaryGap: true,
         data: summary.trends.map((day) => day.date.slice(5)),
         axisLine: { show: false },
         axisTick: { show: false },
@@ -184,13 +196,16 @@ function TrendChart({ summary }: { summary: HistorySummary }) {
       },
       series: summary.trendProjects.map((project, index) => ({
         name: project,
-        type: 'line',
+        type: 'bar',
         stack: 'total',
-        smooth: true,
-        symbol: 'none',
-        lineStyle: { width: 1.8 },
-        areaStyle: { opacity: index === 0 ? 0.18 : 0.12 },
-        showSymbol: false,
+        barMaxWidth: 18,
+        barMinWidth: summary.trends.length > 120 ? 1 : 4,
+        itemStyle: {
+          borderRadius:
+            index === summary.trendProjects.length - 1
+              ? [3, 3, 0, 0]
+              : 0,
+        },
         emphasis: { focus: 'series' },
         data: summary.trends.map((day) => day.projects[project] ?? 0),
       })),
@@ -201,10 +216,135 @@ function TrendChart({ summary }: { summary: HistorySummary }) {
   return <div ref={ref} className="h-[260px] w-full" />
 }
 
+function ProjectShareChart({ summary }: { summary: HistorySummary }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const rows = useMemo(
+    () =>
+      [...summary.topProjects]
+        .sort((a, b) => a.total - b.total)
+        .slice(-6),
+    [summary.topProjects],
+  )
+  const total = rows.reduce((sum, row) => sum + row.total, 0)
+  const option = useMemo<echarts.EChartsCoreOption>(
+    () => ({
+      color: ['#262626'],
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'shadow', shadowStyle: { color: '#0000000a' } },
+        borderWidth: 0,
+        confine: true,
+        extraCssText: 'box-shadow: 0 8px 24px rgba(0,0,0,0.10); border-radius: 8px;',
+        formatter: (params: Array<{ name: string; value: number }>) => {
+          const item = params[0]
+          if (!item) return ''
+          const pct = total > 0 ? Math.round((item.value / total) * 100) : 0
+          return `<div style="font-size:12px;color:#737373">${item.name}</div><div style="margin-top:2px;font-size:13px;font-weight:600;color:#262626">${formatTooltipDuration(item.value)} · ${pct}%</div>`
+        },
+      },
+      grid: { left: 88, right: 18, top: 8, bottom: 18 },
+      xAxis: {
+        type: 'value',
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { ...axisLabelStyle, formatter: (value: number) => formatTooltipDuration(value) },
+        splitLine: { lineStyle: splitLineStyle },
+      },
+      yAxis: {
+        type: 'category',
+        data: rows.map((row) => row.project),
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { ...axisLabelStyle, width: 76, overflow: 'truncate' },
+      },
+      series: [
+        {
+          type: 'bar',
+          data: rows.map((row, index) => ({
+            value: row.total,
+            itemStyle: { color: chartPalette[index % chartPalette.length], borderRadius: [0, 4, 4, 0] },
+          })),
+          barWidth: 10,
+        },
+      ],
+    }),
+    [rows, total],
+  )
+  useChart(ref, option)
+  return <div ref={ref} className="h-[220px] w-full" />
+}
+
+function WeekdayRhythmChart({ summary }: { summary: HistorySummary }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const values = useMemo(() => {
+    const totals = Array.from({ length: 7 }, () => 0)
+    for (const day of summary.trends) {
+      totals[weekdayIndex(day.date)] += sumTrendDay(day)
+    }
+    return totals
+  }, [summary.trends])
+  const option = useMemo<echarts.EChartsCoreOption>(
+    () => ({
+      color: ['#216e39'],
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'shadow', shadowStyle: { color: '#0000000a' } },
+        borderWidth: 0,
+        confine: true,
+        extraCssText: 'box-shadow: 0 8px 24px rgba(0,0,0,0.10); border-radius: 8px;',
+        formatter: (params: Array<{ name: string; value: number }>) => {
+          const item = params[0]
+          return item
+            ? `<div style="font-size:12px;color:#737373">${item.name}</div><div style="margin-top:2px;font-size:13px;font-weight:600;color:#262626">${formatTooltipDuration(item.value)}</div>`
+            : ''
+        },
+      },
+      grid: { left: 34, right: 12, top: 10, bottom: 26 },
+      xAxis: {
+        type: 'category',
+        data: weekdayLabels,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: axisLabelStyle,
+      },
+      yAxis: {
+        type: 'value',
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { ...axisLabelStyle, formatter: (value: number) => formatTooltipDuration(value) },
+        splitLine: { lineStyle: splitLineStyle },
+      },
+      series: [
+        {
+          type: 'bar',
+          data: values.map((value) => ({
+            value,
+            itemStyle: { borderRadius: [4, 4, 0, 0] },
+          })),
+          barWidth: 18,
+        },
+      ],
+    }),
+    [values],
+  )
+  useChart(ref, option)
+  return <div ref={ref} className="h-[220px] w-full" />
+}
+
 function SortIcon({ active, asc }: { active: boolean; asc: boolean }) {
   if (!active) return null
   const Icon = asc ? ArrowUpIcon : ArrowDownIcon
   return <Icon aria-hidden className="ml-1 inline size-3" />
+}
+
+function StatTile({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <div className="rounded-lg border border-border/50 bg-card px-4 py-3">
+      <p className="text-[11px] font-medium text-muted-foreground leading-snug">{label}</p>
+      <p className="mt-2 font-mono text-[22px] font-semibold leading-none tabular-nums">{value}</p>
+      <p className="mt-2 truncate text-[12px] text-muted-foreground leading-snug">{detail}</p>
+    </div>
+  )
 }
 
 export default function History() {
@@ -251,6 +391,29 @@ export default function History() {
     }
   }
 
+  const stats = useMemo(() => {
+    if (!summary) return null
+    const periodTotal = summary.trends.reduce((sum, day) => sum + sumTrendDay(day), 0)
+    const activeDays = summary.trends.filter((day) => sumTrendDay(day) > 0).length
+    const bestDay = summary.trends.reduce(
+      (best, day) => {
+        const total = sumTrendDay(day)
+        return total > best.total ? { date: day.date, total } : best
+      },
+      { date: '', total: 0 },
+    )
+    const turnCount = summary.topProjects.reduce((sum, project) => sum + project.turns, 0)
+    const topProject = summary.topProjects[0]
+    return {
+      activeDays,
+      averageActiveDay: activeDays > 0 ? periodTotal / activeDays : 0,
+      bestDay,
+      periodTotal,
+      topProject,
+      turnCount,
+    }
+  }, [summary])
+
   if (!summary && !error) {
     return (
       <div className="flex h-full min-h-[50vh] items-center justify-center">
@@ -296,10 +459,35 @@ export default function History() {
         </div>
       </header>
 
+      {stats && (
+        <section className="grid gap-3 md:grid-cols-4">
+          <StatTile
+            detail={`${stats.turnCount} completed turns`}
+            label={`${summary.periodDays}-day total`}
+            value={formatDuration(stats.periodTotal)}
+          />
+          <StatTile
+            detail={`${stats.activeDays} active days`}
+            label="Avg active day"
+            value={formatDuration(stats.averageActiveDay)}
+          />
+          <StatTile
+            detail={stats.bestDay.date || 'No activity'}
+            label="Best day"
+            value={formatDuration(stats.bestDay.total)}
+          />
+          <StatTile
+            detail={stats.topProject?.project ?? 'No project'}
+            label="Top project"
+            value={stats.topProject ? formatDuration(stats.topProject.total) : '0s'}
+          />
+        </section>
+      )}
+
       <Card className="overflow-hidden">
         <CardHeader className="pb-1">
-          <CardTitle>Daily intensity</CardTitle>
-          <CardDescription>Last 365 days</CardDescription>
+          <CardTitle>Contribution heatmap</CardTitle>
+          <CardDescription>Last 365 days, GitHub-style intensity</CardDescription>
         </CardHeader>
         <CardContent className="pt-0">
           <CalendarHeatmap summary={summary} />
@@ -309,23 +497,45 @@ export default function History() {
       <Card className="overflow-hidden">
         <CardHeader className="pb-1">
           <CardTitle>Project trends</CardTitle>
-          <CardDescription>Top 5 projects plus Others</CardDescription>
+          <CardDescription>Daily stacked duration by project</CardDescription>
         </CardHeader>
         <CardContent className="pt-0">
           <TrendChart summary={summary} />
         </CardContent>
       </Card>
 
+      <section className="grid gap-5 xl:grid-cols-2">
+        <Card className="overflow-hidden">
+          <CardHeader className="pb-1">
+            <CardTitle>Project share</CardTitle>
+            <CardDescription>Where time went in the selected period</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <ProjectShareChart summary={summary} />
+          </CardContent>
+        </Card>
+
+        <Card className="overflow-hidden">
+          <CardHeader className="pb-1">
+            <CardTitle>Weekday rhythm</CardTitle>
+            <CardDescription>Distribution across the selected period</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <WeekdayRhythmChart summary={summary} />
+          </CardContent>
+        </Card>
+      </section>
+
       <Card>
         <CardHeader className="pb-2">
           <CardTitle>Top Projects</CardTitle>
         </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
+        <CardContent className="pt-0">
+          <Table className="text-[13px]">
+            <TableHeader className="[&_tr]:border-border/35">
+              <TableRow className="border-border/35">
                 {(['project', 'total', 'turns', 'lastActive'] as const).map((key) => (
-                  <TableHead key={key}>
+                  <TableHead className="h-8 px-3 text-[11px]" key={key}>
                     <button
                       className="inline-flex items-center"
                       onClick={() => changeSort(key)}
@@ -346,11 +556,11 @@ export default function History() {
             </TableHeader>
             <TableBody>
               {sortedRows.map((row: TopProjectRow) => (
-                <TableRow key={row.project}>
-                  <TableCell>{row.project}</TableCell>
-                  <TableCell className="font-mono tabular-nums">{formatDuration(row.total)}</TableCell>
-                  <TableCell className="font-mono tabular-nums">{row.turns}</TableCell>
-                  <TableCell>{formatLastActive(row.lastActive)}</TableCell>
+                <TableRow className="border-border/25" key={row.project}>
+                  <TableCell className="px-3 py-3">{row.project}</TableCell>
+                  <TableCell className="px-3 py-3 font-mono tabular-nums">{formatDuration(row.total)}</TableCell>
+                  <TableCell className="px-3 py-3 font-mono tabular-nums">{row.turns}</TableCell>
+                  <TableCell className="px-3 py-3">{formatLastActive(row.lastActive)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
