@@ -48,6 +48,10 @@ function formatDelta(ratio: number | null): string {
   return `${pct >= 0 ? '+' : ''}${pct}% vs previous`
 }
 
+function formatPercent(value: number): string {
+  return `${Math.round(value * 100)}%`
+}
+
 function formatLastActive(ts: number | null): string {
   if (!ts) return '-'
   return new Date(ts * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -579,6 +583,33 @@ function StatTile({
   )
 }
 
+function InsightBar({
+  items,
+}: {
+  items: Array<{ label: string; value: string; tone?: 'neutral' | 'good' | 'warn' }>
+}) {
+  return (
+    <div className="mb-3 grid gap-2 sm:grid-cols-3">
+      {items.map((item) => {
+        const toneClass =
+          item.tone === 'good'
+            ? 'border-emerald-200/70 bg-emerald-50/60 text-emerald-950 dark:border-emerald-950 dark:bg-emerald-950/20 dark:text-emerald-100'
+            : item.tone === 'warn'
+              ? 'border-amber-200/80 bg-amber-50/60 text-amber-950 dark:border-amber-950 dark:bg-amber-950/20 dark:text-amber-100'
+              : 'border-border/45 bg-muted/35 text-foreground'
+        return (
+          <div className={`rounded-md border px-3 py-2 ${toneClass}`} key={`${item.label}-${item.value}`}>
+            <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+              {item.label}
+            </p>
+            <p className="mt-1 truncate text-[13px] font-medium">{item.value}</p>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function History() {
   const [periodDays, setPeriodDays] = useState<HistorySummary['periodDays']>(30)
   const [summary, setSummary] = useState<HistorySummary | null>(null)
@@ -669,6 +700,45 @@ export default function History() {
     }
   }, [summary])
 
+  const insights = useMemo(() => {
+    if (!summary || !stats) return null
+    const activeCalendarDays = summary.calendar.filter((day) => day.total > 0).length
+    const currentStreak = [...summary.calendar].reverse().reduce(
+      (state, day) => {
+        if (state.done) return state
+        if (day.total <= 0) return { ...state, done: true }
+        return { count: state.count + 1, done: false }
+      },
+      { count: 0, done: false },
+    ).count
+    const bestCalendarDay = summary.calendar.reduce(
+      (best, day) => (day.total > best.total ? day : best),
+      { date: '', total: 0 },
+    )
+    const topAgentTotals = new Map<string, number>()
+    let agentGrandTotal = 0
+    for (const project of summary.projectAgentTotals) {
+      for (const agent of project.agents) {
+        topAgentTotals.set(agent.agent, (topAgentTotals.get(agent.agent) ?? 0) + agent.total)
+        agentGrandTotal += agent.total
+      }
+    }
+    const [topAgentName = 'No agent', topAgentTotal = 0] =
+      [...topAgentTotals.entries()].sort((a, b) => b[1] - a[1])[0] ?? []
+    const focusShare = stats.turnCount > 0 ? stats.focusTurns / stats.turnCount : 0
+    const activeDayRate = stats.activeDays / summary.periodDays
+    return {
+      activeCalendarDays,
+      activeDayRate,
+      bestCalendarDay,
+      focusShare,
+      currentStreak,
+      topAgentName,
+      topAgentShare: agentGrandTotal > 0 ? topAgentTotal / agentGrandTotal : 0,
+      topAgentTotal,
+    }
+  }, [stats, summary])
+
   if (!summary && !error) {
     return (
       <div className="flex h-full min-h-[50vh] items-center justify-center">
@@ -745,12 +815,75 @@ export default function History() {
         </section>
       )}
 
+      {stats && insights && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle>Readout</CardTitle>
+            <CardDescription>Current period signals distilled from the charts below</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 pt-0 md:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-lg border border-border/45 px-4 py-3">
+              <p className="text-[11px] font-medium text-muted-foreground">Allocation</p>
+              <p className="mt-2 truncate text-[14px] font-medium">
+                {stats.topProject?.project ?? 'No project'} owns {formatPercent(stats.topProjectShare)}
+              </p>
+              <p className="mt-1 text-[12px] text-muted-foreground">
+                {formatDuration(stats.topProject?.total ?? 0)} of tracked time
+              </p>
+            </div>
+            <div className="rounded-lg border border-border/45 px-4 py-3">
+              <p className="text-[11px] font-medium text-muted-foreground">Work shape</p>
+              <p className="mt-2 text-[14px] font-medium">
+                {formatPercent(insights.focusShare)} focus, {formatPercent(stats.shortTurnRate)} fragmented
+              </p>
+              <p className="mt-1 text-[12px] text-muted-foreground">
+                {stats.focusTurns} turns at 25m+
+              </p>
+            </div>
+            <div className="rounded-lg border border-border/45 px-4 py-3">
+              <p className="text-[11px] font-medium text-muted-foreground">Rhythm</p>
+              <p className="mt-2 text-[14px] font-medium">
+                Peak at {formatHourWindow(stats.peakHour.weekday, stats.peakHour.hour)}
+              </p>
+              <p className="mt-1 text-[12px] text-muted-foreground">
+                {formatDuration(stats.peakHour.total)} in that slot
+              </p>
+            </div>
+            <div className="rounded-lg border border-border/45 px-4 py-3">
+              <p className="text-[11px] font-medium text-muted-foreground">Agent</p>
+              <p className="mt-2 truncate text-[14px] font-medium">
+                {insights.topAgentName} handles {formatPercent(insights.topAgentShare)}
+              </p>
+              <p className="mt-1 text-[12px] text-muted-foreground">
+                {formatDuration(insights.topAgentTotal)} total
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card className="overflow-hidden">
         <CardHeader className="pb-1">
           <CardTitle>Contribution heatmap</CardTitle>
           <CardDescription>Last 365 days, GitHub-style intensity</CardDescription>
         </CardHeader>
         <CardContent className="pt-0">
+          {insights && (
+            <InsightBar
+              items={[
+                { label: 'Active days', value: `${insights.activeCalendarDays} / 365` },
+                {
+                  label: 'Current streak',
+                  value: `${insights.currentStreak} days`,
+                  tone: insights.currentStreak >= 5 ? 'good' : 'neutral',
+                },
+                {
+                  label: 'Best day',
+                  value: `${insights.bestCalendarDay.date.slice(5)} · ${formatDuration(insights.bestCalendarDay.total)}`,
+                },
+              ]}
+            />
+          )}
           <CalendarHeatmap summary={summary} />
         </CardContent>
       </Card>
@@ -761,6 +894,29 @@ export default function History() {
           <CardDescription>Daily stacked duration by project</CardDescription>
         </CardHeader>
         <CardContent className="pt-0">
+          {stats && (
+            <InsightBar
+              items={[
+                {
+                  label: 'Change',
+                  value: formatDelta(summary.periodCompare.deltaRatio),
+                  tone:
+                    summary.periodCompare.deltaRatio === null || summary.periodCompare.deltaRatio >= 0
+                      ? 'good'
+                      : 'warn',
+                },
+                {
+                  label: 'Active days',
+                  value: `${stats.activeDays} / ${summary.periodDays}`,
+                  tone: insights && insights.activeDayRate >= 0.7 ? 'good' : 'neutral',
+                },
+                {
+                  label: 'Best day',
+                  value: `${stats.bestDay.date.slice(5)} · ${formatDuration(stats.bestDay.total)}`,
+                },
+              ]}
+            />
+          )}
           <TrendChart summary={summary} />
         </CardContent>
       </Card>
@@ -772,6 +928,25 @@ export default function History() {
             <CardDescription>Where time went in the selected period</CardDescription>
           </CardHeader>
           <CardContent className="pt-0">
+            {stats && (
+              <InsightBar
+                items={[
+                  {
+                    label: 'Top project',
+                    value: `${stats.topProject?.project ?? 'No project'} · ${formatPercent(stats.topProjectShare)}`,
+                    tone: stats.topProjectShare > 0.65 ? 'warn' : 'neutral',
+                  },
+                  {
+                    label: 'Avg active day',
+                    value: formatDuration(stats.averageActiveDay),
+                  },
+                  {
+                    label: 'Turns',
+                    value: `${stats.turnCount}`,
+                  },
+                ]}
+              />
+            )}
             <ProjectShareChart summary={summary} />
           </CardContent>
         </Card>
@@ -782,6 +957,25 @@ export default function History() {
             <CardDescription>Weekday x hour intensity</CardDescription>
           </CardHeader>
           <CardContent className="pt-0">
+            {stats && (
+              <InsightBar
+                items={[
+                  {
+                    label: 'Peak window',
+                    value: formatHourWindow(stats.peakHour.weekday, stats.peakHour.hour),
+                    tone: 'good',
+                  },
+                  {
+                    label: 'Peak total',
+                    value: formatDuration(stats.peakHour.total),
+                  },
+                  {
+                    label: 'Best day',
+                    value: stats.bestDay.date.slice(5) || '-',
+                  },
+                ]}
+              />
+            )}
             <HourlyActivityHeatmap summary={summary} />
           </CardContent>
         </Card>
@@ -794,6 +988,26 @@ export default function History() {
             <CardDescription>Fragmented turns vs focus blocks</CardDescription>
           </CardHeader>
           <CardContent className="pt-0">
+            {stats && insights && (
+              <InsightBar
+                items={[
+                  {
+                    label: 'Focus share',
+                    value: formatPercent(insights.focusShare),
+                    tone: insights.focusShare >= 0.35 ? 'good' : 'neutral',
+                  },
+                  {
+                    label: 'Fragmented',
+                    value: formatPercent(stats.shortTurnRate),
+                    tone: stats.shortTurnRate > 0.35 ? 'warn' : 'neutral',
+                  },
+                  {
+                    label: 'Median',
+                    value: formatDuration(stats.medianTurn),
+                  },
+                ]}
+              />
+            )}
             <TurnLengthBuckets summary={summary} />
           </CardContent>
         </Card>
@@ -804,6 +1018,25 @@ export default function History() {
             <CardDescription>Agent split inside top projects</CardDescription>
           </CardHeader>
           <CardContent className="pt-0">
+            {insights && (
+              <InsightBar
+                items={[
+                  {
+                    label: 'Top agent',
+                    value: insights.topAgentName,
+                  },
+                  {
+                    label: 'Share',
+                    value: formatPercent(insights.topAgentShare),
+                    tone: insights.topAgentShare > 0.75 ? 'warn' : 'neutral',
+                  },
+                  {
+                    label: 'Total',
+                    value: formatDuration(insights.topAgentTotal),
+                  },
+                ]}
+              />
+            )}
             <AgentContributionBars summary={summary} />
           </CardContent>
         </Card>
