@@ -25,14 +25,14 @@ const splitLineStyle = { color: '#0000000f', width: 1 }
 const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const heatmapHoverEmphasis = {
   itemStyle: {
-    borderColor: '#171717',
+    borderColor: 'rgba(115,115,115,0.55)',
     borderWidth: 1,
     borderRadius: 2,
   },
 } as const
 const hourlyHeatmapHoverEmphasis = {
   itemStyle: {
-    borderColor: '#171717',
+    borderColor: 'rgba(115,115,115,0.55)',
     borderWidth: 1,
     borderRadius: 4,
   },
