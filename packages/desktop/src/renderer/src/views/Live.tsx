@@ -120,23 +120,21 @@ function TurnStage({
       <Card className="relative isolate overflow-hidden">
         <div aria-hidden className="absolute inset-x-0 top-0 h-1 bg-success/70" />
         <CardHeader className="pb-2">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex min-w-0 items-center gap-3">
-              <span className="size-2.5 shrink-0 rounded-full bg-success" />
-              <div className="min-w-0">
-                <p className="text-[12px] font-medium text-muted-foreground">{turn.agent}</p>
+          <div className="grid grid-cols-[10px_minmax(0,1fr)_auto] items-start gap-3">
+            <span className="mt-[7px] size-2.5 rounded-full bg-success" />
+            <div className="min-w-0">
+              <p className="text-[12px] font-medium leading-none text-muted-foreground">{turn.agent}</p>
                 <CardTitle
                   className={
                     compact
-                      ? 'mt-1 truncate font-heading text-2xl'
-                      : 'mt-1 truncate font-heading text-[2rem]'
+                      ? 'mt-1.5 truncate font-heading text-2xl leading-none'
+                      : 'mt-1.5 truncate font-heading text-[2rem] leading-none'
                   }
                 >
                   {turn.project}
                 </CardTitle>
-              </div>
             </div>
-            <span className="rounded-full border border-success/35 bg-success/10 px-2.5 py-1 text-[11px] font-medium text-success">
+            <span className="mt-0 rounded-full border border-success/35 bg-success/10 px-2.5 py-1 text-[11px] font-medium leading-none text-success">
               Live
             </span>
           </div>
