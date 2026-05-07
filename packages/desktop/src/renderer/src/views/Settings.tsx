@@ -59,7 +59,7 @@ function ConnectAgents() {
         <CardHeader>
           <CardTitle>Hooks</CardTitle>
           <CardDescription>
-            Manage vibetime hooks without touching other agent hooks.
+            Manage VibeTime hooks without touching other agent hooks.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-2">

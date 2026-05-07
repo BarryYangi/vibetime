@@ -79,13 +79,21 @@
 }
 
 html {
+  background: transparent;
   font-size: 15px;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
 
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
 body {
-  @apply bg-background font-sans text-foreground antialiased;
+  @apply font-sans text-foreground antialiased;
+  background: transparent;
   margin: 0;
   position: relative;
   -webkit-font-smoothing: antialiased;

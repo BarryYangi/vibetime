@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { HashRouter, Route, Routes } from 'react-router-dom'
-import Sidebar from './components/Sidebar'
 import { cn } from '@/lib/utils'
+import Sidebar from './components/Sidebar'
 import { handlePush } from './store'
 import Settings from './views/Settings'
 import Today from './views/Today'
@@ -15,17 +15,15 @@ export default function App() {
 
   return (
     <HashRouter>
-      <div className="isolate flex h-screen min-h-0 flex-col bg-muted/80">
-        {isMac && (
-          <div className="electron-drag h-9 shrink-0 pl-[76px]" aria-hidden />
+      <div
+        className={cn(
+          'isolate flex h-screen min-h-[640px] min-w-[960px] flex-col',
+          isMac ? 'bg-transparent' : 'bg-muted/80',
         )}
-        <div
-          className={cn(
-            'flex min-h-0 flex-1 gap-3 px-3 pb-3',
-            isMac ? 'pt-1' : 'pt-3',
-          )}
-        >
-          <Sidebar />
+      >
+        {isMac && <div className="electron-drag absolute inset-x-0 top-0 h-9" aria-hidden />}
+        <div className="flex min-h-0 flex-1 gap-3 p-3">
+          <Sidebar className={isMac ? 'pb-3 pt-8' : undefined} />
           <main
             className={cn(
               'relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-2xl',

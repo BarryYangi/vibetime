@@ -13,7 +13,7 @@ Each requirement maps to exactly one roadmap phase. See `## Traceability` below.
 
 ### Process Gate
 
-- [ ] **PROC-01**: `.planning/DECISIONS.md` exists, captures every PRD §16 delegated decision (animation lib, packaging tool, IPC method signatures, per-package directory layout, ad-hoc signing scripting, test strategy, all other implementation choices not locked in PRD §5), and is approved by user before any implementation begins.
+- [x] **PROC-01**: `.planning/DECISIONS.md` exists, captures every PRD §16 delegated decision (animation lib, packaging tool, IPC method signatures, per-package directory layout, ad-hoc signing scripting, test strategy, all other implementation choices not locked in PRD §5), and is approved by user before any implementation begins.
 
 ### Foundation (Monorepo, `core` package, tooling)
 
@@ -33,44 +33,46 @@ Each requirement maps to exactly one roadmap phase. See `## Traceability` below.
 
 ### Local Store
 
-- [ ] **STORE-01**: SQLite database at `~/.vibetime/data.db`. WAL mode + `synchronous=NORMAL` + `busy_timeout=5000` + `foreign_keys=ON` applied at every connection (both `bun:sqlite` in hook and `better-sqlite3` in Electron main).
-- [ ] **STORE-02**: Schema matches PRD §6 verbatim — `events` and `open_turns` tables with the specified columns, types, and indices on `ts`, `project`, `(agent, project)`, `session_id`. Every row writes `schema_version = 1`.
-- [ ] **STORE-03**: Two agents in different terminals running concurrently produce no DB corruption; both turns recorded as `events` rows. (Concurrency stress test passes.)
+- [x] **STORE-01**: SQLite database at `~/.vibetime/data.db`. WAL mode + `synchronous=NORMAL` + `busy_timeout=5000` + `foreign_keys=ON` applied at every connection (both `bun:sqlite` in hook and `better-sqlite3` in Electron main).
+- [x] **STORE-02**: Schema matches PRD §6 verbatim — `events` and `open_turns` tables with the specified columns, types, and indices on `ts`, `project`, `(agent, project)`, `session_id`. Every row writes `schema_version = 1`.
+- [x] **STORE-03**: Two agents in different terminals running concurrently produce no DB corruption; both turns recorded as `events` rows. (Concurrency stress test passes.)
 
 ### Crash Recovery
 
-- [ ] **REC-01**: On every `session_start`, the hook queries `open_turns` for matching `session_id`; each match becomes a synthetic `turn_end` event with `meta.abandoned = true` and `duration_sec = NULL`; the orphan `open_turns` row is deleted.
-- [ ] **REC-02**: At every desktop launch and every CLI invocation, any `open_turns` row older than 6 hours becomes a synthetic `turn_end` with `meta.reason = "stale_sweep"` and is deleted.
+- [x] **REC-01**: On every `session_start`, the hook queries `open_turns` for matching `session_id`; each match becomes a synthetic `turn_end` event with `meta.abandoned = true` and `duration_sec = NULL`; the orphan `open_turns` row is deleted.
+- [x] **REC-02**: At every desktop launch and every CLI invocation, any `open_turns` row older than 6 hours becomes a synthetic `turn_end` with `meta.reason = "stale_sweep"` and is deleted.
+- [x] **REC-03**: For Codex specifically, if a turn remains open but the local Codex transcript already contains `task_complete` for the same `session_id + turn_id`, the next hook/desktop reconciliation closes it with a synthetic `turn_end` carrying `meta.reason = "codex_task_complete_fallback"` and the transcript path.
+- [x] **REC-04**: Repeated `turn_start` for the same still-open `turn_id` must not overwrite the original `started_at`; duplicate starts are ignored and logged.
 
 ### Hook Binary (`vibetime-hook`)
 
-- [ ] **HOOK-01**: `vibetime-hook` is a Bun-compiled standalone binary. Cold-start invocation completes in <50ms typical / <100ms worst-case on the developer machine.
-- [ ] **HOOK-02**: Hook produces no stdout and no stderr during normal operation. Exit code is always `0` even on parse failure.
-- [ ] **HOOK-03**: Errors during hook execution are written to `~/.vibetime/hook.log` with rotation at ~10MB cap. No log-level controls.
-- [ ] **HOOK-04**: Hook reads payload, invokes the matching `core` adapter, and persists the resulting `NormalizedEvent` (or no-ops on `null`) using `bun:sqlite` against the shared `data.db`.
+- [x] **HOOK-01**: `vibetime-hook` is a Bun-compiled standalone binary. Cold-start invocation completes in <50ms typical / <100ms worst-case on the developer machine.
+- [x] **HOOK-02**: Hook produces no stdout and no stderr during normal operation. Exit code is always `0` even on parse failure.
+- [x] **HOOK-03**: Errors during hook execution are written to `~/.vibetime/hook.log` with rotation at ~10MB cap. No log-level controls.
+- [x] **HOOK-04**: Hook reads payload, invokes the matching `core` adapter, and persists the resulting `NormalizedEvent` (or no-ops on `null`) using `bun:sqlite` against the shared `data.db`.
 
 ### Filesystem & Config
 
-- [ ] **FS-01**: First run creates `~/.vibetime/` with directory permissions `0700`.
-- [ ] **FS-02**: First run creates `~/.vibetime/config.toml` with default `[projects]` (empty) and `[display].timezone` (system timezone). The TOML schema matches PRD §12 verbatim.
-- [ ] **FS-03**: `data.db` (and its WAL/SHM siblings) and `hook.log` are created lazily on first write.
+- [x] **FS-01**: First run creates `~/.vibetime/` with directory permissions `0700`.
+- [x] **FS-02**: First run creates `~/.vibetime/config.toml` with default `[projects]` (empty) and `[display].timezone` (system timezone). The TOML schema matches PRD §12 verbatim.
+- [x] **FS-03**: `data.db` (and its WAL/SHM siblings) and `hook.log` are created lazily on first write.
 
 ### CLI
 
-- [ ] **CLI-01**: `vibetime install <agent>` configures hooks for one agent (claude-code | codex | cursor). Idempotent — running it twice does not duplicate hook entries. Existing user-defined hooks are preserved.
-- [ ] **CLI-02**: For Codex specifically, `vibetime install codex` writes `[features] codex_hooks = true` into `~/.codex/config.toml` (preserving any other config).
-- [ ] **CLI-03**: `vibetime today` prints a plain-text per-project breakdown of today's agent time and exits.
-- [ ] **CLI-04**: `vibetime project <name> [--days=N]` prints a per-day + per-agent breakdown for one project. Default `--days=7`.
-- [ ] **CLI-05**: `vibetime export [--format=json|csv] [--out=<path>] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD]` prints/writes raw events. Default JSON to stdout. CSV is well-formed. `--out` writes to file. `--from/--to` bound the result.
-- [ ] **CLI-06**: `vibetime version` prints version and `~/.vibetime/data.db` path.
-- [ ] **CLI-07**: `vibetime` (no args) launches the desktop application.
+- [x] **CLI-01**: `vibetime install <agent>` and `vibetime uninstall <agent>` configure or remove hooks for one agent (claude-code | codex | cursor). Both are idempotent. Uninstall removes only Vibetime-managed hook commands and preserves unrelated user-defined hooks.
+- [x] **CLI-02**: For Codex specifically, `vibetime install codex` writes `[features] codex_hooks = true` into `~/.codex/config.toml` (preserving any other config). If Vibetime temporarily flips a prior `false`, uninstall restores the original `false` rather than guessing user intent.
+- [x] **CLI-03**: `vibetime today` prints a plain-text per-project breakdown of today's agent time and exits.
+- [x] **CLI-04**: `vibetime project <name> [--days=N]` prints a per-day + per-agent breakdown for one project. Default `--days=7`.
+- [x] **CLI-05**: `vibetime export [--format=json|csv] [--out=<path>] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD]` prints/writes raw events. Default JSON to stdout. CSV is well-formed. `--out` writes to file. `--from/--to` bound the result.
+- [x] **CLI-06**: `vibetime version` prints version and `~/.vibetime/data.db` path.
+- [x] **CLI-07**: `vibetime` (no args) launches the desktop application.
 
 ### Desktop — Today View
 
-- [ ] **TODAY-01**: Today view is the default landing view on app launch.
-- [ ] **TODAY-02**: Today view shows today's date, grand total, per-project rows sorted by total time desc, with bar visualization, plus per-project agent breakdown.
-- [ ] **TODAY-03**: Today view footer shows turn count and active project count.
-- [ ] **TODAY-04**: Today view auto-refreshes approximately every 5 seconds.
+- [x] **TODAY-01**: Today view is the default landing view on app launch.
+- [x] **TODAY-02**: Today view shows today's date, grand total, per-project rows sorted by total time desc, with bar visualization, plus per-project agent breakdown.
+- [x] **TODAY-03**: Today view footer shows turn count and active project count.
+- [x] **TODAY-04**: Today view refreshes from push invalidation events instead of polling. When `open_turns` exist, the renderer ticks displayed elapsed time locally every second so totals visibly advance in real time.
 
 ### Desktop — Live View
 
@@ -98,14 +100,14 @@ Each requirement maps to exactly one roadmap phase. See `## Traceability` below.
 
 ### Desktop — Settings & Lifecycle
 
-- [ ] **SET-01**: Settings panel includes a Connect Agents section with a per-agent install button + status indicator. The install button invokes the same code path as `vibetime install <agent>` and is idempotent.
-- [ ] **SET-02**: Settings panel includes a Project Aliases view/editor for `cwd → name` mappings, persisting changes to `config.toml`.
-- [ ] **SET-03**: Settings panel includes an About section showing version, `~/.vibetime/data.db` path, and the MIT license.
+- [x] **SET-01**: Settings panel includes a Connect Agents section with per-agent install/uninstall actions plus status indicator. These buttons invoke the same code paths as the CLI install/uninstall commands and remain idempotent.
+- [x] **SET-02**: Settings panel includes a Project Aliases view/editor for `cwd → name` mappings, persisting changes to `config.toml`.
+- [x] **SET-03**: Settings panel includes an About section showing version, `~/.vibetime/data.db` path, and the MIT license.
 - [ ] **SET-04**: Settings panel exposes an Auto-launch on Login toggle. Default OFF. The first launch prompts the user to opt in.
 - [ ] **LIFE-01**: Closing the main window keeps the menubar widget alive (close ≠ quit).
 - [ ] **LIFE-02**: Quit happens only via the menubar context menu or `Cmd+Q`.
-- [ ] **DESIGN-01**: Renderer applies the Tokyo Night palette tokens (primary `#bb9af7`, accent `#7aa2f7`, success `#9ece6a`, muted `#565f89`, fg `#c0caf5`, bg `#1a1b26`). Inter for UI, JetBrains Mono for numerics. ECharts charts use a custom theme registered at `desktop/src/charts/theme.ts`.
-- [ ] **IPC-01**: Renderer never opens SQLite directly. All renderer reads/writes go through typed Electron IPC methods exposed by the main process.
+- [x] **DESIGN-01**: Renderer uses coss ui as the component baseline and follows the default neutral light/dark semantic theme instead of Tokyo Night. Typography uses local/system sans + mono stacks, and ECharts charts derive from the same restrained semantic palette.
+- [x] **IPC-01**: Renderer never opens SQLite directly. All renderer reads/writes go through typed Electron IPC methods exposed by the main process.
 
 ### Distribution
 
@@ -167,45 +169,47 @@ Each v1 requirement maps to exactly one phase. Updated as roadmap evolves.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PROC-01 | Phase 1 | Pending |
+| PROC-01 | Phase 1 | Done (DECISIONS.md approved 2026-04-28) |
 | FND-01 | Phase 1 | Done (Plan 01-01) |
 | FND-02 | Phase 1 | Staged in 01-01; library code in 01-03 |
 | FND-03 | Phase 1 | Staged in 01-01; library code in 01-03 |
-| FND-04 | Phase 1 | Pending |
+| FND-04 | Phase 1 | Done (Plan 01-03) |
 | FND-05 | Phase 1 | Done (Plan 01-01) |
 | FND-06 | Phase 1 | Done (Plan 01-01) |
 | ADPT-01 | Phase 2 | Done (Plan 02-01) |
 | ADPT-02 | Phase 2 | Done (Plan 02-01) |
 | ADPT-03 | Phase 2 | Done (Plan 02-01) |
 | ADPT-04 | Phase 2 | Done (Plan 02-01) |
-| STORE-01 | Phase 3 | Pending |
-| STORE-02 | Phase 3 | Pending |
-| STORE-03 | Phase 3 | Pending |
-| REC-01 | Phase 3 | Pending |
-| REC-02 | Phase 3 | Pending |
-| HOOK-01 | Phase 3 | Pending |
-| HOOK-02 | Phase 3 | Pending |
-| HOOK-03 | Phase 3 | Pending |
-| HOOK-04 | Phase 3 | Pending |
-| FS-01 | Phase 3 | Pending |
-| FS-02 | Phase 3 | Pending |
-| FS-03 | Phase 3 | Pending |
-| CLI-01 | Phase 3 | Pending |
-| CLI-02 | Phase 3 | Pending |
-| TODAY-01 | Phase 4 | Pending |
-| TODAY-02 | Phase 4 | Pending |
-| TODAY-03 | Phase 4 | Pending |
-| TODAY-04 | Phase 4 | Pending |
-| CLI-03 | Phase 4 | Pending |
-| CLI-04 | Phase 4 | Pending |
-| CLI-05 | Phase 4 | Pending |
-| CLI-06 | Phase 4 | Pending |
-| CLI-07 | Phase 4 | Pending |
-| SET-01 | Phase 4 | Pending |
-| SET-02 | Phase 4 | Pending |
-| SET-03 | Phase 4 | Pending |
-| IPC-01 | Phase 4 | Pending |
-| DESIGN-01 | Phase 4 | Pending |
+| STORE-01 | Phase 3 | Done (Phase 3 verified; rechecked 2026-05-07) |
+| STORE-02 | Phase 3 | Done (Phase 3 verified; rechecked 2026-05-07) |
+| STORE-03 | Phase 3 | Done (Phase 3 verified) |
+| REC-01 | Phase 3 | Done (Phase 3 verified) |
+| REC-02 | Phase 3 | Done (Phase 3 verified) |
+| REC-03 | Phase 3 | Done (post-Phase-4 maintenance, 2026-05-07) |
+| REC-04 | Phase 3 | Done (post-Phase-4 maintenance, 2026-05-07) |
+| HOOK-01 | Phase 3 | Done (binary built and used locally) |
+| HOOK-02 | Phase 3 | Done (Phase 3 verified) |
+| HOOK-03 | Phase 3 | Done (Phase 3 verified) |
+| HOOK-04 | Phase 3 | Done (Phase 3 verified; Codex reconciliation added later) |
+| FS-01 | Phase 3 | Done (Phase 3 verified) |
+| FS-02 | Phase 3 | Done (Phase 3 verified) |
+| FS-03 | Phase 3 | Done (Phase 3 verified) |
+| CLI-01 | Phase 3 | Done (install/uninstall idempotent; rechecked 2026-05-07) |
+| CLI-02 | Phase 3 | Done (safe Codex config ownership restore added 2026-05-07) |
+| TODAY-01 | Phase 4 | Done (Phase 4 verified) |
+| TODAY-02 | Phase 4 | Done (Phase 4 verified) |
+| TODAY-03 | Phase 4 | Done (Phase 4 verified) |
+| TODAY-04 | Phase 4 | Done (event-driven refresh + live ticking, rechecked 2026-05-07) |
+| CLI-03 | Phase 4 | Done (Phase 4 verified) |
+| CLI-04 | Phase 4 | Done (Phase 4 verified) |
+| CLI-05 | Phase 4 | Done (Phase 4 verified) |
+| CLI-06 | Phase 4 | Done (Phase 4 verified) |
+| CLI-07 | Phase 4 | Done (Phase 4 verified) |
+| SET-01 | Phase 4 | Done (install/uninstall actions shipped 2026-05-07) |
+| SET-02 | Phase 4 | Done (Phase 4 verified) |
+| SET-03 | Phase 4 | Done (Phase 4 verified) |
+| IPC-01 | Phase 4 | Done (Phase 4 verified) |
+| DESIGN-01 | Phase 4 | Done (post-Phase-4 COSS theme alignment, 2026-05-07) |
 | LIVE-01 | Phase 5 | Pending |
 | LIVE-02 | Phase 5 | Pending |
 | LIVE-03 | Phase 5 | Pending |
@@ -228,10 +232,10 @@ Each v1 requirement maps to exactly one phase. Updated as roadmap evolves.
 | DIST-02 | Phase 6 | Pending |
 
 **Coverage:**
-- v1 requirements: 59 total
-- Mapped to phases: 59
+- v1 requirements: 61 total
+- Mapped to phases: 61
 - Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-04-28*
-*Last updated: 2026-04-28 after initial roadmap creation*
+*Last updated: 2026-05-07 after post-Phase-4 stabilization sync*

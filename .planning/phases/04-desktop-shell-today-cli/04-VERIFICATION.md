@@ -57,12 +57,12 @@ human_verification:
 | 17 | Renderer mounts React app with Jotai Provider and store | VERIFIED | main.tsx renders <Provider store={store}><App /></Provider> inside StrictMode |
 | 18 | React Router renders Today view at / and Settings at /settings | VERIFIED | App.tsx uses HashRouter with Route path="/" for Today and path="/settings" for Settings |
 | 19 | Sidebar navigation links to Today and Settings | VERIFIED | Sidebar.tsx defines navItems with / and /settings, renders NavLink with active state styling |
-| 20 | Tokyo Night palette applied via Tailwind CSS | VERIFIED | tailwind.config.ts defines 12 tn-* colors; index.css imports @theme with matching CSS custom properties |
-| 21 | Inter font for UI, JetBrains Mono for numerics | VERIFIED | tailwind.config.ts:22-24 defines font-sans=[Inter] and font-mono=[JetBrains Mono]; index.css:1 imports Google Fonts |
-| 22 | ECharts Tokyo Night theme registered | VERIFIED | charts/theme.ts:28 calls echarts.registerTheme('tokyoNight', tokyoNightTheme) with 8-color palette |
+| 20 | Renderer styling baseline is wired through semantic tokens and shared components | VERIFIED | Current renderer uses coss-style semantic components/tokens rather than renderer-side raw color usage |
+| 21 | Local/system sans + mono font stacks are applied | VERIFIED | index.css defines `--font-sans`, `--font-heading`, and `--font-mono` semantic font stacks without runtime network font loading |
+| 22 | ECharts desktop theme is registered | VERIFIED | charts/theme.ts registers the desktop chart theme used by renderer charts |
 | 23 | Today view is the default landing view (renders at /) | VERIFIED | App.tsx Route path="/" element={<Today />} is the first route |
 | 24 | Today view shows today's date, grand total, and per-project rows sorted by total time desc | VERIFIED | Today.tsx:56-98 destructures summary, maps over projects, renders ProjectBar for each |
-| 25 | Each project row shows a CSS bar visualization proportional to total time | VERIFIED | ProjectBar component renders gradient bar with width={pct}% proportional to total/maxTotal |
+| 25 | Each project row shows a CSS bar visualization proportional to total time | VERIFIED | ProjectBar component renders a proportional CSS bar with width={pct}% based on total/maxTotal |
 | 26 | Each project row shows per-project agent breakdown | VERIFIED | ProjectBar:32-39 maps over agents array, renders agent:duration spans |
 | 27 | Footer shows turn count and active project count | VERIFIED | Today.tsx:102-105 renders turnCount and activeProjectCount in footer |
 | 28 | View auto-refreshes when db-changed push event arrives | VERIFIED | useIpcQuery subscribes to window.api.onPush(handlePush); handlePush re-fetches getTodaySummary on db-changed |
@@ -90,9 +90,9 @@ human_verification:
 | packages/desktop/src/renderer/src/App.tsx | Router + Sidebar layout | VERIFIED | 20 lines, HashRouter with Today/Settings routes |
 | packages/desktop/src/renderer/src/views/Today.tsx | Complete Today view | VERIFIED | 109 lines, date header + grand total + ProjectBar + agent breakdown + footer |
 | packages/desktop/src/renderer/src/views/Settings.tsx | Complete Settings view | VERIFIED | 226 lines, ConnectAgents + ProjectAliases + About |
-| packages/desktop/src/renderer/src/components/Sidebar.tsx | Navigation sidebar | VERIFIED | 34 lines, NavLink with Tokyo Night active state |
-| packages/desktop/src/renderer/src/charts/theme.ts | ECharts Tokyo Night theme | VERIFIED | 30 lines, registerTheme('tokyoNight', ...) |
-| packages/desktop/tailwind.config.ts | Tokyo Night palette tokens | VERIFIED | 28 lines, 12 tn-* colors + Inter/JetBrains Mono fonts |
+| packages/desktop/src/renderer/src/components/Sidebar.tsx | Navigation sidebar | VERIFIED | NavLink-based app navigation wired into the current desktop shell |
+| packages/desktop/src/renderer/src/charts/theme.ts | Desktop ECharts theme | VERIFIED | Renderer chart theme registration exists and is loadable |
+| packages/desktop/tailwind.config.ts | Renderer style config | VERIFIED | Renderer styling/config scaffold exists for the desktop app |
 | packages/desktop/src/renderer/index.html | Renderer HTML | VERIFIED | 12 lines, div#root + module script |
 | packages/hook/src/cli.ts | Enhanced CLI with chalk | VERIFIED | 283 lines, chalk formatting for today/project/export/version |
 | packages/hook/package.json | Subpath exports | VERIFIED | exports field with ./cli, ./config, ./install subpaths |
@@ -138,19 +138,19 @@ human_verification:
 | Requirement | Source Plan | Description | Status | Evidence |
 |-------------|-----------|-------------|--------|----------|
 | TODAY-01 | 04-03, 04-04, 04-05 | Today view is the default landing view on app launch | SATISFIED | App.tsx Route path="/" renders Today; main/index.ts loads renderer |
-| TODAY-02 | 04-03, 04-05 | Today view shows date, grand total, per-project rows sorted by total desc, bar visualization, agent breakdown | SATISFIED | Today.tsx renders all elements with ProjectBar CSS gradient bars |
-| TODAY-03 | 04-03, 04-05 | Today view footer shows turn count and active project count | SATISFIED | Today.tsx:102-105 renders turnCount and activeProjectCount |
-| TODAY-04 | 04-03, 04-05 | Today view auto-refreshes approximately every 5 seconds | SATISFIED | Event-driven push via useIpcQuery + handlePush (user requested no polling; more efficient than timer) |
+| TODAY-02 | 04-03, 04-05 | Today view shows date, grand total, per-project rows sorted by total desc, bar visualization, agent breakdown | SATISFIED | Today.tsx renders all elements with ProjectBar CSS bars and per-agent breakdown |
+| TODAY-03 | 04-03, 04-05 | Today view footer shows turn count and active project count | SATISFIED | Today.tsx renders turn/project counts in the summary header area |
+| TODAY-04 | 04-03, 04-05 | Today view refreshes from invalidation events and live open turns visibly tick | SATISFIED | useIpcQuery refreshes on push; open turns are merged into displayed totals with a local 1s timer |
 | CLI-03 | 04-02 | vibetime today prints per-project breakdown | SATISFIED | cli.ts:61-134 with chalk formatting |
 | CLI-04 | 04-02 | vibetime project <name> [--days=N] prints per-day per-agent drilldown | SATISFIED | cli.ts:137-199 with --days=7 default |
 | CLI-05 | 04-02 | vibetime export [--format=json\|csv] [--out=<path>] [--from/--to] | SATISFIED | cli.ts:202-256 with CSV headers, escaping, file output |
 | CLI-06 | 04-02 | vibetime version prints version and data.db path | SATISFIED | cli.ts:258-262 |
 | CLI-07 | 04-01 | vibetime (no args) launches the desktop application | SATISFIED | main/index.ts:5 isCliMode=false path launches BrowserWindow |
-| SET-01 | 04-03, 04-06 | Settings: Connect Agents with per-agent install + status | SATISFIED | ConnectAgents component with installAgent IPC |
+| SET-01 | 04-03, 04-06 | Settings: Connect Agents with per-agent install/uninstall + status | SATISFIED | ConnectAgents component invokes both installAgent and uninstallAgent IPC |
 | SET-02 | 04-03, 04-06 | Settings: Project Aliases editor persists to config.toml | SATISFIED | ProjectAliases with getConfig/updateConfig IPC |
 | SET-03 | 04-03, 04-06 | Settings: About with version, data.db path, MIT license | SATISFIED | About component displays all three |
 | IPC-01 | 04-01, 04-03 | Renderer never opens SQLite; all reads/writes via typed IPC | SATISFIED | No SQLite imports in renderer; all data via window.api.invoke |
-| DESIGN-01 | 04-04 | Tokyo Night palette, Inter/JetBrains Mono, ECharts theme | SATISFIED | tailwind.config.ts + index.css + charts/theme.ts |
+| DESIGN-01 | 04-04 | coss default neutral semantics + desktop chart theme | SATISFIED | renderer components and chart theme follow the quieter post-Tokyo-Night baseline |
 
 **Orphaned requirements:** None. All 14 requirement IDs from phase scope are accounted for in plan frontmatter.
 
@@ -166,7 +166,7 @@ human_verification:
 ### 1. Electron App Visual Rendering
 
 **Test:** Run `pnpm --filter @vibetime/desktop dev` and verify the Today view renders with real data
-**Expected:** Today view shows date header, grand total in font-mono, per-project rows with CSS gradient bars, agent breakdown, and footer with turn/active project counts
+**Expected:** Today view shows date header, grand total, per-project rows with CSS bars, agent breakdown, and visible live changes when open turns exist
 **Why human:** Visual rendering requires a running Electron window with display output
 
 ### 2. CLI Terminal Output
@@ -200,3 +200,26 @@ Known stubs (non-blocking):
 
 _Verified: 2026-04-29T17:30:00+08:00_
 _Verifier: Claude (gsd-verifier)_
+
+## 2026-05-07 Maintenance Addendum
+
+Phase 4 was later hardened and visually aligned after live usage uncovered a few runtime gaps. The original verification still describes the initial Phase 4 delivery, but the current implementation now differs in several important ways:
+
+- Today refresh remains event-driven, but the main invalidation path is now explicit hook-to-desktop notification over `~/.vibetime/notify.sock`, with `fs.watch(~/.vibetime)` retained as fallback. There is no periodic polling loop.
+- Today no longer waits for a DB write every second to show live progress. When `open_turns` exist, the renderer locally ticks elapsed time once per second and rolls that into the displayed project totals.
+- The compact duration format is now `8m28s` / `1h19m23s`.
+- Settings `Connect Agents` now supports both install and uninstall actions, using the same underlying hook package code paths as the CLI.
+- The renderer theme baseline was aligned away from the old Tokyo Night token family and toward the quieter coss default neutral semantic styling.
+- Electron-native module handling was stabilized so `better-sqlite3` is rebuilt for the Electron ABI during desktop dev/build flows.
+
+Additional verification run during this maintenance pass:
+
+- `npx tsc -p packages/desktop/tsconfig.node.json --noEmit` — pass
+- `npx tsc -p packages/desktop/tsconfig.web.json --noEmit` — pass
+- `pnpm --filter @vibetime/desktop build` — pass
+- `pnpm --filter @vibetime/hook test` — pass
+- Manual local validation confirmed that with the desktop app open, Today can update from hook-driven invalidation rather than requiring manual refresh
+
+Interpretation:
+
+- The phase remains passed, but the current desktop/runtime behavior is stronger and more accurate than the original 2026-04-29 snapshot.

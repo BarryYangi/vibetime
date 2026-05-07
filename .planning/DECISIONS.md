@@ -22,7 +22,15 @@
 | D-CI | CI in Phase 1 | Recommended SKIP — local `pnpm run ci` only (note: `pnpm ci` is reserved by pnpm for npm-ci-style installs, hence `pnpm run ci`); defer GitHub Actions to a follow-up | A7: keeps Phase 1 scaffolding minimal; cheap to add `.github/workflows/ci.yml` later if velocity demands; nothing in PRD requires it (RESEARCH.md A7 + Plan 01-01 deviation #4). | 1 | approved |
 | D-PRECOMMIT | Pre-commit hooks (lefthook / simple-git-hooks) | Recommended SKIP for Phase 1; revisit if `pnpm run ci` velocity becomes painful | Open Question 3: nothing in PRD requires it; minimal scaffolding wins (RESEARCH.md Open Questions §3). | 1 | approved |
 
-## 2. Decisions deferred to later phases
+## 2. Later-phase decisions (approved after Phase 1)
+
+| ID | Decision | Choice | Rationale (1 sentence) | Decided in Phase | Status |
+|----|----------|--------|------------------------|------------------|--------|
+| D-IPC-REFRESH | Desktop DB invalidation path | Hook writes send `db-changed` over Unix socket `~/.vibetime/notify.sock`; Electron main debounces and pushes to renderer; `fs.watch(~/.vibetime)` stays as fallback | SQLite `update_hook`/`wal_hook` are connection-local, so cross-process UI refresh needs an explicit invalidation path instead of polling or file-guessing alone. | 4 | approved |
+| D-CODEX-CONFIG-OWNERSHIP | Codex `codex_hooks` flag ownership | If install flips a prior `codex_hooks = false`, write a Vibetime-managed marker and restore the prior `false` on uninstall; if user already had `true`, leave it alone | Uninstall must only revert state Vibetime clearly owns, otherwise it can silently break a user's pre-existing Codex hook setup. | 3 | approved |
+| D-CODEX-RECOVERY | Missing Codex `Stop` handling | Reconcile open Codex turns from local transcript `task_complete`; ignore duplicate `turn_start` for a still-open `turn_id` | Long-running turns are legitimate, so timeout/freeze heuristics are weaker than using Codex's own transcript as the authoritative completion fallback. | 3 | approved |
+
+## 3. Decisions deferred to later phases
 
 | ID | Decision | Choice | Rationale (1 sentence) | Decided in Phase | Status |
 |----|----------|--------|------------------------|------------------|--------|
@@ -32,7 +40,7 @@
 | D-SIGN | Ad-hoc signing scripting | TBD by Phase 6 | Locked: ad-hoc only (NOT Apple notarization, per user decision). Scripting choice — `codesign` shell script vs electron-builder built-in vs a Node script — deferred until packaging tool is chosen (RESEARCH.md §G). | 6 | deferred |
 | D-TEST-HOOK | Test runner for `hook` package | TBD by Phase 3 | `bun test` is the natural choice for `bun:sqlite`-touching code, but cross-runtime portability questions need a Phase 3 decision (RESEARCH.md A2). | 3 | deferred |
 
-## 3. Locked decisions (replicated for traceability — NOT up for debate)
+## 4. Locked decisions (replicated for traceability — NOT up for debate)
 
 | ID | Decision | Choice | Status | Source |
 |----|----------|--------|--------|--------|
@@ -50,12 +58,12 @@
 | DEC-012 | Crash recovery | Orphan sweep on session_start; 6h stale sweep at every desktop launch / CLI invocation | locked | PRD §9 |
 | DEC-013 | Menubar metric | Today's cumulative agent time across all projects | locked | PRD §10.1 |
 | DEC-014 | Window lifecycle | Close ≠ quit; Cmd+Q or menubar context menu only | locked | PRD §10.4 |
-| DEC-015 | Design system | Tokyo Night palette, Inter, JetBrains Mono, ECharts custom theme | locked | PRD §10.5 |
+| DEC-015 | Design system | coss ui default neutral light/dark semantic theme, system/local font stacks, ECharts theme derived from the same semantic palette | locked | PRD §10.5 |
 | LIC | License | MIT | locked | User decision |
 | SIGN | Code-signing | Ad-hoc self-signed (replaces PRD §14 notarization); first-launch right-click → Open documented | locked | User decision |
 | AUTO | Auto-launch on login | Default OFF; opt-in prompt on first launch | locked | User decision |
 
-## 4. Assumptions surfaced for explicit user approval
+## 5. Assumptions surfaced for explicit user approval
 
 - A1: Biome (single tool) is acceptable now; an ESLint complement may land in Phase 4 if React rule coverage demands. **Approve?**
 - A2: Vitest (pinned to 3.2.4 today; bump to 4.x when Node ≥ 22.12) for `core`; `bun test` decision deferred to Phase 3. **Approve?**
@@ -66,7 +74,7 @@
 - A7: No CI in Phase 1 (local `pnpm run ci` only). **Approve?**
 - A8: `verbatimModuleSyntax: true` is acceptable (forces `import type` everywhere). **Approve?**
 
-## Gate mechanics
+## 6. Gate mechanics
 
 PRD §16 forbids any non-scaffolding code being written before this file is approved. Phase 1 Plan 01 has shipped the scaffolding. The next plan (`01-03-PLAN.md`) ships the `core` library code (NormalizedEvent, AdapterFn, DDL constants, resolveProject + tests). Plan 03 must NOT execute until the user has reviewed this document and either:
 
@@ -75,7 +83,7 @@ PRD §16 forbids any non-scaffolding code being written before this file is appr
 
 Until one of those replies arrives, the workflow STOPS.
 
-## User review checklist
+## 7. User review checklist
 
 - [ ] Every `proposed` row above has a clear Choice and one-sentence Rationale
 - [ ] Every `deferred` row names a specific later phase

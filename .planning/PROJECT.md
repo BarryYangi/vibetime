@@ -21,15 +21,15 @@ Accurately and silently record agent coding time per project on the developer's 
 <!-- V0 scope. Source: vibetime-prd.md §4, §10, §11, §14, §16. Full traceable list in REQUIREMENTS.md. -->
 
 - [x] Three agent adapters (Claude Code, Codex CLI, Cursor) producing `NormalizedEvent`s — Phase 2 verified 2026-04-28
-- [ ] Local SQLite store (WAL) with concurrent multi-process writes
-- [ ] Crash recovery (orphan sweep on `session_start` + 6h stale sweep at every launch / CLI invocation)
-- [ ] Desktop app: Today / Live / History views + menubar widget + minimal Settings
-- [ ] CLI: `install / today / project / export / version` + bare invocation launches desktop
+- [x] Local SQLite store (WAL) with concurrent multi-process writes — Phase 3 verified 2026-04-29
+- [x] Crash recovery (orphan sweep on `session_start` + 6h stale sweep at every launch / CLI invocation), plus Codex transcript reconciliation for missing `Stop` — rechecked 2026-05-07
+- [ ] Desktop app: Today / Live / History views + menubar widget + minimal Settings (`Today` + `Settings` shipped; `Live` / `History` / menubar pending)
+- [x] CLI: `install / uninstall / today / project / export / version` + bare invocation launches desktop
 - [ ] Two-binary distribution: `vibetime-hook` (Bun CLI bundled in .app) + `vibetime.app` (Electron)
-- [ ] `~/.vibetime/` filesystem at `0700` (config.toml, data.db [+ WAL/SHM], hook.log)
-- [ ] DECISIONS.md produced and approved before any implementation begins (§16 gate)
+- [x] `~/.vibetime/` filesystem at `0700` (config.toml, data.db [+ WAL/SHM], hook.log)
+- [x] DECISIONS.md produced and approved before any implementation begins (§16 gate)
 - [ ] macOS arm64 distribution; **ad-hoc self-signed**, with first-launch self-authorization documented
-- [ ] Tokyo Night design system + Inter / JetBrains Mono + ECharts theme
+- [x] coss ui default neutral light/dark baseline + restrained ECharts theme alignment
 
 ### Out of Scope
 
@@ -55,6 +55,7 @@ Accurately and silently record agent coding time per project on the developer's 
 - TypeScript-only stack (user is a React/Next.js engineer; Rust/Tauri rejected)
 - Three-package monorepo: `core` (pure logic, zero deps) / `hook` (Bun CLI + `bun:sqlite`) / `desktop` (Electron + `better-sqlite3` in main, React 18 + Tailwind v4 + coss ui + ECharts v6 + Jotai in renderer)
 - Two binaries share state via the same SQLite WAL file, never via IPC
+- Live desktop refresh is event-driven: hook writes notify the Electron main process over `~/.vibetime/notify.sock`; `fs.watch(~/.vibetime)` remains a fallback invalidation path.
 - `core` is intentionally pure — explicit goal is to future-proof a possible web UI (V0.1) that imports the same package
 
 **Prior work:** user's Scenee codebase already uses coss ui and a similar React/TS stack — zero new framework learning cost.
@@ -68,8 +69,10 @@ Accurately and silently record agent coding time per project on the developer's 
 
 **Hook payload caveats GSD must verify during implementation:**
 - Codex requires `[features] codex_hooks = true` in `~/.codex/config.toml` (the `vibetime install codex` command sets this)
+- Codex uninstall must not guess ownership of `codex_hooks`; Vibetime only restores the flag when it can prove it previously changed it
 - Cursor's `workspace_roots` is an array; V0 uses `[0]` only — documented known limitation
 - Codex `SessionEnd` is not GA; use process-exit fallback
+- Codex `Stop` is not fully reliable in all terminal outcomes; Vibetime reconciles open turns against the local Codex transcript `task_complete` records
 
 ## Constraints
 
@@ -85,7 +88,7 @@ Accurately and silently record agent coding time per project on the developer's 
 - **Hook NFRs (LOCKED — §7)**: <50ms typical / <100ms worst-case startup. Silent stdout/stderr. Exit 0 always. Errors → `~/.vibetime/hook.log`.
 - **Crash recovery (LOCKED — DEC-012)**: orphan sweep on `session_start` per matching `session_id`; 6-hour stale sweep at every desktop launch and every CLI invocation.
 - **Filesystem (LOCKED)**: `~/.vibetime/` at `0700` mode; `config.toml`, `data.db` (+ WAL/SHM), `hook.log` (~10MB cap, rotating).
-- **Design tokens (LOCKED — DEC-015)**: Tokyo Night palette (primary `#bb9af7`, accent `#7aa2f7`, success `#9ece6a`, muted `#565f89`, fg `#c0caf5`, bg `#1a1b26`). Inter (UI), JetBrains Mono (numerics). ECharts theme registered at `desktop/src/charts/theme.ts`.
+- **Design tokens (LOCKED — DEC-015)**: coss ui default neutral light/dark semantic theme. Prefer local/system sans + mono stacks and derive ECharts colors from the same restrained semantic palette.
 - **Menubar metric (LOCKED — DEC-013)**: Today's cumulative agent time across all projects (NOT current-turn timer). Format states: idle `●` / `● 47m` / `● 5h 23m`; pulsing `●` only during active turn; recompute ~10s during active turns.
 - **Window lifecycle (LOCKED — DEC-014)**: Closing main window does NOT quit. Menubar item stays alive. Quit only via menubar context menu or `Cmd+Q`.
 - **Auto-launch on login (LOCKED — user decision)**: Default OFF. Toggle in Settings; opt-in prompt on first launch.
@@ -114,10 +117,12 @@ Accurately and silently record agent coding time per project on the developer's 
 | Crash recovery rules (DEC-012) | Self-healing without daemons; aligns with "no long-running daemons" non-goal | — Pending |
 | Menubar shows cumulative today (DEC-013) | Monotonic = "quietly growing badge"; right shape for ambient surface; better for livestream | — Pending |
 | Close-to-menubar (DEC-014) | Standard macOS background-app behavior; Cmd+Q for full quit | — Pending |
-| Tokyo Night design (DEC-015) | Already-established palette; cohesive across UI + ECharts theme | — Pending |
+| coss default neutral theme (DEC-015) | Matches the user's current PRD direction, reduces custom styling, and keeps contrast quieter than the old Tokyo Night token family | — Approved |
+| Desktop invalidation path (DEC-016) | SQLite hooks are connection-local; use hook-side Unix socket notification to Electron main, with `fs.watch` fallback, then re-query SQLite in renderer | — Approved |
+| Codex recovery hardening (DEC-017) | `Stop` is not fully reliable; reconcile against local transcript `task_complete` and ignore duplicate `turn_start` while a turn is still open | — Approved |
 | MIT license | Permissive, standard for solo OSS dev tooling, no copyleft friction for content/community use | — Pending |
-| Ad-hoc self-signed for V0 (replaces DEC-016) | Avoids Apple Developer enrollment cost/delay; first-launch right-click → Open is standard for indie macOS tools; notarization deferred to V0.1+ | — Pending |
+| Ad-hoc self-signed for V0 | Avoids Apple Developer enrollment cost/delay; first-launch right-click → Open is standard for indie macOS tools; notarization deferred to V0.1+ | — Pending |
 | Auto-launch default OFF | User-controlled; opt-in on first-launch prompt; respects user choice | — Pending |
 
 ---
-*Last updated: 2026-04-28 after Phase 2 verification (Agent Adapters in core)*
+*Last updated: 2026-05-07 after post-Phase-4 stabilization sync*

@@ -1,12 +1,14 @@
 {
   "name": "@vibetime/desktop",
+  "productName": "VibeTime",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
-    "predev": "pnpm --filter @vibetime/hook build && pnpm run rebuild:native",
+    "predev": "pnpm run patch:electron-name && pnpm --filter @vibetime/hook build && pnpm run rebuild:native",
     "dev": "electron-vite dev",
+    "patch:electron-name": "node scripts/patch-electron-app-name.mjs",
     "prebuild": "pnpm --filter @vibetime/hook build && pnpm run rebuild:native",
     "build": "electron-vite build",
     "preview": "electron-vite preview",

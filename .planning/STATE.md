@@ -2,17 +2,17 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-28)
+See: .planning/PROJECT.md (updated 2026-05-07)
 
 **Core value:** Accurately and silently record agent coding time per project on the developer's machine, then surface it in a visual surface good enough to live on a livestream — with zero network calls.
-**Current focus:** Phase 5 — Live, History, Menubar & Lifecycle
+**Current focus:** Phase 5 — Live, History, Menubar & Lifecycle planning, with post-Phase-4 stabilization now landed
 
 ## Current Position
 
 Phase: 5 of 6 (Live, History, Menubar & Lifecycle) — Not started
 Plan: TBD
-Status: Phase 4 complete. 6/6 plans executed. Verification passed (33/33 must-haves).
-Last activity: 2026-04-29 — Phase 4 executed (6 plans, 3 waves, ~30 min). Electron shell + Today view + CLI + Settings complete.
+Status: Phase 4 complete. 6/6 plans executed. Verification passed (33/33 must-haves). Post-phase maintenance shipped for agent uninstall, COSS theme alignment, event-driven refresh, and Codex recovery hardening.
+Last activity: 2026-05-07 — Post-Phase-4 stabilization executed. Electron shell + Today view + CLI + Settings remain complete; runtime reliability improved.
 
 Progress: [██████████] ~67% (16/16 plans completed through Phase 4)
 
@@ -63,15 +63,19 @@ Recent decisions affecting current work:
 - Cursor empty/missing/wrong-type workspace_roots ⇒ project='' (Plan 02-01) — Phase 3 resolveProject promotes to _unknown; preserves the event even when project is unknown
 - Property test uses inline mulberry32 seed=42 (Plan 02-01) — reproducible across runs; no fast-check dep needed for V0 fuzz scale
 - Two-step `as unknown as` cast on adapter turn_id branches (Plan 02-01 deviation) — TS2352 fix when both turn-narrowed and session-narrowed shapes converge after if/else; runtime guard already proves the field is present
-- D-09 revised (Phase 4 research): better-sqlite3 v12.9.0 does NOT expose `updateHook()`. Use application-level event emission: main process wraps DB writes with `writeAndNotify()` → `webContents.send('push', { type: 'db-changed' })`. Same zero-polling goal achieved.
+- D-09 revised (Phase 4 research): better-sqlite3 v12.9.0 does NOT expose `updateHook()`. Initial application-level push remains valid, but the live desktop path now uses hook-side Unix socket notification (`~/.vibetime/notify.sock`) with `fs.watch(~/.vibetime)` fallback rather than polling.
 - Node.js 22.12+ required for electron-vite v5.0.0 (Phase 4 prerequisite). Current 22.7.0 incompatible.
-- coss ui is a copy-paste component registry (not npm). For Phase 4, use basic Tailwind-styled HTML elements.
+- coss ui is a copy-paste component registry (not npm). Current desktop UI has migrated away from the old Tokyo Night custom token set and uses coss-style semantic components / neutral light-dark baseline.
 - Hook package needs `exports` field in package.json for desktop subpath imports (./cli, ./config, ./install)
 - CSS bars for Today view (lighter than ECharts for simple horizontal bars); ECharts reserved for Phase 5 History view
+- Codex install/uninstall must preserve user ownership of `~/.codex/config.toml` `codex_hooks`; Vibetime now marks only self-managed flips and restores the prior value on uninstall.
+- Codex stop recovery no longer relies on freeze heuristics. Open Codex turns are reconciled against local transcript `task_complete` records, and duplicate `turn_start` rows are ignored while a turn is already open.
+- Today view refresh is event-driven and live: DB invalidations push into renderer, open turns tick locally every second, and duration formatting is compact (`8m28s`).
 
 ### Pending Todos
 
-None yet.
+- Phase 5 planning: Live / History / menubar / lifecycle
+- Re-run Phase 4 visual pass after the latest COSS theme cleanup and Connect Agents uninstall flow changes
 
 ### Blockers/Concerns
 
@@ -91,6 +95,6 @@ None yet. (Phase 1 must produce DECISIONS.md before Phase 1 implementation can a
 
 ## Session Continuity
 
-Last session: 2026-04-29 (Phase 4 execution)
-Stopped at: Phase 4 complete. Ready for Phase 5 planning.
+Last session: 2026-05-07 (post-Phase-4 stabilization)
+Stopped at: Runtime capture and Today refresh stabilized. Ready for Phase 5 planning.
 Resume file: .planning/phases/04-desktop-shell-today-cli/04-VERIFICATION.md
