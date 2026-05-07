@@ -31,6 +31,16 @@ const stableTooltip = {
   transitionDuration: 0,
   extraCssText: 'box-shadow: 0 8px 24px rgba(0,0,0,0.10); border-radius: 8px;',
 } as const
+const stableHeatmapEmphasis = {
+  itemStyle: {
+    borderColor: '#171717',
+    borderWidth: 2,
+    shadowBlur: 0,
+    shadowOffsetX: 0,
+    shadowOffsetY: 0,
+    shadowColor: 'transparent',
+  },
+} as const
 
 function formatDuration(seconds: number): string {
   const whole = Math.max(0, Math.floor(seconds))
@@ -111,6 +121,7 @@ function CalendarHeatmap({ summary }: { summary: HistorySummary }) {
   const max = Math.max(1, ...values.map(([, total]) => Number(total)))
   const option = useMemo<echarts.EChartsCoreOption>(
     () => ({
+      stateAnimation: { duration: 0 },
       tooltip: {
         ...stableTooltip,
         formatter: (params: { value: [string, number] }) =>
@@ -153,14 +164,7 @@ function CalendarHeatmap({ summary }: { summary: HistorySummary }) {
           type: 'heatmap',
           coordinateSystem: 'calendar',
           data: values,
-          emphasis: {
-            itemStyle: {
-              borderColor: '#262626',
-              borderWidth: 1,
-              shadowBlur: 8,
-              shadowColor: 'rgba(0,0,0,0.14)',
-            },
-          },
+          emphasis: stableHeatmapEmphasis,
         },
       ],
     }),
@@ -305,6 +309,7 @@ function HourlyActivityHeatmap({ summary }: { summary: HistorySummary }) {
   const max = Math.max(1, ...summary.hourlyMatrix.map((cell) => cell.total))
   const option = useMemo<echarts.EChartsCoreOption>(
     () => ({
+      stateAnimation: { duration: 0 },
       tooltip: {
         ...stableTooltip,
         formatter: (params: { value: [number, number, number] }) => {
@@ -337,14 +342,7 @@ function HourlyActivityHeatmap({ summary }: { summary: HistorySummary }) {
         {
           type: 'heatmap',
           data: summary.hourlyMatrix.map((cell) => [cell.hour, cell.weekday, cell.total]),
-          emphasis: {
-            itemStyle: {
-              borderColor: '#262626',
-              borderWidth: 1,
-              shadowBlur: 8,
-              shadowColor: 'rgba(0,0,0,0.12)',
-            },
-          },
+          emphasis: stableHeatmapEmphasis,
           itemStyle: { borderColor: '#ffffff', borderRadius: 3, borderWidth: 2 },
         },
       ],
