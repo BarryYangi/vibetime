@@ -122,10 +122,7 @@ function TurnStage({
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between gap-4">
             <div className="flex min-w-0 items-center gap-3">
-              <span className="relative flex size-2.5 shrink-0">
-                <span className="absolute inline-flex size-full animate-ping rounded-full bg-success/40" />
-                <span className="relative inline-flex size-2.5 rounded-full bg-success" />
-              </span>
+              <span className="size-2.5 shrink-0 rounded-full bg-success" />
               <div className="min-w-0">
                 <p className="text-[12px] font-medium text-muted-foreground">{turn.agent}</p>
                 <CardTitle
