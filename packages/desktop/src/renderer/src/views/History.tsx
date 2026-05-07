@@ -26,7 +26,8 @@ const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const heatmapHoverEmphasis = {
   itemStyle: {
     borderColor: '#171717',
-    borderWidth: 2,
+    borderWidth: 1,
+    borderRadius: 2,
   },
 } as const
 
@@ -155,6 +156,7 @@ function CalendarHeatmap({ summary }: { summary: HistorySummary }) {
           coordinateSystem: 'calendar',
           data: values,
           emphasis: heatmapHoverEmphasis,
+          itemStyle: { borderRadius: 2 },
         },
       ],
     }),
