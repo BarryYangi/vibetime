@@ -351,150 +351,200 @@ function HourlyActivityHeatmap({ summary }: { summary: HistorySummary }) {
   return <div ref={ref} className="h-[220px] w-full" />
 }
 
-function AgentMixTreemap({ summary }: { summary: HistorySummary }) {
+function TurnLengthBuckets({ summary }: { summary: HistorySummary }) {
   const ref = useRef<HTMLDivElement>(null)
-  const data = useMemo(
-    () =>
-      summary.projectAgentTotals.slice(0, 8).map((project, index) => ({
-        name: project.project,
-        value: project.total,
-        itemStyle: { color: chartPalette[index % chartPalette.length] },
-        children: project.agents.map((agent) => ({
-          name: agent.agent,
-          value: agent.total,
-        })),
-      })),
-    [summary.projectAgentTotals],
-  )
-  const option = useMemo<echarts.EChartsCoreOption>(
-    () => ({
-      tooltip: {
-        borderWidth: 0,
-        confine: true,
-        extraCssText: 'box-shadow: 0 8px 24px rgba(0,0,0,0.10); border-radius: 8px;',
-        formatter: (params: { name: string; value: number; treePathInfo?: Array<{ name: string }> }) => {
-          const path = params.treePathInfo?.map((item) => item.name).filter(Boolean).join(' / ')
-          return `<div style="font-size:12px;color:#737373">${path || params.name}</div><div style="margin-top:2px;font-size:13px;font-weight:600;color:#262626">${formatTooltipDuration(params.value)}</div>`
-        },
-      },
-      series: [
-        {
-          type: 'treemap',
-          data,
-          roam: false,
-          nodeClick: false,
-          breadcrumb: { show: false },
-          left: 0,
-          right: 0,
-          top: 4,
-          bottom: 0,
-          label: { color: '#ffffff', fontSize: 12, overflow: 'truncate' },
-          upperLabel: { show: true, height: 22, color: '#ffffff', fontSize: 12 },
-          itemStyle: { borderColor: '#ffffff', borderRadius: 5, borderWidth: 2, gapWidth: 2 },
-          levels: [
-            { itemStyle: { borderWidth: 2, gapWidth: 2 } },
-            { itemStyle: { borderWidth: 1, gapWidth: 1, opacity: 0.82 } },
-          ],
-        },
-      ],
-    }),
-    [data],
-  )
-  useChart(ref, option)
-  return <div ref={ref} className="h-[260px] w-full" />
-}
-
-function TurnDurationChart({ summary }: { summary: HistorySummary }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const grouped = useMemo(() => {
-    const groups = new Map<string, number[]>()
-    for (const turn of summary.turnDurations) {
-      const values = groups.get(turn.project) ?? []
-      values.push(turn.duration)
-      groups.set(turn.project, values)
-    }
-    return [...groups.entries()]
-      .map(([project, values]) => ({ project, values: values.sort((a, b) => a - b) }))
-      .sort((a, b) => b.values.length - a.values.length || a.project.localeCompare(b.project))
-      .slice(0, 6)
+  const buckets = useMemo(() => {
+    const ranges = [
+      { label: '<5m', min: 0, max: 5 * 60 },
+      { label: '5-15m', min: 5 * 60, max: 15 * 60 },
+      { label: '15-30m', min: 15 * 60, max: 30 * 60 },
+      { label: '30-60m', min: 30 * 60, max: 60 * 60 },
+      { label: '1h+', min: 60 * 60, max: Number.POSITIVE_INFINITY },
+    ]
+    return ranges.map((range) => {
+      const turns = summary.turnDurations.filter(
+        (turn) => turn.duration >= range.min && turn.duration < range.max,
+      )
+      return {
+        label: range.label,
+        count: turns.length,
+        total: turns.reduce((sum, turn) => sum + turn.duration, 0),
+      }
+    })
   }, [summary.turnDurations])
-  const categories = grouped.map((group) => group.project)
-  const boxData = grouped.map((group) => {
-    const q1 = quantile(group.values, 0.25)
-    const median = quantile(group.values, 0.5)
-    const q3 = quantile(group.values, 0.75)
-    const iqr = q3 - q1
-    const lowFence = q1 - 1.5 * iqr
-    const highFence = q3 + 1.5 * iqr
-    const whiskerLow = group.values.find((value) => value >= lowFence) ?? group.values[0] ?? 0
-    const whiskerHigh =
-      [...group.values].reverse().find((value) => value <= highFence) ??
-      group.values[group.values.length - 1] ??
-      0
-    return [whiskerLow, q1, median, q3, whiskerHigh]
-  })
-  const outliers = grouped.flatMap((group, index) => {
-    const box = boxData[index]
-    if (!box) return []
-    const [, q1, , q3] = box
-    const iqr = q3 - q1
-    const lowFence = q1 - 1.5 * iqr
-    const highFence = q3 + 1.5 * iqr
-    return group.values
-      .filter((value) => value < lowFence || value > highFence)
-      .map((value) => [index, value])
-  })
+  const totalTurns = buckets.reduce((sum, bucket) => sum + bucket.count, 0)
   const option = useMemo<echarts.EChartsCoreOption>(
     () => ({
-      color: ['#262626', '#e11d48'],
+      color: ['#2563eb'],
       tooltip: {
-        trigger: 'item',
+        trigger: 'axis',
+        axisPointer: { type: 'shadow', shadowStyle: { color: '#0000000a' } },
         borderWidth: 0,
         confine: true,
         extraCssText: 'box-shadow: 0 8px 24px rgba(0,0,0,0.10); border-radius: 8px;',
-        formatter: (params: { seriesType: string; name: string; value: number[] }) => {
-          if (params.seriesType === 'boxplot') {
-            const [low = 0, q1 = 0, median = 0, q3 = 0, high = 0] = params.value.slice(-5)
-            return `<div style="font-size:12px;color:#737373">${params.name}</div><div style="margin-top:4px;color:#262626">median ${formatTooltipDuration(median)}</div><div style="margin-top:2px;color:#737373">p25 ${formatTooltipDuration(q1)} · p75 ${formatTooltipDuration(q3)}</div><div style="margin-top:2px;color:#737373">range ${formatTooltipDuration(low)}-${formatTooltipDuration(high)}</div>`
-          }
-          return `<div style="font-size:12px;color:#737373">${params.name}</div><div style="margin-top:2px;font-size:13px;font-weight:600;color:#262626">${formatTooltipDuration(params.value[1])}</div>`
+        formatter: (params: Array<{ dataIndex: number; name: string }>) => {
+          const item = params[0]
+          const bucket = item ? buckets[item.dataIndex] : undefined
+          if (!item || !bucket) return ''
+          const pct = totalTurns > 0 ? Math.round((bucket.count / totalTurns) * 100) : 0
+          return `<div style="font-size:12px;color:#737373">${item.name}</div><div style="margin-top:2px;font-size:13px;font-weight:600;color:#262626">${bucket.count} turns · ${pct}%</div><div style="margin-top:2px;color:#737373">${formatTooltipDuration(bucket.total)} total</div>`
         },
       },
-      grid: { left: 42, right: 14, top: 20, bottom: 42 },
+      grid: { left: 34, right: 12, top: 18, bottom: 28 },
       xAxis: {
         type: 'category',
-        data: categories,
+        data: buckets.map((bucket) => bucket.label),
         axisLine: { show: false },
         axisTick: { show: false },
-        axisLabel: { ...axisLabelStyle, interval: 0, width: 82, overflow: 'truncate' },
+        axisLabel: axisLabelStyle,
       },
       yAxis: {
         type: 'value',
+        minInterval: 1,
         axisLine: { show: false },
         axisTick: { show: false },
-        axisLabel: { ...axisLabelStyle, formatter: (value: number) => formatTooltipDuration(value) },
+        axisLabel: axisLabelStyle,
         splitLine: { lineStyle: splitLineStyle },
       },
       series: [
         {
-          name: 'Turn duration',
-          type: 'boxplot',
-          data: boxData,
-          itemStyle: { borderColor: '#262626', color: '#f5f5f5' },
-        },
-        {
-          name: 'Outlier',
-          type: 'scatter',
-          data: outliers,
-          symbolSize: 6,
-          itemStyle: { color: '#e11d48' },
+          type: 'bar',
+          data: buckets.map((bucket, index) => ({
+            value: bucket.count,
+            itemStyle: {
+              color: index === 0 ? '#f59e0b' : index >= 3 ? '#10b981' : '#2563eb',
+              borderRadius: [4, 4, 0, 0],
+            },
+          })),
+          barMaxWidth: 34,
+          label: {
+            show: true,
+            position: 'top',
+            color: '#737373',
+            fontSize: 11,
+            formatter: ({ value }: { value: number }) => String(value),
+          },
         },
       ],
     }),
-    [boxData, categories, outliers],
+    [buckets, totalTurns],
   )
   useChart(ref, option)
-  return <div ref={ref} className="h-[260px] w-full" />
+  return <div ref={ref} className="h-[220px] w-full" />
+}
+
+function AgentContributionBars({ summary }: { summary: HistorySummary }) {
+  const rows = useMemo(
+    () => summary.projectAgentTotals.filter((project) => project.total > 0).slice(0, 6),
+    [summary.projectAgentTotals],
+  )
+  const agentTotals = useMemo(() => {
+    const totals = new Map<string, number>()
+    for (const project of rows) {
+      for (const agent of project.agents) {
+        totals.set(agent.agent, (totals.get(agent.agent) ?? 0) + agent.total)
+      }
+    }
+    return [...totals.entries()].sort((a, b) => b[1] - a[1])
+  }, [rows])
+  const agentColorByName = useMemo(
+    () =>
+      new Map(
+        agentTotals.map(([agent], index) => [
+          agent,
+          chartPalette[index % chartPalette.length],
+        ]),
+      ),
+    [agentTotals],
+  )
+
+  if (rows.length === 0) {
+    return <div className="py-8 text-[13px] text-muted-foreground">No agent activity in this period.</div>
+  }
+
+  return (
+    <div className="flex min-h-[220px] flex-col justify-between gap-4 pt-2">
+      <div className="space-y-4">
+        {rows.map((project) => (
+          <div key={project.project}>
+            <div className="mb-2 flex items-center justify-between gap-4">
+              <p className="truncate text-[13px] font-medium">{project.project}</p>
+              <p className="shrink-0 font-mono text-[12px] text-muted-foreground tabular-nums">
+                {formatDuration(project.total)}
+              </p>
+            </div>
+            <div className="flex h-3 overflow-hidden rounded-sm bg-muted">
+              {project.agents.map((agent, index) => {
+                const pct = project.total > 0 ? (agent.total / project.total) * 100 : 0
+                return (
+                  <div
+                    className="border-r border-background last:border-r-0"
+                    key={agent.agent}
+                    style={{
+                      width: `${pct}%`,
+                      backgroundColor:
+                        agentColorByName.get(agent.agent) ?? chartPalette[index % chartPalette.length],
+                    }}
+                    title={`${agent.agent}: ${formatDuration(agent.total)} (${Math.round(pct)}%)`}
+                  />
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-2 border-t border-border/40 pt-3">
+        {agentTotals.map(([agent, total], index) => (
+          <div className="flex items-center gap-2 text-[12px]" key={agent}>
+            <span
+              aria-hidden
+              className="size-2.5 rounded-sm"
+              style={{ backgroundColor: agentColorByName.get(agent) ?? chartPalette[index % chartPalette.length] }}
+            />
+            <span className="text-muted-foreground">{agent}</span>
+            <span className="font-mono tabular-nums">{formatDuration(total)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function TopProjectSignals({ summary }: { summary: HistorySummary }) {
+  const rows = useMemo(() => {
+    const durationsByProject = new Map<string, number[]>()
+    for (const turn of summary.turnDurations) {
+      const values = durationsByProject.get(turn.project) ?? []
+      values.push(turn.duration)
+      durationsByProject.set(turn.project, values)
+    }
+    return summary.topProjects.slice(0, 5).map((project) => {
+      const values = (durationsByProject.get(project.project) ?? []).sort((a, b) => a - b)
+      const median = quantile(values, 0.5)
+      const focusTurns = values.filter((value) => value >= 25 * 60).length
+      return { ...project, focusTurns, median }
+    })
+  }, [summary.turnDurations, summary.topProjects])
+
+  return (
+    <div className="space-y-2 pt-1">
+      {rows.map((row) => (
+        <div
+          className="grid grid-cols-[minmax(0,1fr)_76px_64px_76px] items-center gap-3 border-b border-border/30 py-2.5 last:border-b-0"
+          key={row.project}
+        >
+          <p className="truncate text-[13px] font-medium">{row.project}</p>
+          <p className="font-mono text-[12px] tabular-nums">{formatDuration(row.total)}</p>
+          <p className="font-mono text-[12px] text-muted-foreground tabular-nums">
+            {row.focusTurns} focus
+          </p>
+          <p className="text-right font-mono text-[12px] text-muted-foreground tabular-nums">
+            med {formatDuration(row.median)}
+          </p>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 function SortIcon({ active, asc }: { active: boolean; asc: boolean }) {
@@ -740,28 +790,38 @@ export default function History() {
       <section className="grid gap-5 xl:grid-cols-2">
         <Card className="overflow-hidden">
           <CardHeader className="pb-1">
-            <CardTitle>Turn duration</CardTitle>
-            <CardDescription>Distribution and outliers by project</CardDescription>
+            <CardTitle>Turn length buckets</CardTitle>
+            <CardDescription>Fragmented turns vs focus blocks</CardDescription>
           </CardHeader>
           <CardContent className="pt-0">
-            <TurnDurationChart summary={summary} />
+            <TurnLengthBuckets summary={summary} />
           </CardContent>
         </Card>
 
         <Card className="overflow-hidden">
           <CardHeader className="pb-1">
-            <CardTitle>Project / agent mix</CardTitle>
-            <CardDescription>Nested time allocation</CardDescription>
+            <CardTitle>Agent contribution</CardTitle>
+            <CardDescription>Agent split inside top projects</CardDescription>
           </CardHeader>
           <CardContent className="pt-0">
-            <AgentMixTreemap summary={summary} />
+            <AgentContributionBars summary={summary} />
           </CardContent>
         </Card>
       </section>
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle>Top Projects</CardTitle>
+          <CardTitle>Project signals</CardTitle>
+          <CardDescription>Total time, focus blocks, and median turn length</CardDescription>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <TopProjectSignals summary={summary} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle>Top projects</CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
           <Table className="text-[13px]">
