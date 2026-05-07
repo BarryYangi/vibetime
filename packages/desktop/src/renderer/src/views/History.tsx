@@ -30,6 +30,13 @@ const heatmapHoverEmphasis = {
     borderRadius: 2,
   },
 } as const
+const hourlyHeatmapHoverEmphasis = {
+  itemStyle: {
+    borderColor: '#171717',
+    borderWidth: 1,
+    borderRadius: 4,
+  },
+} as const
 
 function formatDuration(seconds: number): string {
   const whole = Math.max(0, Math.floor(seconds))
@@ -340,8 +347,8 @@ function HourlyActivityHeatmap({ summary }: { summary: HistorySummary }) {
         {
           type: 'heatmap',
           data: summary.hourlyMatrix.map((cell) => [cell.hour, cell.weekday, cell.total]),
-          emphasis: heatmapHoverEmphasis,
-          itemStyle: { borderColor: '#ffffff', borderRadius: 2, borderWidth: 1 },
+          emphasis: hourlyHeatmapHoverEmphasis,
+          itemStyle: { borderColor: '#ffffff', borderRadius: 4, borderWidth: 1 },
         },
       ],
     }),
