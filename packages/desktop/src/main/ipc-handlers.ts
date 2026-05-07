@@ -1,6 +1,6 @@
 import { readConfig, writeConfig } from '@vibetime/hook/config'
 import { installAgent, uninstallAgent } from '@vibetime/hook/install'
-import { ipcMain } from 'electron'
+import { app, ipcMain } from 'electron'
 import type { AppPreferences, IpcResult, VibetimeConfig } from '../shared/ipc-types.js'
 import {
   queryAgentStatus,
@@ -28,7 +28,7 @@ function mergeConfig(current: VibetimeConfig, patch: Partial<VibetimeConfig>): V
 
 function appPreferencesFromConfig(config: VibetimeConfig): AppPreferences {
   return {
-    openAtLogin: config.app.open_at_login,
+    openAtLogin: app.getLoginItemSettings().openAtLogin,
     autoLaunchPrompted: config.app.auto_launch_prompted,
     lastView: config.app.last_view,
   }
@@ -93,6 +93,11 @@ export function registerIpcHandlers(actions: { showMainWindow?: (route?: string)
 
   ipcMain.handle('getAppPreferences', async (): Promise<IpcResult<AppPreferences>> => {
     try {
+      const current = readConfig()
+      const openAtLogin = app.getLoginItemSettings().openAtLogin
+      if (current.app.open_at_login !== openAtLogin) {
+        writeConfig(mergeConfig(current, { app: { ...current.app, open_at_login: openAtLogin } }))
+      }
       return { ok: true, data: appPreferencesFromConfig(readConfig()) }
     } catch (err) {
       return { ok: false, error: String(err) }
@@ -104,9 +109,13 @@ export function registerIpcHandlers(actions: { showMainWindow?: (route?: string)
     async (_event, preferences: Partial<AppPreferences>): Promise<IpcResult<AppPreferences>> => {
       try {
         const current = readConfig()
+        if (preferences.openAtLogin !== undefined) {
+          app.setLoginItemSettings({ openAtLogin: preferences.openAtLogin })
+        }
+        const openAtLogin = app.getLoginItemSettings().openAtLogin
         const next = mergeConfig(current, {
           app: {
-            open_at_login: preferences.openAtLogin ?? current.app.open_at_login,
+            open_at_login: openAtLogin,
             auto_launch_prompted:
               preferences.autoLaunchPrompted ?? current.app.auto_launch_prompted,
             last_view: preferences.lastView ?? current.app.last_view,

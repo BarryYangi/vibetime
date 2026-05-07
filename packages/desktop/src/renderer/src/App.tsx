@@ -10,9 +10,15 @@ import Settings from './views/Settings'
 import Today from './views/Today'
 
 const isMac = window.api.platform === 'darwin'
+const LAST_VIEW_ROUTES = new Set(['/', '/live', '/history', '/settings'])
 
 function AppRoutes() {
   const location = useLocation()
+
+  useEffect(() => {
+    if (!LAST_VIEW_ROUTES.has(location.pathname)) return
+    void window.api.invoke('updateAppPreferences', { lastView: location.pathname })
+  }, [location.pathname])
 
   if (location.pathname === '/menubar') {
     return (

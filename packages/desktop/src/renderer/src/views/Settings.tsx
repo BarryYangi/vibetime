@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { PageShell } from '@/components/PageShell'
+import type { AppPreferences } from '../../../shared/ipc-types'
 import { configAtom, store } from '../store'
 
 const AGENTS = [
@@ -12,7 +13,7 @@ const AGENTS = [
   { id: 'cursor', name: 'Cursor', description: 'Cursor IDE' },
 ] as const
 
-function ConnectAgents() {
+function ConnectAgents({ onSuccessfulConnection }: { onSuccessfulConnection: () => void }) {
   const [statuses, setStatuses] = useState<Array<{ agent: string; installed: boolean }>>([])
   const [activeAction, setActiveAction] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -32,6 +33,7 @@ function ConnectAgents() {
     const result = await window.api.invoke('installAgent', { agent })
     if (result.ok) {
       await refreshStatuses()
+      onSuccessfulConnection()
     } else {
       setError(result.error)
     }
@@ -114,6 +116,116 @@ function ConnectAgents() {
               </div>
             )
           })}
+          {error && (
+            <div className="rounded-lg bg-destructive/8 px-3 py-2 text-[13px] text-destructive-foreground leading-snug">
+              {error}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </section>
+  )
+}
+
+function AppPreferencesSection({
+  onReadyToPrompt,
+}: {
+  onReadyToPrompt: (preferences: AppPreferences) => void
+}) {
+  const [preferences, setPreferences] = useState<AppPreferences | null>(null)
+  const [showPrompt, setShowPrompt] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const refreshPreferences = useCallback(async () => {
+    const result = await window.api.invoke('getAppPreferences')
+    if (result.ok) {
+      setPreferences(result.data)
+      onReadyToPrompt(result.data)
+      if (!result.data.autoLaunchPrompted) setShowPrompt(true)
+    } else {
+      setError(result.error)
+    }
+  }, [onReadyToPrompt])
+
+  useEffect(() => {
+    refreshPreferences()
+  }, [refreshPreferences])
+
+  const updatePreferences = async (patch: Partial<AppPreferences>) => {
+    setSaving(true)
+    setError(null)
+    const result = await window.api.invoke('updateAppPreferences', patch)
+    if (result.ok) {
+      setPreferences(result.data)
+      if (patch.autoLaunchPrompted !== undefined) setShowPrompt(false)
+    } else {
+      setError(result.error)
+    }
+    setSaving(false)
+  }
+
+  const openAtLogin = preferences?.openAtLogin ?? false
+
+  return (
+    <section className="space-y-3">
+      <h2 className="font-heading font-semibold text-[13px] tracking-[-0.01em] text-foreground">
+        App
+      </h2>
+      <Card>
+        <CardHeader>
+          <CardTitle>Startup</CardTitle>
+          <CardDescription>Control the menubar timer lifecycle.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3 rounded-xl bg-muted/35 p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-[15px] font-medium leading-snug">Open at login</div>
+              <p className="mt-1 text-[13px] text-muted-foreground leading-snug">
+                Keep VibeTime available in the menu bar after sign in.
+              </p>
+            </div>
+            <Button
+              aria-pressed={openAtLogin}
+              disabled={!preferences || saving}
+              loading={saving}
+              onClick={() =>
+                updatePreferences({ openAtLogin: !openAtLogin, autoLaunchPrompted: true })
+              }
+              size="sm"
+              variant={openAtLogin ? 'default' : 'outline'}
+            >
+              {openAtLogin ? 'On' : 'Off'}
+            </Button>
+          </div>
+
+          {showPrompt && preferences && !preferences.autoLaunchPrompted && (
+            <div className="rounded-xl border border-border bg-card p-3">
+              <h3 className="text-[15px] font-medium leading-snug">Open VibeTime at login?</h3>
+              <p className="mt-1 text-[13px] text-muted-foreground leading-snug">
+                Keep the menubar timer available after you sign in.
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button
+                  disabled={saving}
+                  loading={saving}
+                  onClick={() => updatePreferences({ openAtLogin: true, autoLaunchPrompted: true })}
+                  size="sm"
+                >
+                  Open at login
+                </Button>
+                <Button
+                  disabled={saving}
+                  onClick={() => updatePreferences({ autoLaunchPrompted: true })}
+                  size="sm"
+                  variant="ghost"
+                >
+                  Not now
+                </Button>
+              </div>
+            </div>
+          )}
+
           {error && (
             <div className="rounded-lg bg-destructive/8 px-3 py-2 text-[13px] text-destructive-foreground leading-snug">
               {error}
@@ -273,6 +385,17 @@ function About() {
 }
 
 export default function Settings() {
+  const [promptCandidate, setPromptCandidate] = useState<AppPreferences | null>(null)
+  const [promptKey, setPromptKey] = useState(0)
+  const maybePromptOpenAtLogin = useCallback(() => {
+    if (promptCandidate && !promptCandidate.autoLaunchPrompted) {
+      setPromptKey((key) => key + 1)
+    }
+  }, [promptCandidate])
+  const handleReadyToPrompt = useCallback((preferences: AppPreferences) => {
+    setPromptCandidate(preferences)
+  }, [])
+
   return (
     <PageShell prose className="space-y-12 pb-12">
       <header>
@@ -284,7 +407,11 @@ export default function Settings() {
         </p>
       </header>
       <div className="flex flex-col gap-12">
-        <ConnectAgents />
+        <AppPreferencesSection
+          key={promptKey}
+          onReadyToPrompt={handleReadyToPrompt}
+        />
+        <ConnectAgents onSuccessfulConnection={maybePromptOpenAtLogin} />
         <ProjectAliases />
         <About />
       </div>
