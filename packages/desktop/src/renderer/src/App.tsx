@@ -3,6 +3,8 @@ import { HashRouter, Route, Routes } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import Sidebar from './components/Sidebar'
 import { handlePush } from './store'
+import History from './views/History'
+import Live from './views/Live'
 import Settings from './views/Settings'
 import Today from './views/Today'
 
@@ -35,6 +37,8 @@ export default function App() {
             <div className="h-full overflow-auto scroll-smooth">
               <Routes>
                 <Route path="/" element={<Today />} />
+                <Route path="/live" element={<Live />} />
+                <Route path="/history" element={<History />} />
                 <Route path="/settings" element={<Settings />} />
               </Routes>
             </div>

@@ -1,10 +1,12 @@
-import { BarChart3Icon, SettingsIcon } from 'lucide-react'
+import { BarChart3Icon, CalendarDaysIcon, RadioIcon, SettingsIcon } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
 const navItems = [
   { to: '/', label: 'Today', icon: BarChart3Icon },
+  { to: '/live', label: 'Live', icon: RadioIcon },
+  { to: '/history', label: 'History', icon: CalendarDaysIcon },
   { to: '/settings', label: 'Settings', icon: SettingsIcon },
 ]
 
