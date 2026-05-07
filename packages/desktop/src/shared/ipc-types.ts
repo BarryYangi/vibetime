@@ -91,6 +91,7 @@ export interface IpcMethods {
   updateConfig: { args: Partial<VibetimeConfig>; result: undefined }
   getAppPreferences: { args: undefined; result: AppPreferences }
   updateAppPreferences: { args: Partial<AppPreferences>; result: AppPreferences }
+  showMainWindow: { args: { route?: string }; result: undefined }
   installAgent: { args: { agent: string }; result: undefined }
   uninstallAgent: { args: { agent: string }; result: undefined }
 }

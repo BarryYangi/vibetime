@@ -34,7 +34,7 @@ function appPreferencesFromConfig(config: VibetimeConfig): AppPreferences {
   }
 }
 
-export function registerIpcHandlers(): void {
+export function registerIpcHandlers(actions: { showMainWindow?: (route?: string) => void } = {}): void {
   ipcMain.handle(
     'getTodayLiveState',
     async (): Promise<IpcResult<ReturnType<typeof queryTodayLiveState>>> => {
@@ -119,6 +119,15 @@ export function registerIpcHandlers(): void {
       }
     },
   )
+
+  ipcMain.handle('showMainWindow', async (_event, args): Promise<IpcResult<void>> => {
+    try {
+      actions.showMainWindow?.(args?.route)
+      return { ok: true, data: undefined }
+    } catch (err) {
+      return { ok: false, error: String(err) }
+    }
+  })
 
   ipcMain.handle('installAgent', async (_event, { agent }): Promise<IpcResult<void>> => {
     try {

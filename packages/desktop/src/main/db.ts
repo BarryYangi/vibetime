@@ -36,6 +36,11 @@ const DB_FILES = new Set(['data.db', 'data.db-wal', 'data.db-shm'])
 let db: Database.Database | null = null
 let dbWatcher: FSWatcher | null = null
 let notifyTimer: ReturnType<typeof setTimeout> | null = null
+let dbChangeListener: ((event: IpcPushEvent) => void) | null = null
+
+export function setDbChangeListener(listener: ((event: IpcPushEvent) => void) | null): void {
+  dbChangeListener = listener
+}
 
 export function getDb(): Database.Database {
   if (!db) {
@@ -91,8 +96,13 @@ export function stopDbChangeWatcher(): void {
 }
 
 export function notifyRenderer(event: IpcPushEvent = { type: 'db-changed' }): void {
-  const win = BrowserWindow.getAllWindows()[0]
-  if (win && !win.isDestroyed()) {
+  try {
+    dbChangeListener?.(event)
+  } catch {
+    // Renderer push must continue even if the native menu title refresh fails.
+  }
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (win.isDestroyed()) continue
     win.webContents.send('push', event)
   }
 }
