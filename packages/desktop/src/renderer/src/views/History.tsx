@@ -23,6 +23,12 @@ const githubHeatmapPalette = ['#ebedf0', '#9be9a8', '#40c463', '#30a14e', '#216e
 const axisLabelStyle = { color: '#737373', fontSize: 11, fontFamily: 'SN Pro' }
 const splitLineStyle = { color: '#0000000f', width: 1 }
 const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const heatmapHoverEmphasis = {
+  itemStyle: {
+    borderColor: '#171717',
+    borderWidth: 2,
+  },
+} as const
 
 function formatDuration(seconds: number): string {
   const whole = Math.max(0, Math.floor(seconds))
@@ -103,6 +109,7 @@ function CalendarHeatmap({ summary }: { summary: HistorySummary }) {
   const max = Math.max(1, ...values.map(([, total]) => Number(total)))
   const option = useMemo<echarts.EChartsCoreOption>(
     () => ({
+      stateAnimation: { duration: 0 },
       tooltip: {
         borderWidth: 0,
         confine: true,
@@ -147,7 +154,7 @@ function CalendarHeatmap({ summary }: { summary: HistorySummary }) {
           type: 'heatmap',
           coordinateSystem: 'calendar',
           data: values,
-          emphasis: { disabled: true },
+          emphasis: heatmapHoverEmphasis,
         },
       ],
     }),
@@ -296,6 +303,7 @@ function HourlyActivityHeatmap({ summary }: { summary: HistorySummary }) {
   const max = Math.max(1, ...summary.hourlyMatrix.map((cell) => cell.total))
   const option = useMemo<echarts.EChartsCoreOption>(
     () => ({
+      stateAnimation: { duration: 0 },
       tooltip: {
         borderWidth: 0,
         confine: true,
@@ -330,7 +338,7 @@ function HourlyActivityHeatmap({ summary }: { summary: HistorySummary }) {
         {
           type: 'heatmap',
           data: summary.hourlyMatrix.map((cell) => [cell.hour, cell.weekday, cell.total]),
-          emphasis: { disabled: true },
+          emphasis: heatmapHoverEmphasis,
           itemStyle: { borderColor: '#ffffff', borderRadius: 3, borderWidth: 2 },
         },
       ],
