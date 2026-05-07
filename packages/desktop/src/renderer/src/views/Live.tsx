@@ -1,7 +1,9 @@
 import NumberFlow, { NumberFlowGroup } from '@number-flow/react'
+import { ActivityIcon, ClockIcon, FolderIcon, TimerIcon } from 'lucide-react'
 import { motion } from 'motion/react'
 import { useEffect, useMemo, useState } from 'react'
 import { PageShell } from '@/components/PageShell'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import type { ActiveTurn, TodayLiveState } from '../../../shared/ipc-types'
 import { useIpcQuery } from '../hooks/useIpcQuery'
@@ -27,6 +29,13 @@ function formatCompactDuration(seconds: number): string {
   return `${h}h ${m}m`
 }
 
+function formatClock(ts: number): string {
+  return new Date(ts * 1000).toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 function activeSeconds(turn: ActiveTurn, state: TodayLiveState, now: number): number {
   return Math.max(0, now - Math.max(turn.started_at, state.dayStart))
 }
@@ -44,7 +53,7 @@ function LiveTimer({ seconds }: { seconds: number }) {
 
   return (
     <NumberFlowGroup>
-      <div className="flex min-h-[5.5rem] items-baseline overflow-hidden font-mono font-bold tabular-nums text-[4.5rem] leading-none lg:text-[6rem]">
+      <div className="flex min-h-[4.75rem] items-baseline overflow-hidden font-mono font-bold tabular-nums text-[3.75rem] leading-none lg:text-[5rem]">
         {h > 0 && (
           <span className="inline-flex items-baseline">
             <NumberFlow locales="en-US" value={h} />
@@ -66,6 +75,28 @@ function LiveTimer({ seconds }: { seconds: number }) {
   )
 }
 
+function Metric({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof ClockIcon
+  label: string
+  value: string
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-3 rounded-lg border border-border/50 bg-muted/25 px-3 py-2.5">
+      <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+      <div className="min-w-0">
+        <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
+          {label}
+        </p>
+        <p className="mt-0.5 truncate font-mono text-[13px] tabular-nums">{value}</p>
+      </div>
+    </div>
+  )
+}
+
 function TurnStage({
   turn,
   state,
@@ -81,44 +112,48 @@ function TurnStage({
   const total = projectTotal(turn.project, state, now)
 
   return (
-    <motion.section
+    <motion.div
       animate={{ opacity: 1, y: 0 }}
-      className="relative isolate flex min-h-0 flex-1 overflow-hidden rounded-lg border border-border bg-card p-6"
       initial={{ opacity: 0, y: 8 }}
-      transition={{ duration: 0.35, ease: 'easeOut' }}
+      transition={{ duration: 0.2, ease: 'easeOut' }}
     >
-      <motion.div
-        aria-hidden
-        animate={{ opacity: [0.16, 0.34, 0.16], scale: [1, 1.06, 1] }}
-        className="absolute right-6 top-6 size-3 rounded-full bg-success"
-        transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
-      />
-      <motion.div
-        aria-hidden
-        animate={{ x: ['-45%', '145%'] }}
-        className="absolute bottom-0 left-0 h-1 w-1/2 bg-gradient-to-r from-transparent via-primary to-transparent opacity-70"
-        transition={{ duration: 3.6, repeat: Infinity, ease: 'linear' }}
-      />
-      <div className="flex min-w-0 flex-1 flex-col justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-[13px] font-medium text-muted-foreground leading-snug">{turn.agent}</p>
-          <h1
-            className={
-              compact
-                ? 'mt-1 truncate font-heading text-[2.55rem] font-bold leading-none'
-                : 'mt-2 truncate font-heading text-[4.5rem] font-bold leading-none'
-            }
-          >
-            {turn.project}
-          </h1>
-        </div>
-        <LiveTimer seconds={elapsed} />
-        <footer className="flex items-center justify-between gap-4 border-border/60 border-t pt-4 text-[13px] text-muted-foreground">
-          <span>Today in project</span>
-          <span className="font-mono tabular-nums">{formatCompactDuration(total)}</span>
-        </footer>
-      </div>
-    </motion.section>
+      <Card className="relative isolate overflow-hidden">
+        <div aria-hidden className="absolute inset-x-0 top-0 h-1 bg-success/70" />
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="relative flex size-2.5 shrink-0">
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-success/40" />
+                <span className="relative inline-flex size-2.5 rounded-full bg-success" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[12px] font-medium text-muted-foreground">{turn.agent}</p>
+                <CardTitle
+                  className={
+                    compact
+                      ? 'mt-1 truncate font-heading text-2xl'
+                      : 'mt-1 truncate font-heading text-[2rem]'
+                  }
+                >
+                  {turn.project}
+                </CardTitle>
+              </div>
+            </div>
+            <span className="rounded-full border border-success/35 bg-success/10 px-2.5 py-1 text-[11px] font-medium text-success">
+              Live
+            </span>
+          </div>
+        </CardHeader>
+        <CardContent className="flex min-w-0 flex-col gap-5">
+          <LiveTimer seconds={elapsed} />
+          <div className="grid gap-2 md:grid-cols-3">
+            <Metric icon={ClockIcon} label="Started" value={formatClock(turn.started_at)} />
+            <Metric icon={TimerIcon} label="Project today" value={formatCompactDuration(total)} />
+            <Metric icon={FolderIcon} label="Session" value={turn.session_id.slice(0, 12)} />
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
   )
 }
 
@@ -165,28 +200,23 @@ export default function Live() {
   if (turns.length === 0) {
     return (
       <PageShell className="flex h-full min-h-[calc(100vh-2rem)] items-center justify-center" fluid>
-        <motion.div
-          animate={{ opacity: [0.82, 1, 0.82] }}
-          className="relative isolate flex w-full max-w-3xl flex-col items-center overflow-hidden rounded-lg border border-border bg-card px-8 py-16 text-center"
-          transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}
-        >
-          <motion.div
-            aria-hidden
-            animate={{ x: ['-60%', '160%'] }}
-            className="absolute bottom-0 h-px w-2/3 bg-gradient-to-r from-transparent via-primary to-transparent opacity-50"
-            transition={{ duration: 5, repeat: Infinity, ease: 'linear' }}
-          />
-          <h1 className="font-heading text-[3.5rem] font-bold leading-none">No active turn</h1>
-          <p className="mt-4 max-w-md text-[14px] text-muted-foreground leading-relaxed">
-            Start a coding-agent turn and it will appear here.
-          </p>
-        </motion.div>
+        <Card className="w-full max-w-xl text-center">
+          <CardContent className="flex flex-col items-center px-8 py-14">
+            <div className="flex size-11 items-center justify-center rounded-full border border-border bg-muted/40">
+              <ActivityIcon aria-hidden className="size-5 text-muted-foreground" />
+            </div>
+            <h1 className="mt-5 font-heading text-3xl font-semibold leading-none">No active turn</h1>
+            <p className="mt-3 max-w-sm text-[13px] text-muted-foreground leading-relaxed">
+              Start a coding-agent turn and it will appear here.
+            </p>
+          </CardContent>
+        </Card>
       </PageShell>
     )
   }
 
   return (
-    <PageShell className="flex h-full min-h-[calc(100vh-2rem)] flex-col gap-4 p-5" fluid>
+    <PageShell className="flex h-full min-h-[calc(100vh-2rem)] flex-col gap-5 p-5" fluid>
       <div className="flex items-center justify-between">
         <div>
           <p className="text-[13px] text-muted-foreground">Active now</p>
@@ -196,7 +226,7 @@ export default function Live() {
           {turns.length} running
         </span>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-4">
+      <div className="grid min-h-0 flex-1 content-start gap-4">
         {turns.map((turn) => (
           <TurnStage
             key={turn.turn_id}
