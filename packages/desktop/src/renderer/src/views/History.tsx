@@ -147,12 +147,7 @@ function CalendarHeatmap({ summary }: { summary: HistorySummary }) {
           type: 'heatmap',
           coordinateSystem: 'calendar',
           data: values,
-          emphasis: {
-            itemStyle: {
-              borderColor: '#262626',
-              borderWidth: 1,
-            },
-          },
+          emphasis: { disabled: true },
         },
       ],
     }),
@@ -335,12 +330,7 @@ function HourlyActivityHeatmap({ summary }: { summary: HistorySummary }) {
         {
           type: 'heatmap',
           data: summary.hourlyMatrix.map((cell) => [cell.hour, cell.weekday, cell.total]),
-          emphasis: {
-            itemStyle: {
-              borderColor: '#262626',
-              borderWidth: 1,
-            },
-          },
+          emphasis: { disabled: true },
           itemStyle: { borderColor: '#ffffff', borderRadius: 3, borderWidth: 2 },
         },
       ],
