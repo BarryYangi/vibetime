@@ -62,6 +62,10 @@ function weekdayIndex(date: string): number {
   return day === 0 ? 6 : day - 1
 }
 
+function formatHourWindow(weekday: number, hour: number): string {
+  return `${weekdayLabels[weekday] ?? '-'} ${String(hour).padStart(2, '0')}:00`
+}
+
 function quantile(values: number[], q: number): number {
   if (values.length === 0) return 0
   const pos = (values.length - 1) * q
@@ -499,9 +503,25 @@ function SortIcon({ active, asc }: { active: boolean; asc: boolean }) {
   return <Icon aria-hidden className="ml-1 inline size-3" />
 }
 
-function StatTile({ label, value, detail }: { label: string; value: string; detail: string }) {
+function StatTile({
+  label,
+  value,
+  detail,
+  tone = 'neutral',
+}: {
+  label: string
+  value: string
+  detail: string
+  tone?: 'neutral' | 'good' | 'warn'
+}) {
+  const toneClass =
+    tone === 'good'
+      ? 'border-emerald-200/70 bg-emerald-50/70 dark:border-emerald-950 dark:bg-emerald-950/20'
+      : tone === 'warn'
+        ? 'border-amber-200/80 bg-amber-50/70 dark:border-amber-950 dark:bg-amber-950/20'
+        : 'border-border/55 bg-card'
   return (
-    <div className="rounded-lg border border-border/50 bg-card px-4 py-3">
+    <div className={`rounded-lg border px-4 py-3 shadow-sm shadow-black/[0.02] ${toneClass}`}>
       <p className="text-[11px] font-medium text-muted-foreground leading-snug">{label}</p>
       <p className="mt-2 font-mono text-[22px] font-semibold leading-none tabular-nums">{value}</p>
       <p className="mt-2 truncate text-[12px] text-muted-foreground leading-snug">{detail}</p>
@@ -564,14 +584,37 @@ export default function History() {
       },
       { date: '', total: 0 },
     )
-    const turnCount = summary.topProjects.reduce((sum, project) => sum + project.turns, 0)
+    const turnDurations = summary.turnDurations
+      .map((turn) => turn.duration)
+      .filter((duration) => duration > 0)
+      .sort((a, b) => a - b)
+    const turnCount = turnDurations.length
+    const medianTurn = quantile(turnDurations, 0.5)
+    const p75Turn = quantile(turnDurations, 0.75)
+    const focusTurns = turnDurations.filter((duration) => duration >= 25 * 60).length
+    const shortTurnRate =
+      turnCount > 0
+        ? turnDurations.filter((duration) => duration < 5 * 60).length / turnCount
+        : 0
+    const peakHour = summary.hourlyMatrix.reduce(
+      (best, cell) => (cell.total > best.total ? cell : best),
+      { weekday: 0, hour: 0, total: 0 },
+    )
     const topProject = summary.topProjects[0]
+    const topProjectShare =
+      topProject && periodTotal > 0 ? topProject.total / periodTotal : 0
     return {
       activeDays,
       averageActiveDay: activeDays > 0 ? periodTotal / activeDays : 0,
       bestDay,
+      focusTurns,
+      medianTurn,
+      p75Turn,
+      peakHour,
       periodTotal,
+      shortTurnRate,
       topProject,
+      topProjectShare,
       turnCount,
     }
   }, [summary])
@@ -627,21 +670,27 @@ export default function History() {
             detail={formatDelta(summary.periodCompare.deltaRatio)}
             label={`${summary.periodDays}-day total`}
             value={formatDuration(stats.periodTotal)}
+            tone={
+              summary.periodCompare.deltaRatio === null || summary.periodCompare.deltaRatio >= 0
+                ? 'good'
+                : 'warn'
+            }
           />
           <StatTile
-            detail={`${stats.activeDays} active days`}
-            label="Avg active day"
-            value={formatDuration(stats.averageActiveDay)}
+            detail={`${stats.turnCount} turns · p75 ${formatDuration(stats.p75Turn)}`}
+            label="Median turn"
+            value={formatDuration(stats.medianTurn)}
           />
           <StatTile
-            detail={stats.bestDay.date || 'No activity'}
-            label="Best day"
-            value={formatDuration(stats.bestDay.total)}
+            detail={`${Math.round(stats.shortTurnRate * 100)}% under 5m`}
+            label="Focus blocks"
+            value={`${stats.focusTurns}`}
+            tone={stats.shortTurnRate > 0.35 ? 'warn' : 'neutral'}
           />
           <StatTile
-            detail={stats.topProject?.project ?? 'No project'}
-            label="Top project"
-            value={stats.topProject ? formatDuration(stats.topProject.total) : '0s'}
+            detail={`${formatDuration(stats.peakHour.total)} · ${stats.topProject?.project ?? 'No project'} ${Math.round(stats.topProjectShare * 100)}%`}
+            label="Peak rhythm"
+            value={formatHourWindow(stats.peakHour.weekday, stats.peakHour.hour)}
           />
         </section>
       )}
