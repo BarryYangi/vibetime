@@ -341,7 +341,7 @@ function HourlyActivityHeatmap({ summary }: { summary: HistorySummary }) {
           type: 'heatmap',
           data: summary.hourlyMatrix.map((cell) => [cell.hour, cell.weekday, cell.total]),
           emphasis: heatmapHoverEmphasis,
-          itemStyle: { borderColor: '#ffffff', borderRadius: 3, borderWidth: 2 },
+          itemStyle: { borderColor: '#ffffff', borderRadius: 2, borderWidth: 1 },
         },
       ],
     }),
