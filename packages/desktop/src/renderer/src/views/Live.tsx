@@ -120,10 +120,7 @@ function TurnStage({
       <Card className="relative isolate overflow-hidden">
         <div aria-hidden className="absolute inset-x-0 top-0 h-1 bg-success/70" />
         <CardHeader className="pb-2">
-          <div className="grid grid-cols-[10px_minmax(0,1fr)_auto] items-start gap-3">
-            <span className="flex h-3 items-center">
-              <span className="size-2.5 rounded-full bg-success" />
-            </span>
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
             <div className="min-w-0">
               <p className="text-[12px] font-medium leading-none text-muted-foreground">{turn.agent}</p>
                 <CardTitle
