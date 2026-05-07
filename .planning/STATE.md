@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: verifying
-stopped_at: Phase 5 UI-SPEC approved
-last_updated: "2026-05-07T04:54:55.758Z"
+stopped_at: Phase 5 research complete
+last_updated: "2026-05-07T05:01:11.246Z"
 last_activity: 2026-05-07 — Post-Phase-4 stabilization executed. Electron shell + Today view + CLI + Settings remain complete; runtime reliability improved.
 progress:
   total_phases: 6
@@ -113,6 +113,6 @@ None yet. (Phase 1 must produce DECISIONS.md before Phase 1 implementation can a
 
 ## Session Continuity
 
-Last session: 2026-05-07T04:54:55.753Z
-Stopped at: Phase 5 UI-SPEC approved
-Resume file: .planning/phases/05-live-history-menubar-lifecycle/05-UI-SPEC.md
+Last session: 2026-05-07T05:01:11.238Z
+Stopped at: Phase 5 research complete
+Resume file: .planning/phases/05-live-history-menubar-lifecycle/05-RESEARCH.md
