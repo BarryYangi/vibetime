@@ -2,13 +2,22 @@ import { existsSync, type FSWatcher, mkdirSync, readFileSync, watch } from 'node
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { NormalizedEvent } from '@vibetime/core'
-import { DDL_EVENTS, DDL_INDICES, DDL_OPEN_TURNS, findCodexTurnCompletion } from '@vibetime/core'
+import {
+  allocateDurationByLocalDay,
+  DDL_EVENTS,
+  DDL_INDICES,
+  DDL_OPEN_TURNS,
+  durationWithinWindow,
+  findCodexTurnCompletion,
+} from '@vibetime/core'
 import Database from 'better-sqlite3'
 import { BrowserWindow } from 'electron'
 import type {
   ActiveTurn,
   AgentStatus,
+  HistorySummary,
   IpcPushEvent,
+  MenubarState,
   TodayLiveState,
   TodaySummary,
 } from '../shared/ipc-types.js'
@@ -17,6 +26,8 @@ type DbEvent = Omit<NormalizedEvent, 'duration_sec' | 'meta'> & {
   duration_sec: number | null
   meta: Record<string, unknown> | string | null
 }
+
+type PeriodDays = 7 | 30 | 90 | 365
 
 const DB_PATH = join(homedir(), '.vibetime', 'data.db')
 const DB_DIR = join(homedir(), '.vibetime')
@@ -164,17 +175,24 @@ function isUnknownDurationEnd(ev: DbEvent): boolean {
   return meta?.abandoned === true || meta?.reason === 'stale_sweep'
 }
 
-function completedDuration(ev: DbEvent, turnStarts: Map<string, { ts: number }>): number | null {
-  if (typeof ev.duration_sec === 'number') {
-    return Math.max(0, ev.duration_sec)
-  }
-
+function completedDuration(
+  ev: DbEvent,
+  turnStarts: Map<string, { ts: number }>,
+  windowStart: number,
+  windowEnd: number,
+): number | null {
   if (isUnknownDurationEnd(ev)) {
     return null
   }
 
   const start = ev.turn_id ? turnStarts.get(ev.turn_id) : undefined
-  return start && ev.turn_id ? Math.max(0, ev.ts - start.ts) : null
+  return durationWithinWindow({
+    endTs: ev.ts,
+    durationSec: ev.duration_sec,
+    startTs: start?.ts,
+    windowStart,
+    windowEnd,
+  })
 }
 
 function buildTodaySummary(db: Database.Database, now: Date): TodaySummary {
@@ -203,7 +221,7 @@ function buildTodaySummary(db: Database.Database, now: Date): TodaySummary {
   for (const ev of events) {
     if (ev.event_type !== 'turn_end') continue
 
-    const duration = completedDuration(ev, turnStarts)
+    const duration = completedDuration(ev, turnStarts, from, to)
     if (duration === null) continue
 
     if (ev.turn_id) {
@@ -239,6 +257,196 @@ function buildTodaySummary(db: Database.Database, now: Date): TodaySummary {
     turnCount: completedTurns.size,
     activeProjectCount: projectMap.size,
   }
+}
+
+function startOfLocalDay(date: Date): number {
+  return Math.floor(new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime() / 1000)
+}
+
+function toDateKey(ts: number): string {
+  return new Date(ts * 1000).toLocaleDateString('en-CA')
+}
+
+function denseDateKeys(days: number, endDate: Date): string[] {
+  const endDay = startOfLocalDay(endDate)
+  const firstDay = endDay - (days - 1) * 86400
+  return Array.from({ length: days }, (_, index) => toDateKey(firstDay + index * 86400))
+}
+
+function queryEventsBefore(db: Database.Database, to: number): DbEvent[] {
+  return db.prepare('SELECT * FROM events WHERE ts < ? ORDER BY ts ASC').all(to) as DbEvent[]
+}
+
+function buildTurnStarts(events: DbEvent[]): Map<string, { ts: number }> {
+  const turnStarts = new Map<string, { ts: number }>()
+  for (const ev of events) {
+    if (ev.event_type === 'turn_start' && ev.turn_id) {
+      const existingStart = turnStarts.get(ev.turn_id)
+      if (!existingStart || ev.ts < existingStart.ts) {
+        turnStarts.set(ev.turn_id, { ts: ev.ts })
+      }
+    }
+  }
+  return turnStarts
+}
+
+function completedTurnEventsInWindow(events: DbEvent[], from: number, to: number): DbEvent[] {
+  return events.filter((ev) => ev.event_type === 'turn_end' && ev.ts >= from && ev.ts < to)
+}
+
+export function buildHistorySummaryFromEvents(
+  events: DbEvent[],
+  options: { periodDays: PeriodDays; now?: Date },
+): HistorySummary {
+  const now = options.now ?? new Date()
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+  const rangeEnd = startOfLocalDay(tomorrow)
+  const calendarStart = rangeEnd - 365 * 86400
+  const periodStart = rangeEnd - options.periodDays * 86400
+  const turnStarts = buildTurnStarts(events)
+  const calendarTotals = new Map(denseDateKeys(365, now).map((date) => [date, 0]))
+  const periodProjectTotals = new Map<string, number>()
+  const trendProjectDayTotals = new Map<string, Map<string, number>>()
+  const topProjectRows = new Map<
+    string,
+    { project: string; total: number; turns: Set<string>; lastActive: number | null }
+  >()
+
+  for (const ev of completedTurnEventsInWindow(events, calendarStart, rangeEnd)) {
+    if (isUnknownDurationEnd(ev)) continue
+
+    const allocations = allocateDurationByLocalDay({
+      endTs: ev.ts,
+      durationSec: ev.duration_sec,
+      startTs: ev.turn_id ? turnStarts.get(ev.turn_id)?.ts : undefined,
+      rangeStart: calendarStart,
+      rangeEnd,
+    })
+
+    for (const allocation of allocations) {
+      calendarTotals.set(
+        allocation.day,
+        (calendarTotals.get(allocation.day) ?? 0) + allocation.duration,
+      )
+    }
+
+    const periodDuration = completedDuration(ev, turnStarts, periodStart, rangeEnd)
+    if (periodDuration === null || periodDuration <= 0) continue
+
+    periodProjectTotals.set(ev.project, (periodProjectTotals.get(ev.project) ?? 0) + periodDuration)
+
+    let row = topProjectRows.get(ev.project)
+    if (!row) {
+      row = { project: ev.project, total: 0, turns: new Set(), lastActive: null }
+      topProjectRows.set(ev.project, row)
+    }
+    row.total += periodDuration
+    if (ev.turn_id) row.turns.add(ev.turn_id)
+    row.lastActive = Math.max(row.lastActive ?? 0, ev.ts)
+  }
+
+  const topProjects = [...periodProjectTotals.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 5)
+    .map(([project]) => project)
+  const topProjectSet = new Set(topProjects)
+  const hasOthers = [...periodProjectTotals.keys()].some((project) => !topProjectSet.has(project))
+  const trendProjects = hasOthers ? [...topProjects, 'Others'] : topProjects
+
+  for (const date of denseDateKeys(options.periodDays, now)) {
+    trendProjectDayTotals.set(date, new Map(trendProjects.map((project) => [project, 0])))
+  }
+
+  for (const ev of completedTurnEventsInWindow(events, periodStart, rangeEnd)) {
+    if (isUnknownDurationEnd(ev)) continue
+
+    const allocations = allocateDurationByLocalDay({
+      endTs: ev.ts,
+      durationSec: ev.duration_sec,
+      startTs: ev.turn_id ? turnStarts.get(ev.turn_id)?.ts : undefined,
+      rangeStart: periodStart,
+      rangeEnd,
+    })
+    const bucket = topProjectSet.has(ev.project) ? ev.project : 'Others'
+    if (!trendProjects.includes(bucket)) continue
+
+    for (const allocation of allocations) {
+      const day = trendProjectDayTotals.get(allocation.day)
+      if (!day) continue
+      day.set(bucket, (day.get(bucket) ?? 0) + allocation.duration)
+    }
+  }
+
+  return {
+    periodDays: options.periodDays,
+    calendar: [...calendarTotals.entries()].map(([date, total]) => ({ date, total })),
+    trendProjects,
+    trends: [...trendProjectDayTotals.entries()].map(([date, projects]) => ({
+      date,
+      projects: Object.fromEntries(projects),
+    })),
+    topProjects: [...topProjectRows.values()]
+      .sort((a, b) => b.total - a.total || a.project.localeCompare(b.project))
+      .map((row) => ({
+        project: row.project,
+        total: row.total,
+        turns: row.turns.size,
+        lastActive: row.lastActive,
+      })),
+  }
+}
+
+export function queryHistorySummary(options: { periodDays: PeriodDays }): HistorySummary {
+  const db = getDb()
+  reconcileCodexCompletedTurns(db)
+  discardInactiveOpenTurns(db)
+
+  return db.transaction(() => {
+    const now = new Date()
+    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+    const events = queryEventsBefore(db, startOfLocalDay(tomorrow))
+    return buildHistorySummaryFromEvents(events, { periodDays: options.periodDays, now })
+  })()
+}
+
+export function queryMenubarState(): MenubarState {
+  const liveState = queryTodayLiveState()
+  const activeTotals = new Map<string, number>()
+  for (const turn of liveState.activeTurns) {
+    const active = Math.max(0, liveState.serverNow - Math.max(turn.started_at, liveState.dayStart))
+    activeTotals.set(turn.project, (activeTotals.get(turn.project) ?? 0) + active)
+  }
+
+  const projects = liveState.completed.projects
+    .map((project) => ({
+      name: project.name,
+      total: project.total + (activeTotals.get(project.name) ?? 0),
+    }))
+    .concat(
+      [...activeTotals.entries()]
+        .filter(([name]) => !liveState.completed.projects.some((project) => project.name === name))
+        .map(([name, total]) => ({ name, total })),
+    )
+    .filter((project) => project.total > 0)
+    .sort((a, b) => b.total - a.total || a.name.localeCompare(b.name))
+    .slice(0, 3)
+
+  return {
+    todayTotal: liveState.completed.grandTotal + [...activeTotals.values()].reduce((a, b) => a + b, 0),
+    active: liveState.activeTurns.length > 0,
+    projects,
+    activeTurns: liveState.activeTurns,
+  }
+}
+
+export function formatMenubarTitle(state: MenubarState): string {
+  const total = Math.max(0, Math.floor(state.todayTotal))
+  if (total <= 0) return '●'
+  const minutes = Math.floor(total / 60)
+  if (minutes < 60) return `● ${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  const remainingMinutes = minutes % 60
+  return `● ${hours}h ${remainingMinutes}m`
 }
 
 function queryRevision(db: Database.Database): number {

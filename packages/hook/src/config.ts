@@ -14,12 +14,22 @@ export interface VibetimeConfig {
   display: {
     timezone: string
   }
+  app: {
+    open_at_login: boolean
+    auto_launch_prompted: boolean
+    last_view: string
+  }
 }
 
 const DEFAULT_CONFIG: VibetimeConfig = {
   projects: {},
   display: {
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  },
+  app: {
+    open_at_login: false,
+    auto_launch_prompted: false,
+    last_view: '/',
   },
 }
 
@@ -42,6 +52,12 @@ export function readConfig(): VibetimeConfig {
       projects: config.projects ?? {},
       display: {
         timezone: config.display?.timezone ?? DEFAULT_CONFIG.display.timezone,
+      },
+      app: {
+        open_at_login: config.app?.open_at_login ?? DEFAULT_CONFIG.app.open_at_login,
+        auto_launch_prompted:
+          config.app?.auto_launch_prompted ?? DEFAULT_CONFIG.app.auto_launch_prompted,
+        last_view: config.app?.last_view ?? DEFAULT_CONFIG.app.last_view,
       },
     }
   } catch {
@@ -71,6 +87,11 @@ function serializeToml(config: VibetimeConfig): string {
   lines.push('')
   lines.push('[display]')
   lines.push(`timezone = "${config.display.timezone}"`)
+  lines.push('')
+  lines.push('[app]')
+  lines.push(`open_at_login = ${config.app.open_at_login}`)
+  lines.push(`auto_launch_prompted = ${config.app.auto_launch_prompted}`)
+  lines.push(`last_view = "${config.app.last_view}"`)
   return lines.join('\n') + '\n'
 }
 
@@ -78,9 +99,9 @@ function serializeToml(config: VibetimeConfig): string {
  * Simple TOML parser for V0 config structure.
  * Only handles flat keys and [section] tables.
  */
-function parseToml(raw: string): Record<string, unknown> {
-  const result: Record<string, unknown> = {}
-  let currentSection: Record<string, string> = {}
+function parseToml(raw: string): Partial<VibetimeConfig> {
+  const result: Record<string, Record<string, string | boolean>> = {}
+  let currentSection: Record<string, string | boolean> = {}
   let currentSectionName = ''
 
   for (const line of raw.split('\n')) {
@@ -99,7 +120,9 @@ function parseToml(raw: string): Record<string, unknown> {
 
     const kvMatch = trimmed.match(/^(\w+)\s*=\s*"?(.+?)"?$/)
     if (kvMatch && currentSectionName) {
-      currentSection[kvMatch[1]] = kvMatch[2].replace(/^"|"$/g, '')
+      const rawValue = kvMatch[2].replace(/^"|"$/g, '')
+      currentSection[kvMatch[1]] =
+        rawValue === 'true' ? true : rawValue === 'false' ? false : rawValue
     }
   }
 
@@ -107,5 +130,5 @@ function parseToml(raw: string): Record<string, unknown> {
     result[currentSectionName] = currentSection
   }
 
-  return result
+  return result as Partial<VibetimeConfig>
 }

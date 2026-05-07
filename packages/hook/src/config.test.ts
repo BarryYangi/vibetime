@@ -38,11 +38,15 @@ describe('readConfig — happy paths', () => {
     const cfg: VibetimeConfig = {
       projects: { myproject: '/path/to/myproject' },
       display: { timezone: 'Asia/Tokyo' },
+      app: { open_at_login: true, auto_launch_prompted: true, last_view: '/history' },
     }
     writeConfig(cfg)
     const result = readConfig()
     expect(result.projects.myproject).toBe('/path/to/myproject')
     expect(result.display.timezone).toBe('Asia/Tokyo')
+    expect(result.app.open_at_login).toBe(true)
+    expect(result.app.auto_launch_prompted).toBe(true)
+    expect(result.app.last_view).toBe('/history')
   })
 
   it('is idempotent (multiple reads return same result)', () => {
@@ -54,7 +58,11 @@ describe('readConfig — happy paths', () => {
 
 describe('readConfig — adversarial inputs', () => {
   it('returns defaults on malformed TOML', () => {
-    writeConfig({ projects: {}, display: { timezone: 'UTC' } })
+    writeConfig({
+      projects: {},
+      display: { timezone: 'UTC' },
+      app: { open_at_login: false, auto_launch_prompted: false, last_view: '/' },
+    })
     // Overwrite with garbage
     writeFileSync(`${tempHome}/.vibetime/config.toml`, '[[[[invalid', 'utf-8')
     const config = readConfig()
@@ -69,7 +77,11 @@ describe('readConfig — adversarial inputs', () => {
 
 describe('writeConfig — happy paths', () => {
   it('creates config.toml file', () => {
-    writeConfig({ projects: {}, display: { timezone: 'UTC' } })
+    writeConfig({
+      projects: {},
+      display: { timezone: 'UTC' },
+      app: { open_at_login: false, auto_launch_prompted: false, last_view: '/' },
+    })
     expect(existsSync(`${tempHome}/.vibetime/config.toml`)).toBe(true)
   })
 
@@ -77,12 +89,17 @@ describe('writeConfig — happy paths', () => {
     const cfg: VibetimeConfig = {
       projects: { foo: '/bar' },
       display: { timezone: 'America/New_York' },
+      app: { open_at_login: true, auto_launch_prompted: false, last_view: '/live' },
     }
     writeConfig(cfg)
     const raw = readFileSync(`${tempHome}/.vibetime/config.toml`, 'utf-8')
     expect(raw).toContain('[projects]')
     expect(raw).toContain('[display]')
+    expect(raw).toContain('[app]')
     expect(raw).toContain('foo = "/bar"')
     expect(raw).toContain('timezone = "America/New_York"')
+    expect(raw).toContain('open_at_login = true')
+    expect(raw).toContain('auto_launch_prompted = false')
+    expect(raw).toContain('last_view = "/live"')
   })
 })

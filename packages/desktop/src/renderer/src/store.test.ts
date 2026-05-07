@@ -61,6 +61,9 @@ describe('handlePush', () => {
     const invoke = vi.fn(async (channel: string) => {
       calls.push(channel)
       if (channel === 'getTodayLiveState') return { ok: true, data: makeLiveState(1, 30) }
+      if (channel === 'getMenubarState') {
+        return { ok: true, data: { todayTotal: 30, active: false, projects: [], activeTurns: [] } }
+      }
       return { ok: false, error: 'unexpected channel' }
     })
     vi.stubGlobal('window', { api: { invoke } })
@@ -68,7 +71,7 @@ describe('handlePush', () => {
     handlePush({ type: 'db-changed' })
     await flushPromises()
 
-    expect(calls).toEqual(['getTodayLiveState'])
+    expect(calls).toEqual(['getTodayLiveState', 'getMenubarState'])
     expect(store.get(todayLiveStateAtom)?.completed.grandTotal).toBe(30)
   })
 
@@ -86,13 +89,23 @@ describe('handlePush', () => {
 
     expect(requests.map((request) => request.channel)).toEqual([
       'getTodayLiveState',
+      'getMenubarState',
       'getTodayLiveState',
+      'getMenubarState',
     ])
 
-    requests[1].deferred.resolve({ ok: true, data: makeLiveState(2, 42) })
+    requests[3].deferred.resolve({
+      ok: true,
+      data: { todayTotal: 42, active: false, projects: [], activeTurns: [] },
+    })
+    requests[2].deferred.resolve({ ok: true, data: makeLiveState(2, 42) })
     await flushPromises()
 
     requests[0].deferred.resolve({ ok: true, data: makeLiveState(1, 1) })
+    requests[1].deferred.resolve({
+      ok: true,
+      data: { todayTotal: 1, active: false, projects: [], activeTurns: [] },
+    })
     await flushPromises()
 
     expect(store.get(todayLiveStateAtom)?.completed.grandTotal).toBe(42)

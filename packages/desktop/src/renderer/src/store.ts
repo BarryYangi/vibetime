@@ -1,12 +1,25 @@
 import { atom, createStore } from 'jotai'
-import type { IpcPushEvent, TodayLiveState, VibetimeConfig } from '../../shared/ipc-types'
+import type {
+  AppPreferences,
+  HistorySummary,
+  IpcPushEvent,
+  MenubarState,
+  TodayLiveState,
+  VibetimeConfig,
+} from '../../shared/ipc-types'
 
 export const store = createStore()
 
 export const todayLiveStateAtom = atom<TodayLiveState | null>(null)
 export const configAtom = atom<VibetimeConfig | null>(null)
+export const historySummaryAtom = atom<HistorySummary | null>(null)
+export const menubarStateAtom = atom<MenubarState | null>(null)
+export const appPreferencesAtom = atom<AppPreferences | null>(null)
 
 let refreshSeq = 0
+let historyRefreshSeq = 0
+let menubarRefreshSeq = 0
+let appPreferencesRefreshSeq = 0
 
 function activeTurnsEqual(
   a: TodayLiveState['activeTurns'],
@@ -56,8 +69,50 @@ export async function refreshTodayLiveState(): Promise<void> {
   }
 }
 
+export async function refreshHistorySummary(
+  periodDays: HistorySummary['periodDays'],
+): Promise<void> {
+  const seq = ++historyRefreshSeq
+  try {
+    const result = await window.api.invoke('getHistorySummary', { periodDays })
+    if (seq !== historyRefreshSeq) return
+    if (result.ok) {
+      store.set(historySummaryAtom, result.data)
+    }
+  } catch {
+    // Page-level queries surface initial load errors; push refresh is best-effort.
+  }
+}
+
+export async function refreshMenubarState(): Promise<void> {
+  const seq = ++menubarRefreshSeq
+  try {
+    const result = await window.api.invoke('getMenubarState')
+    if (seq !== menubarRefreshSeq) return
+    if (result.ok) {
+      store.set(menubarStateAtom, result.data)
+    }
+  } catch {
+    // Menubar refresh is best-effort.
+  }
+}
+
+export async function refreshAppPreferences(): Promise<void> {
+  const seq = ++appPreferencesRefreshSeq
+  try {
+    const result = await window.api.invoke('getAppPreferences')
+    if (seq !== appPreferencesRefreshSeq) return
+    if (result.ok) {
+      store.set(appPreferencesAtom, result.data)
+    }
+  } catch {
+    // Settings view surfaces explicit errors.
+  }
+}
+
 export function handlePush(event: IpcPushEvent): void {
   if (event.type === 'db-changed') {
     void refreshTodayLiveState()
+    void refreshMenubarState()
   }
 }
