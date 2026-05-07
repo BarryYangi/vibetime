@@ -1,14 +1,14 @@
 // Tests for crash recovery module. Covers REC-01, REC-02.
 // Uses bun:test — bun built-in test runner (CONTEXT.md D-TEST-HOOK).
 
-import { describe, expect, it, beforeEach, afterEach } from 'bun:test'
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { openDatabase, closeDatabase, persistEvent, queryOpenTurns } from './store.js'
-import { recoverOrphans, sweepStale } from './recovery.js'
-import { STALE_TURN_MAX_AGE } from './constants.js'
 import type { NormalizedEvent } from '@vibetime/core'
+import { STALE_TURN_MAX_AGE } from './constants.js'
+import { recoverOrphans, sweepStale } from './recovery.js'
+import { closeDatabase, openDatabase, persistEvent, queryOpenTurns } from './store.js'
 
 let tmpDir: string
 let dbPath: string
@@ -42,7 +42,10 @@ describe('recoverOrphans — orphan sweep on session_start (REC-01)', () => {
     const db = openDatabase(dbPath)
     try {
       // Simulate a crashed turn — insert directly into open_turns via turn_start
-      persistEvent(db, makeEvent({ event_type: 'turn_start', turn_id: 'orphan-1', session_id: 'sess-crashed' }))
+      persistEvent(
+        db,
+        makeEvent({ event_type: 'turn_start', turn_id: 'orphan-1', session_id: 'sess-crashed' }),
+      )
 
       // Verify open_turns has 1 entry
       expect(queryOpenTurns(db, 'sess-crashed')).toHaveLength(1)
@@ -54,7 +57,9 @@ describe('recoverOrphans — orphan sweep on session_start (REC-01)', () => {
       expect(queryOpenTurns(db, 'sess-crashed')).toHaveLength(0)
 
       // Should have created a turn_end event with meta.abandoned=true
-      const rows = db.query("SELECT * FROM events WHERE event_type = 'turn_end' AND turn_id = 'orphan-1'").all() as Array<Record<string, unknown>>
+      const rows = db
+        .query("SELECT * FROM events WHERE event_type = 'turn_end' AND turn_id = 'orphan-1'")
+        .all() as Array<Record<string, unknown>>
       expect(rows).toHaveLength(1)
       const meta = JSON.parse(rows[0].meta as string)
       expect(meta.abandoned).toBe(true)
@@ -66,11 +71,16 @@ describe('recoverOrphans — orphan sweep on session_start (REC-01)', () => {
   it('sets duration_sec=null for abandoned turns', () => {
     const db = openDatabase(dbPath)
     try {
-      persistEvent(db, makeEvent({ event_type: 'turn_start', turn_id: 'orphan-1', session_id: 'sess-1' }))
+      persistEvent(
+        db,
+        makeEvent({ event_type: 'turn_start', turn_id: 'orphan-1', session_id: 'sess-1' }),
+      )
 
       recoverOrphans(db, 'sess-1')
 
-      const rows = db.query("SELECT duration_sec FROM events WHERE event_type = 'turn_end'").all() as Array<{ duration_sec: number | null }>
+      const rows = db
+        .query("SELECT duration_sec FROM events WHERE event_type = 'turn_end'")
+        .all() as Array<{ duration_sec: number | null }>
       expect(rows).toHaveLength(1)
       expect(rows[0].duration_sec).toBeNull()
     } finally {
@@ -81,9 +91,20 @@ describe('recoverOrphans — orphan sweep on session_start (REC-01)', () => {
   it('recovers multiple orphans in the same session', () => {
     const db = openDatabase(dbPath)
     try {
-      persistEvent(db, makeEvent({ event_type: 'turn_start', turn_id: 'o1', session_id: 's1' }))
-      persistEvent(db, makeEvent({ event_type: 'turn_start', turn_id: 'o2', session_id: 's1' }))
-      persistEvent(db, makeEvent({ event_type: 'turn_start', turn_id: 'o3', session_id: 's1' }))
+      const insertOpenTurn = db.query(`
+        INSERT INTO open_turns (turn_id, agent, project, session_id, started_at, timezone, meta)
+        VALUES ($turn_id, $agent, $project, $session_id, $started_at, $timezone, NULL)
+      `)
+      for (const turnId of ['o1', 'o2', 'o3']) {
+        insertOpenTurn.run({
+          $turn_id: turnId,
+          $agent: 'claude-code',
+          $project: 'test-project',
+          $session_id: 's1',
+          $started_at: 1000,
+          $timezone: 'Asia/Tokyo',
+        })
+      }
 
       expect(queryOpenTurns(db, 's1')).toHaveLength(3)
 
@@ -155,7 +176,9 @@ describe('sweepStale — stale sweep at CLI/desktop launch (REC-02)', () => {
 
       expect(queryOpenTurns(db)).toHaveLength(0)
 
-      const rows = db.query("SELECT * FROM events WHERE event_type = 'turn_end' AND turn_id = 'stale-1'").all() as Array<Record<string, unknown>>
+      const rows = db
+        .query("SELECT * FROM events WHERE event_type = 'turn_end' AND turn_id = 'stale-1'")
+        .all() as Array<Record<string, unknown>>
       expect(rows).toHaveLength(1)
       const meta = JSON.parse(rows[0].meta as string)
       expect(meta.reason).toBe('stale_sweep')
@@ -172,7 +195,9 @@ describe('sweepStale — stale sweep at CLI/desktop launch (REC-02)', () => {
 
       sweepStale(db)
 
-      const rows = db.query("SELECT duration_sec FROM events WHERE event_type = 'turn_end'").all() as Array<{ duration_sec: number | null }>
+      const rows = db
+        .query("SELECT duration_sec FROM events WHERE event_type = 'turn_end'")
+        .all() as Array<{ duration_sec: number | null }>
       expect(rows).toHaveLength(1)
       expect(rows[0].duration_sec).toBeNull()
     } finally {
@@ -206,7 +231,15 @@ describe('sweepStale — stale sweep at CLI/desktop launch (REC-02)', () => {
       const freshTs = Math.floor(Date.now() / 1000) - 60
 
       persistEvent(db, makeEvent({ event_type: 'turn_start', turn_id: 'stale-1', ts: oldTs }))
-      persistEvent(db, makeEvent({ event_type: 'turn_start', turn_id: 'fresh-1', ts: freshTs }))
+      persistEvent(
+        db,
+        makeEvent({
+          event_type: 'turn_start',
+          turn_id: 'fresh-1',
+          session_id: 'fresh-session',
+          ts: freshTs,
+        }),
+      )
 
       expect(queryOpenTurns(db)).toHaveLength(2)
 
@@ -249,8 +282,14 @@ describe('sweepStale — stale sweep at CLI/desktop launch (REC-02)', () => {
     const db = openDatabase(dbPath)
     try {
       const oldTs = Math.floor(Date.now() / 1000) - STALE_TURN_MAX_AGE - 100
-      persistEvent(db, makeEvent({ event_type: 'turn_start', turn_id: 's1', session_id: 'a', ts: oldTs }))
-      persistEvent(db, makeEvent({ event_type: 'turn_start', turn_id: 's2', session_id: 'b', ts: oldTs }))
+      persistEvent(
+        db,
+        makeEvent({ event_type: 'turn_start', turn_id: 's1', session_id: 'a', ts: oldTs }),
+      )
+      persistEvent(
+        db,
+        makeEvent({ event_type: 'turn_start', turn_id: 's2', session_id: 'b', ts: oldTs }),
+      )
 
       sweepStale(db)
 

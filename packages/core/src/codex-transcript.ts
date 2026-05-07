@@ -1,14 +1,14 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-export interface FindCodexTaskCompletionInput {
+export interface FindCodexTurnCompletionInput {
   sessionId: string
   turnId: string
   startedAt: number
   homeDir?: string
 }
 
-export interface CodexTaskCompletion {
+export interface CodexTurnCompletion {
   completedAt: number
   transcriptPath: string
 }
@@ -49,9 +49,13 @@ function candidateTranscriptPaths(homeDir: string, sessionId: string, startedAt:
   return results
 }
 
-export function findCodexTaskCompletion(
-  input: FindCodexTaskCompletionInput,
-): CodexTaskCompletion | null {
+function parseTimestamp(timestamp: string | undefined): number {
+  return timestamp ? new Date(timestamp).getTime() / 1000 : NaN
+}
+
+export function findCodexTurnCompletion(
+  input: FindCodexTurnCompletionInput,
+): CodexTurnCompletion | null {
   const homeDir = input.homeDir ?? process.env.HOME
   if (!homeDir) return null
 
@@ -67,25 +71,27 @@ export function findCodexTaskCompletion(
           payload?: { type?: string; turn_id?: string; completed_at?: unknown }
         }
 
+        const payloadType = record.payload?.type
         if (
-          record.payload?.type !== 'task_complete' ||
-          record.payload.turn_id !== input.turnId
+          (payloadType !== 'task_complete' && payloadType !== 'turn_aborted') ||
+          record.payload?.turn_id !== input.turnId
         ) {
           continue
         }
 
+        const payloadCompletedAt =
+          typeof record.payload.completed_at === 'number' ? record.payload.completed_at : NaN
+        const timestampCompletedAt = parseTimestamp(record.timestamp)
         const completedAt =
-          typeof record.payload.completed_at === 'number'
-            ? record.payload.completed_at
-            : record.timestamp
-              ? Math.floor(new Date(record.timestamp).getTime() / 1000)
-              : NaN
+          Number.isFinite(payloadCompletedAt) && payloadCompletedAt >= input.startedAt
+            ? payloadCompletedAt
+            : timestampCompletedAt
 
         if (!Number.isFinite(completedAt) || completedAt < input.startedAt) continue
 
         return { completedAt, transcriptPath }
       } catch {
-        continue
+        // Codex transcripts can contain non-JSON diagnostic lines; ignore them.
       }
     }
   }

@@ -1,16 +1,22 @@
-import { existsSync, mkdirSync, readFileSync, watch, type FSWatcher } from 'node:fs'
+import { existsSync, type FSWatcher, mkdirSync, readFileSync, watch } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { NormalizedEvent } from '@vibetime/core'
-import {
-  DDL_EVENTS,
-  DDL_INDICES,
-  DDL_OPEN_TURNS,
-  findCodexTaskCompletion,
-} from '@vibetime/core'
+import { DDL_EVENTS, DDL_INDICES, DDL_OPEN_TURNS, findCodexTurnCompletion } from '@vibetime/core'
 import Database from 'better-sqlite3'
 import { BrowserWindow } from 'electron'
-import type { AgentStatus, IpcPushEvent, OpenTurn, TodaySummary } from '../shared/ipc-types.js'
+import type {
+  ActiveTurn,
+  AgentStatus,
+  IpcPushEvent,
+  TodayLiveState,
+  TodaySummary,
+} from '../shared/ipc-types.js'
+
+type DbEvent = Omit<NormalizedEvent, 'duration_sec' | 'meta'> & {
+  duration_sec: number | null
+  meta: Record<string, unknown> | string | null
+}
 
 const DB_PATH = join(homedir(), '.vibetime', 'data.db')
 const DB_DIR = join(homedir(), '.vibetime')
@@ -104,30 +110,32 @@ function reconcileCodexCompletedTurns(db: Database.Database): void {
   `)
   const deleteOpenTurn = db.prepare('DELETE FROM open_turns WHERE turn_id = ?')
 
-  const reconcileTurn = db.transaction((turn: (typeof openTurns)[number], completedAt: number, transcriptPath: string) => {
-    if (hasTurnEnd.get(turn.turn_id)) {
-      deleteOpenTurn.run(turn.turn_id)
-      return
-    }
+  const reconcileTurn = db.transaction(
+    (turn: (typeof openTurns)[number], completedAt: number, transcriptPath: string) => {
+      if (hasTurnEnd.get(turn.turn_id)) {
+        deleteOpenTurn.run(turn.turn_id)
+        return
+      }
 
-    insertTurnEnd.run({
-      $agent: 'codex',
-      $project: turn.project,
-      $session_id: turn.session_id,
-      $turn_id: turn.turn_id,
-      $ts: completedAt,
-      $timezone: turn.timezone,
-      $duration_sec: Math.max(0, completedAt - turn.started_at),
-      $meta: JSON.stringify({
-        reason: 'codex_task_complete_fallback',
-        transcript_path: transcriptPath,
-      }),
-    })
-    deleteOpenTurn.run(turn.turn_id)
-  })
+      insertTurnEnd.run({
+        agent: 'codex',
+        project: turn.project,
+        session_id: turn.session_id,
+        turn_id: turn.turn_id,
+        ts: completedAt,
+        timezone: turn.timezone,
+        duration_sec: Math.max(0, completedAt - turn.started_at),
+        meta: JSON.stringify({
+          reason: 'codex_task_complete_fallback',
+          transcript_path: transcriptPath,
+        }),
+      })
+      deleteOpenTurn.run(turn.turn_id)
+    },
+  )
 
   for (const turn of openTurns) {
-    const completion = findCodexTaskCompletion({
+    const completion = findCodexTurnCompletion({
       sessionId: turn.session_id,
       turnId: turn.turn_id,
       startedAt: turn.started_at,
@@ -137,28 +145,57 @@ function reconcileCodexCompletedTurns(db: Database.Database): void {
   }
 }
 
-export function queryTodaySummary(): TodaySummary {
-  const db = getDb()
-  reconcileCodexCompletedTurns(db)
-  const now = new Date()
+function parseEventMeta(meta: DbEvent['meta']): Record<string, unknown> | null {
+  if (!meta) return null
+  if (typeof meta !== 'string') return meta
+
+  try {
+    const parsed = JSON.parse(meta)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null
+  } catch {
+    return null
+  }
+}
+
+function isUnknownDurationEnd(ev: DbEvent): boolean {
+  const meta = parseEventMeta(ev.meta)
+  return meta?.abandoned === true || meta?.reason === 'stale_sweep'
+}
+
+function completedDuration(ev: DbEvent, turnStarts: Map<string, { ts: number }>): number | null {
+  if (typeof ev.duration_sec === 'number') {
+    return Math.max(0, ev.duration_sec)
+  }
+
+  if (isUnknownDurationEnd(ev)) {
+    return null
+  }
+
+  const start = ev.turn_id ? turnStarts.get(ev.turn_id) : undefined
+  return start && ev.turn_id ? Math.max(0, ev.ts - start.ts) : null
+}
+
+function buildTodaySummary(db: Database.Database, now: Date): TodaySummary {
   const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const startOfTomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
   const from = Math.floor(startOfDay.getTime() / 1000)
-  const to = Math.floor(now.getTime() / 1000)
+  const to = Math.floor(startOfTomorrow.getTime() / 1000)
 
   const events = db
-    .prepare('SELECT * FROM events WHERE ts >= ? AND ts <= ? ORDER BY ts ASC')
-    .all(from, to) as NormalizedEvent[]
+    .prepare('SELECT * FROM events WHERE ts >= ? AND ts < ? ORDER BY ts ASC')
+    .all(from, to) as DbEvent[]
 
   const projectMap = new Map<string, { total: number; agents: Map<string, number> }>()
-  const distinctTurns = new Set<string>()
-  const turnStarts = new Map<string, { agent: string; project: string; ts: number }>()
+  const completedTurns = new Set<string>()
+  const turnStarts = new Map<string, { ts: number }>()
 
   for (const ev of events) {
     if (ev.event_type === 'turn_start' && ev.turn_id) {
-      distinctTurns.add(ev.turn_id)
       const existingStart = turnStarts.get(ev.turn_id)
       if (!existingStart || ev.ts < existingStart.ts) {
-        turnStarts.set(ev.turn_id, { agent: ev.agent, project: ev.project, ts: ev.ts })
+        turnStarts.set(ev.turn_id, { ts: ev.ts })
       }
     }
   }
@@ -166,15 +203,20 @@ export function queryTodaySummary(): TodaySummary {
   for (const ev of events) {
     if (ev.event_type !== 'turn_end') continue
 
+    const duration = completedDuration(ev, turnStarts)
+    if (duration === null) continue
+
+    if (ev.turn_id) {
+      completedTurns.add(ev.turn_id)
+    }
+
+    if (duration <= 0) continue
+
     let entry = projectMap.get(ev.project)
     if (!entry) {
       entry = { total: 0, agents: new Map() }
       projectMap.set(ev.project, entry)
     }
-
-    const start = ev.turn_id ? turnStarts.get(ev.turn_id) : undefined
-    const duration =
-      start && ev.turn_id ? Math.max(0, ev.ts - start.ts) : (ev.duration_sec ?? 0)
 
     entry.total += duration
     entry.agents.set(ev.agent, (entry.agents.get(ev.agent) ?? 0) + duration)
@@ -194,33 +236,100 @@ export function queryTodaySummary(): TodaySummary {
     date: now.toLocaleDateString('en-CA'), // YYYY-MM-DD
     grandTotal: projects.reduce((sum, p) => sum + p.total, 0),
     projects,
-    turnCount: distinctTurns.size,
+    turnCount: completedTurns.size,
     activeProjectCount: projectMap.size,
   }
 }
 
-export function queryOpenTurnsForIpc(): OpenTurn[] {
+function queryRevision(db: Database.Database): number {
+  const row = db.prepare('SELECT COALESCE(MAX(id), 0) AS revision FROM events').get() as {
+    revision: number
+  }
+  return row.revision
+}
+
+function discardInactiveOpenTurns(db: Database.Database): void {
+  db.prepare(`
+    DELETE FROM open_turns
+    WHERE EXISTS (
+      SELECT 1
+      FROM events event
+      WHERE event.turn_id = open_turns.turn_id
+        AND event.event_type = 'turn_end'
+      LIMIT 1
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM events later
+      WHERE later.agent = open_turns.agent
+        AND later.session_id = open_turns.session_id
+        AND later.ts > open_turns.started_at
+        AND later.event_type IN ('turn_start', 'turn_end', 'session_end')
+        AND COALESCE(later.turn_id, '') <> open_turns.turn_id
+      LIMIT 1
+    )
+  `).run()
+}
+
+function queryActiveTurns(db: Database.Database): ActiveTurn[] {
+  return db
+    .prepare(`
+      SELECT turn_id, agent, project, session_id, started_at, timezone
+      FROM open_turns open_turn
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM events event
+        WHERE event.turn_id = open_turn.turn_id
+          AND event.event_type = 'turn_end'
+        LIMIT 1
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM events later
+        WHERE later.agent = open_turn.agent
+          AND later.session_id = open_turn.session_id
+          AND later.ts > open_turn.started_at
+          AND later.event_type IN ('turn_start', 'turn_end', 'session_end')
+          AND COALESCE(later.turn_id, '') <> open_turn.turn_id
+        LIMIT 1
+      )
+      ORDER BY started_at ASC
+    `)
+    .all() as ActiveTurn[]
+}
+
+export function queryTodayLiveState(): TodayLiveState {
   const db = getDb()
   reconcileCodexCompletedTurns(db)
-  const now = Math.floor(Date.now() / 1000)
-  const rows = db.prepare('SELECT * FROM open_turns').all() as Array<{
-    turn_id: string
-    agent: string
-    project: string
-    session_id: string
-    started_at: number
-    timezone: string
-  }>
-  return rows.map((row) => ({
-    ...row,
-    elapsed: now - row.started_at,
-  }))
+  discardInactiveOpenTurns(db)
+
+  return db.transaction(() => {
+    const serverNow = Date.now() / 1000
+    const now = new Date(serverNow * 1000)
+    const dayStart = Math.floor(
+      new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000,
+    )
+
+    return {
+      revision: queryRevision(db),
+      serverNow,
+      dayStart,
+      completed: buildTodaySummary(db, now),
+      activeTurns: queryActiveTurns(db),
+    }
+  })()
 }
 
 export function queryAgentStatus(): AgentStatus[] {
   const agents = ['claude-code', 'codex', 'cursor'] as const
   const hasVibetimeCommand = (command: unknown): command is string =>
     typeof command === 'string' && command.includes('vibetime-hook')
+  const hasCodexHooksFeature = (): boolean => {
+    const path = `${process.env.HOME}/.codex/config.toml`
+    if (!existsSync(path)) return false
+    const content = readFileSync(path, 'utf-8')
+    return /^\s*codex_hooks\s*=\s*true\b/m.test(content)
+  }
 
   function checkAgent(agent: string): boolean {
     try {
@@ -240,6 +349,7 @@ export function queryAgentStatus(): AgentStatus[] {
         case 'codex': {
           const path = `${process.env.HOME}/.codex/hooks.json`
           if (!existsSync(path)) return false
+          if (!hasCodexHooksFeature()) return false
           const data = JSON.parse(readFileSync(path, 'utf-8'))
           return Object.values((data.hooks ?? {}) as Record<string, unknown[]>).some((groups) =>
             groups.some((group) =>

@@ -4,11 +4,25 @@
 // All operations wrapped in try/catch — never throws (PRD §7).
 
 import { Database } from 'bun:sqlite'
-import { DDL_EVENTS, DDL_OPEN_TURNS, DDL_INDICES } from '@vibetime/core'
 import type { NormalizedEvent } from '@vibetime/core'
+import { DDL_EVENTS, DDL_INDICES, DDL_OPEN_TURNS } from '@vibetime/core'
 import { DB_PATH } from './constants.js'
 import { ensureVibetimeDir } from './fs.js'
 import { appendLog } from './log.js'
+
+export interface StoredOpenTurn {
+  turn_id: string
+  agent: string
+  project: string
+  session_id: string
+  started_at: number
+  timezone: string
+  meta: string | null
+}
+
+export type PersistableEvent = Omit<NormalizedEvent, 'duration_sec'> & {
+  duration_sec?: number | null
+}
 
 /**
  * Open (or create) the SQLite database with required PRAGMAs and tables.
@@ -50,62 +64,97 @@ export function closeDatabase(db: Database): void {
  * Persist a NormalizedEvent to the events table.
  * Also manages open_turns for crash recovery.
  */
-export function persistEvent(db: Database, event: NormalizedEvent): void {
+export function persistEvent(db: Database, event: PersistableEvent): void {
   try {
-    if (event.event_type === 'turn_start' && event.turn_id) {
-      const existingOpenTurn = db
-        .query('SELECT 1 FROM open_turns WHERE turn_id = ? LIMIT 1')
-        .get(event.turn_id)
-      if (existingOpenTurn) {
-        appendLog(`Skipped duplicate turn_start for ${event.agent}:${event.turn_id}`)
-        return
+    db.transaction(() => {
+      const hasNewerOpenTurn =
+        event.event_type === 'turn_start' && event.turn_id
+          ? Boolean(
+              db
+                .query(`
+                SELECT 1
+                FROM open_turns
+                WHERE agent = $agent
+                  AND session_id = $session_id
+                  AND started_at > $ts
+                LIMIT 1
+              `)
+                .get({
+                  $agent: event.agent,
+                  $session_id: event.session_id,
+                  $ts: event.ts,
+                }),
+            )
+          : false
+
+      if (event.event_type === 'turn_start' && event.turn_id) {
+        db.query(`
+          DELETE FROM open_turns
+          WHERE agent = $agent
+            AND session_id = $session_id
+            AND turn_id != $turn_id
+            AND started_at <= $ts
+        `).run({
+          $agent: event.agent,
+          $session_id: event.session_id,
+          $turn_id: event.turn_id,
+          $ts: event.ts,
+        })
+
+        const existingOpenTurn = db
+          .query('SELECT 1 FROM open_turns WHERE turn_id = ? LIMIT 1')
+          .get(event.turn_id)
+        if (existingOpenTurn) {
+          appendLog(`Skipped duplicate turn_start for ${event.agent}:${event.turn_id}`)
+          return
+        }
       }
-    }
 
-    // Insert event — prepared statement with parameter binding (T-03-04)
-    const insertEvent = db.query(`
-      INSERT INTO events (schema_version, agent, event_type, project, session_id, turn_id, ts, timezone, duration_sec, meta)
-      VALUES (1, $agent, $event_type, $project, $session_id, $turn_id, $ts, $timezone, $duration_sec, $meta)
-    `)
+      const explicitDuration = event.duration_sec
+      const open =
+        event.event_type === 'turn_end' && event.turn_id
+          ? (db.query('SELECT started_at FROM open_turns WHERE turn_id = ?').get(event.turn_id) as
+              | { started_at: number }
+              | undefined)
+          : undefined
+      const durationSec =
+        open && explicitDuration === undefined
+          ? Math.max(0, event.ts - open.started_at)
+          : (explicitDuration ?? null)
+      const meta = event.meta ? JSON.stringify(event.meta) : null
 
-    insertEvent.run({
-      $agent: event.agent,
-      $event_type: event.event_type,
-      $project: event.project,
-      $session_id: event.session_id,
-      $turn_id: event.turn_id ?? null,
-      $ts: event.ts,
-      $timezone: event.timezone,
-      $duration_sec: event.duration_sec ?? null,
-      $meta: event.meta ? JSON.stringify(event.meta) : null,
-    })
-
-    // Manage open_turns for crash recovery
-    if (event.event_type === 'turn_start' && event.turn_id) {
       db.query(`
-        INSERT OR REPLACE INTO open_turns (turn_id, agent, project, session_id, started_at, timezone, meta)
-        VALUES ($turn_id, $agent, $project, $session_id, $ts, $timezone, $meta)
+        INSERT INTO events (schema_version, agent, event_type, project, session_id, turn_id, ts, timezone, duration_sec, meta)
+        VALUES (1, $agent, $event_type, $project, $session_id, $turn_id, $ts, $timezone, $duration_sec, $meta)
       `).run({
-        $turn_id: event.turn_id,
         $agent: event.agent,
+        $event_type: event.event_type,
         $project: event.project,
         $session_id: event.session_id,
+        $turn_id: event.turn_id ?? null,
         $ts: event.ts,
         $timezone: event.timezone,
-        $meta: event.meta ? JSON.stringify(event.meta) : null,
+        $duration_sec: durationSec,
+        $meta: meta,
       })
-    } else if (event.event_type === 'turn_end' && event.turn_id) {
-      // Compute duration from open_turns
-      const open = db.query('SELECT started_at FROM open_turns WHERE turn_id = ?').get(event.turn_id) as { started_at: number } | undefined
-      if (open) {
-        const duration = event.ts - open.started_at
-        // Update the turn_end event with computed duration
-        db.query("UPDATE events SET duration_sec = $dur WHERE turn_id = $turn_id AND event_type = 'turn_end'")
-          .run({ $dur: duration, $turn_id: event.turn_id })
+
+      if (event.event_type === 'turn_start' && event.turn_id && !hasNewerOpenTurn) {
+        db.query(`
+          INSERT OR REPLACE INTO open_turns (turn_id, agent, project, session_id, started_at, timezone, meta)
+          VALUES ($turn_id, $agent, $project, $session_id, $ts, $timezone, $meta)
+        `).run({
+          $turn_id: event.turn_id,
+          $agent: event.agent,
+          $project: event.project,
+          $session_id: event.session_id,
+          $ts: event.ts,
+          $timezone: event.timezone,
+          $meta: meta,
+        })
+      } else if (event.event_type === 'turn_end' && event.turn_id) {
+        db.query('DELETE FROM open_turns WHERE turn_id = ?').run(event.turn_id)
       }
-      // Remove from open_turns
-      db.query('DELETE FROM open_turns WHERE turn_id = ?').run(event.turn_id)
-    }
+    })()
   } catch (err) {
     appendLog(`Error persisting event: ${err}`)
     // Never throw — hook must exit 0
@@ -153,36 +202,14 @@ export function queryEvents(
 /**
  * Query open turns for crash recovery.
  */
-export function queryOpenTurns(db: Database, sessionId?: string): Array<{
-  turn_id: string
-  agent: string
-  project: string
-  session_id: string
-  started_at: number
-  timezone: string
-  meta: string | null
-}> {
+export function queryOpenTurns(db: Database, sessionId?: string): StoredOpenTurn[] {
   try {
     if (sessionId) {
-      return db.query('SELECT * FROM open_turns WHERE session_id = ?').all(sessionId) as Array<{
-        turn_id: string
-        agent: string
-        project: string
-        session_id: string
-        started_at: number
-        timezone: string
-        meta: string | null
-      }>
+      return db
+        .query('SELECT * FROM open_turns WHERE session_id = ?')
+        .all(sessionId) as StoredOpenTurn[]
     }
-    return db.query('SELECT * FROM open_turns').all() as Array<{
-      turn_id: string
-      agent: string
-      project: string
-      session_id: string
-      started_at: number
-      timezone: string
-      meta: string | null
-    }>
+    return db.query('SELECT * FROM open_turns').all() as StoredOpenTurn[]
   } catch (err) {
     appendLog(`Error querying open turns: ${err}`)
     return []

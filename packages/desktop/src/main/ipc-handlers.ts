@@ -2,7 +2,7 @@ import { readConfig, writeConfig } from '@vibetime/hook/config'
 import { installAgent, uninstallAgent } from '@vibetime/hook/install'
 import { ipcMain } from 'electron'
 import type { IpcResult } from '../shared/ipc-types.js'
-import { queryAgentStatus, queryOpenTurnsForIpc, queryTodaySummary, writeAndNotify } from './db.js'
+import { queryAgentStatus, queryTodayLiveState, writeAndNotify } from './db.js'
 
 const VALID_AGENTS = new Set(['claude-code', 'codex', 'cursor'])
 
@@ -14,21 +14,10 @@ function assertValidAgent(agent: unknown): asserts agent is string {
 
 export function registerIpcHandlers(): void {
   ipcMain.handle(
-    'getTodaySummary',
-    async (): Promise<IpcResult<ReturnType<typeof queryTodaySummary>>> => {
+    'getTodayLiveState',
+    async (): Promise<IpcResult<ReturnType<typeof queryTodayLiveState>>> => {
       try {
-        return { ok: true, data: queryTodaySummary() }
-      } catch (err) {
-        return { ok: false, error: String(err) }
-      }
-    },
-  )
-
-  ipcMain.handle(
-    'getOpenTurns',
-    async (): Promise<IpcResult<ReturnType<typeof queryOpenTurnsForIpc>>> => {
-      try {
-        return { ok: true, data: queryOpenTurnsForIpc() }
+        return { ok: true, data: queryTodayLiveState() }
       } catch (err) {
         return { ok: false, error: String(err) }
       }

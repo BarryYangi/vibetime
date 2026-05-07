@@ -1,16 +1,11 @@
 import NumberFlow, { NumberFlowGroup } from '@number-flow/react'
 import { useEffect, useState } from 'react'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
 import { PageShell } from '@/components/PageShell'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
+import type { ActiveTurn } from '../../../shared/ipc-types'
 import { useIpcQuery } from '../hooks/useIpcQuery'
-import { openTurnsAtom, todaySummaryAtom } from '../store'
+import { refreshTodayLiveState, setTodayLiveState, todayLiveStateAtom } from '../store'
 
 function formatDuration(seconds: number): string {
   const wholeSeconds = Math.max(0, Math.floor(seconds))
@@ -27,64 +22,77 @@ function formatDuration(seconds: number): string {
 }
 
 const durationFlowClass =
-  'inline-flex flex-wrap items-baseline font-mono font-bold tabular-nums tracking-tight text-[2.125rem] leading-none sm:text-[2.5rem]'
+  'inline-flex h-[2.75rem] min-w-[12rem] max-w-full items-baseline overflow-hidden font-mono font-bold tabular-nums text-[2.125rem] leading-none sm:h-[3.125rem] sm:min-w-[14rem] sm:text-[2.5rem]'
+const durationUnitClass =
+  'ml-[0.08em] mr-[0.16em] text-[0.56em] font-semibold text-muted-foreground/80'
+const ACTIVE_REFRESH_INTERVAL_MS = 1000
+
+function DurationSegment({ value, unit }: { value: number; unit: string }) {
+  return (
+    <span className="inline-flex items-baseline">
+      <NumberFlow locales="en-US" value={value} />
+      <span className={durationUnitClass}>{unit}</span>
+    </span>
+  )
+}
 
 function TotalDurationFlow({ seconds }: { seconds: number }) {
   const s = Math.max(0, Math.floor(seconds))
-
-  if (s < 60) {
-    return (
-      <span className={durationFlowClass}>
-        <NumberFlow locales="en-US" suffix="s" value={s} />
-      </span>
-    )
-  }
-
-  if (s < 3600) {
-    const m = Math.floor(s / 60)
-    const sec = s % 60
-    return (
-      <NumberFlowGroup>
-        <span className={durationFlowClass}>
-          <NumberFlow locales="en-US" suffix="m" value={m} />
-          <NumberFlow locales="en-US" suffix="s" value={sec} />
-        </span>
-      </NumberFlowGroup>
-    )
-  }
-
   const h = Math.floor(s / 3600)
   const m = Math.floor((s % 3600) / 60)
   const sec = s % 60
+
   return (
     <NumberFlowGroup>
       <span className={durationFlowClass}>
-        <NumberFlow locales="en-US" suffix="h" value={h} />
-        <NumberFlow locales="en-US" suffix="m" value={m} />
-        <NumberFlow locales="en-US" suffix="s" value={sec} />
+        <span className="inline-flex items-baseline">
+          {h > 0 && <DurationSegment unit="h" value={h} />}
+          {(h > 0 || m > 0) && <DurationSegment unit="m" value={m} />}
+          <DurationSegment unit="s" value={sec} />
+        </span>
       </span>
     </NumberFlowGroup>
   )
 }
 
+function activeSeconds(turn: ActiveTurn, now: number, dayStart: number): number {
+  return Math.max(0, now - Math.max(turn.started_at, dayStart))
+}
+
+function SummaryStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="min-w-0">
+      <dt className="truncate text-[11px] text-muted-foreground leading-snug">{label}</dt>
+      <dd className="mt-1 flex h-6 items-baseline font-mono font-semibold text-[15px] tabular-nums leading-none">
+        <span className="inline-flex min-w-[2ch]">
+          <NumberFlow locales="en-US" value={value} />
+        </span>
+      </dd>
+    </div>
+  )
+}
+
 function ProjectBar({
   name,
-  total,
+  completed,
+  active,
   agents,
   maxTotal,
 }: {
   name: string
-  total: number
-  agents: Array<{ agent: string; total: number }>
+  completed: number
+  active: number
+  agents: Array<{ agent: string; completed: number; active: number }>
   maxTotal: number
 }) {
+  const total = completed + active
   const pct = maxTotal > 0 ? (total / maxTotal) * 100 : 0
 
   return (
-    <div className="flex flex-col gap-2 border-border/45 border-b py-2.5 last:border-b-0 last:pb-0 first:pt-0">
-      <div className="flex items-center justify-between gap-4">
+    <div className="flex flex-col gap-2.5 border-border/45 border-b py-3 last:border-b-0 last:pb-0 first:pt-0">
+      <div className="flex items-baseline justify-between gap-6">
         <span className="truncate text-[13px] font-medium leading-snug">{name}</span>
-        <span className="shrink-0 font-mono text-[13px] text-muted-foreground tabular-nums leading-snug">
+        <span className="min-w-[6.75rem] shrink-0 text-right font-mono text-[13px] text-muted-foreground tabular-nums leading-snug">
           {formatDuration(total)}
         </span>
       </div>
@@ -95,10 +103,14 @@ function ProjectBar({
         />
       </div>
       {agents.length > 0 && (
-        <div className="flex flex-wrap gap-x-3 gap-y-1">
-          {agents.map(({ agent, total: agentTotal }) => (
-            <span key={agent} className="text-[11px] text-muted-foreground leading-snug">
-              {agent}: {formatDuration(agentTotal)}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          {agents.map(({ agent, completed: agentCompleted, active: agentActive }) => (
+            <span key={agent} className="min-w-0 text-[11px] text-muted-foreground leading-snug">
+              <span>{agent}</span>
+              <span className="mx-1.5 text-muted-foreground/60">·</span>
+              <span className="font-mono tabular-nums">
+                {formatDuration(agentCompleted + agentActive)}
+              </span>
             </span>
           ))}
         </div>
@@ -108,19 +120,31 @@ function ProjectBar({
 }
 
 export default function Today() {
-  const { data: summary, error, isLoading } = useIpcQuery('getTodaySummary', todaySummaryAtom)
-  const { data: openTurns } = useIpcQuery('getOpenTurns', openTurnsAtom)
-  const [nowSec, setNowSec] = useState(() => Math.floor(Date.now() / 1000))
+  const {
+    data: liveState,
+    error,
+    isLoading,
+  } = useIpcQuery('getTodayLiveState', todayLiveStateAtom, setTodayLiveState)
+  const [now, setNow] = useState(() => Date.now() / 1000)
+  const activeTurnCount = liveState?.activeTurns.length ?? 0
 
   useEffect(() => {
-    if (!openTurns || openTurns.length === 0) return
+    if (!liveState) return
+    setNow(Math.max(Date.now() / 1000, liveState.serverNow))
+  }, [liveState])
 
-    const timer = window.setInterval(() => {
-      setNowSec(Math.floor(Date.now() / 1000))
-    }, 1000)
+  useEffect(() => {
+    if (activeTurnCount === 0) return
 
+    const tick = () => {
+      setNow(Date.now() / 1000)
+      void refreshTodayLiveState()
+    }
+    tick()
+
+    const timer = window.setInterval(tick, ACTIVE_REFRESH_INTERVAL_MS)
     return () => window.clearInterval(timer)
-  }, [openTurns])
+  }, [activeTurnCount])
 
   if (isLoading) {
     return (
@@ -130,9 +154,9 @@ export default function Today() {
     )
   }
 
-  if (!summary) {
+  if (!liveState) {
     return (
-      <PageShell className="py-7 sm:py-8">
+      <PageShell className="py-7 sm:py-8" fluid>
         <header className="space-y-1">
           <h1 className="font-heading font-semibold text-2xl tracking-[-0.02em]">Today</h1>
           <p className="text-[13px] text-muted-foreground leading-snug">
@@ -143,39 +167,74 @@ export default function Today() {
     )
   }
 
-  const liveProjectMap = new Map(
-    summary.projects.map((project) => [
-      project.name,
+  const { completed, activeTurns, dayStart } = liveState
+  const { activeTotal, projects } = (() => {
+    let nextActiveTotal = 0
+    const completedOrder = new Map(
+      completed.projects.map((project, index) => [project.name, index] as const),
+    )
+    const projectMap = new Map<
+      string,
       {
-        total: project.total,
-        agents: new Map(project.agents.map((agent) => [agent.agent, agent.total])),
-      },
-    ]),
-  )
+        completed: number
+        active: number
+        agents: Map<string, { completed: number; active: number }>
+      }
+    >()
 
-  for (const turn of openTurns ?? []) {
-    const elapsed = Math.max(0, nowSec - Math.floor(turn.started_at))
-    const entry = liveProjectMap.get(turn.project) ?? { total: 0, agents: new Map<string, number>() }
-    entry.total += elapsed
-    entry.agents.set(turn.agent, (entry.agents.get(turn.agent) ?? 0) + elapsed)
-    liveProjectMap.set(turn.project, entry)
-  }
+    for (const project of completed.projects) {
+      projectMap.set(project.name, {
+        completed: project.total,
+        active: 0,
+        agents: new Map(
+          project.agents.map((agent) => [agent.agent, { completed: agent.total, active: 0 }]),
+        ),
+      })
+    }
 
-  const projects = [...liveProjectMap.entries()]
-    .sort((a, b) => b[1].total - a[1].total)
-    .map(([name, data]) => ({
-      name,
-      total: data.total,
-      agents: [...data.agents.entries()]
-        .filter(([, total]) => total > 0)
-        .map(([agent, total]) => ({ agent, total })),
-    }))
+    for (const turn of activeTurns) {
+      const active = activeSeconds(turn, now, dayStart)
+      if (active <= 0) continue
 
-  const grandTotal = projects.reduce((sum, project) => sum + project.total, 0)
-  const turnCount = summary.turnCount
+      nextActiveTotal += active
+
+      const project = projectMap.get(turn.project) ?? {
+        completed: 0,
+        active: 0,
+        agents: new Map<string, { completed: number; active: number }>(),
+      }
+      project.active += active
+
+      const agent = project.agents.get(turn.agent) ?? { completed: 0, active: 0 }
+      agent.active += active
+      project.agents.set(turn.agent, agent)
+      projectMap.set(turn.project, project)
+    }
+
+    const nextProjects = [...projectMap.entries()]
+      .map(([name, project]) => ({
+        name,
+        completed: project.completed,
+        active: project.active,
+        agents: [...project.agents.entries()]
+          .map(([agent, totals]) => ({ agent, ...totals }))
+          .filter((agent) => agent.completed + agent.active > 0),
+      }))
+      .sort((a, b) => {
+        const aOrder = completedOrder.get(a.name) ?? Number.MAX_SAFE_INTEGER
+        const bOrder = completedOrder.get(b.name) ?? Number.MAX_SAFE_INTEGER
+        if (aOrder !== bOrder) return aOrder - bOrder
+        return a.name.localeCompare(b.name)
+      })
+
+    return { activeTotal: nextActiveTotal, projects: nextProjects }
+  })()
+  const liveTotal = completed.grandTotal + activeTotal
+  const turnCount = completed.turnCount
   const activeProjectCount = projects.length
-  const { date } = summary
-  const maxTotal = projects.length > 0 ? Math.max(...projects.map((p) => p.total)) : 0
+  const { date } = completed
+  const maxTotal =
+    projects.length > 0 ? Math.max(...projects.map((p) => p.completed + p.active)) : 0
 
   const displayDate = new Date(`${date}T00:00:00`).toLocaleDateString('en-US', {
     weekday: 'long',
@@ -185,52 +244,52 @@ export default function Today() {
 
   if (projects.length === 0) {
     return (
-      <PageShell className="py-7 sm:py-8">
+      <PageShell className="py-7 sm:py-8" fluid>
         <header className="space-y-1">
           <p className="text-[13px] text-muted-foreground leading-snug">{displayDate}</p>
           <h1 className="font-heading font-semibold text-2xl tracking-[-0.02em]">Today</h1>
         </header>
-        <p className="mt-5 text-[13px] text-muted-foreground leading-relaxed">
-          No activity today. Start coding to see your time breakdown.
-        </p>
+        <p className="mt-5 text-[13px] text-muted-foreground leading-relaxed">No activity today.</p>
       </PageShell>
     )
   }
 
   return (
-    <PageShell className="flex flex-col gap-8 py-7 sm:px-7 sm:py-8">
+    <PageShell className="flex flex-col gap-8 py-7 sm:px-7 sm:py-8" fluid>
       <div className="flex flex-col gap-6">
         <header className="space-y-1">
           <p className="text-[13px] text-muted-foreground leading-snug">{displayDate}</p>
           <h1 className="font-heading font-semibold text-2xl tracking-[-0.02em]">Today</h1>
         </header>
 
-        <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between sm:gap-x-10 sm:gap-y-2">
+        <div className="grid gap-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
           <div className="min-w-0">
             <p className="text-[13px] text-muted-foreground leading-snug">Total coding time</p>
             <div className="mt-1 leading-none">
-              <TotalDurationFlow seconds={grandTotal} />
+              <TotalDurationFlow seconds={liveTotal} />
             </div>
           </div>
-          <p className="max-w-[16rem] text-[13px] text-muted-foreground leading-snug sm:shrink-0 sm:text-right">
-            {turnCount} turn{turnCount !== 1 ? 's' : ''} across {activeProjectCount} project
-            {activeProjectCount !== 1 ? 's' : ''}
-          </p>
+          <dl className="grid w-full grid-cols-3 gap-8 pb-1 sm:w-[21rem]">
+            <SummaryStat label="Turns" value={turnCount} />
+            <SummaryStat label="Projects" value={activeProjectCount} />
+            <SummaryStat label="Running" value={activeTurns.length} />
+          </dl>
         </div>
       </div>
 
       <section className="min-w-0">
         <Card className="overflow-hidden">
-          <CardHeader className="pb-4">
+          <CardHeader className="px-5 pt-5 pb-3">
             <CardTitle>By project</CardTitle>
             <CardDescription>Breakdown for today</CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-col gap-0 pt-0">
-            {projects.map(({ name, total, agents }) => (
+          <CardContent className="flex flex-col gap-0 px-5 pt-0 pb-5">
+            {projects.map(({ name, completed: projectCompleted, active, agents }) => (
               <ProjectBar
                 key={name}
                 name={name}
-                total={total}
+                completed={projectCompleted}
+                active={active}
                 agents={agents}
                 maxTotal={maxTotal}
               />

@@ -12,14 +12,21 @@ export interface TodaySummary {
   activeProjectCount: number
 }
 
-export interface OpenTurn {
+export interface ActiveTurn {
   turn_id: string
   agent: string
   project: string
   session_id: string
   started_at: number
   timezone: string
-  elapsed: number
+}
+
+export interface TodayLiveState {
+  revision: number
+  serverNow: number
+  dayStart: number
+  completed: TodaySummary
+  activeTurns: ActiveTurn[]
 }
 
 export interface AgentStatus {
@@ -33,23 +40,21 @@ export interface VibetimeConfig {
 }
 
 export interface IpcMethods {
-  getTodaySummary: { args: void; result: TodaySummary }
-  getOpenTurns: { args: void; result: OpenTurn[] }
-  getAgentStatus: { args: void; result: AgentStatus[] }
-  getConfig: { args: void; result: VibetimeConfig }
-  updateConfig: { args: Partial<VibetimeConfig>; result: void }
-  installAgent: { args: { agent: string }; result: void }
-  uninstallAgent: { args: { agent: string }; result: void }
+  getTodayLiveState: { args: undefined; result: TodayLiveState }
+  getAgentStatus: { args: undefined; result: AgentStatus[] }
+  getConfig: { args: undefined; result: VibetimeConfig }
+  updateConfig: { args: Partial<VibetimeConfig>; result: undefined }
+  installAgent: { args: { agent: string }; result: undefined }
+  uninstallAgent: { args: { agent: string }; result: undefined }
 }
 
 export type IpcChannel = keyof IpcMethods
 
-export type IpcPushEvent =
-  | {
-      type: 'db-changed'
-      agent?: string
-      event_type?: string
-      session_id?: string
-      project?: string
-      ts?: number
-    }
+export type IpcPushEvent = {
+  type: 'db-changed'
+  agent?: string
+  event_type?: string
+  session_id?: string
+  project?: string
+  ts?: number
+}

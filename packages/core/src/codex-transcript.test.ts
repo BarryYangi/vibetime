@@ -1,8 +1,8 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { findCodexTaskCompletion } from './codex-transcript.js'
+import { findCodexTurnCompletion } from './codex-transcript.js'
 
 const tempDirs: string[] = []
 
@@ -19,10 +19,11 @@ function writeTranscript(
   return file
 }
 
-describe('findCodexTaskCompletion', () => {
+describe('findCodexTurnCompletion', () => {
   afterEach(() => {
     while (tempDirs.length > 0) {
-      rmSync(tempDirs.pop()!, { recursive: true, force: true })
+      const tempDir = tempDirs.pop()
+      if (tempDir) rmSync(tempDir, { recursive: true, force: true })
     }
   })
 
@@ -43,7 +44,7 @@ describe('findCodexTaskCompletion', () => {
     ])
 
     expect(
-      findCodexTaskCompletion({
+      findCodexTurnCompletion({
         homeDir,
         sessionId,
         turnId,
@@ -68,7 +69,7 @@ describe('findCodexTaskCompletion', () => {
     ])
 
     expect(
-      findCodexTaskCompletion({
+      findCodexTurnCompletion({
         homeDir,
         sessionId,
         turnId,
@@ -88,7 +89,70 @@ describe('findCodexTaskCompletion', () => {
     })
   })
 
-  it('returns null when the turn has no task_complete', () => {
+  it('finds turn_aborted for an interrupted turn', () => {
+    const homeDir = mkdtempSync(join(tmpdir(), 'vibetime-core-codex-'))
+    tempDirs.push(homeDir)
+    const sessionId = 'session-aborted'
+    const turnId = 'turn-aborted'
+    const transcriptPath = writeTranscript(homeDir, '2026/05/06', sessionId, [
+      JSON.stringify({
+        timestamp: '2026-05-06T09:30:01.935Z',
+        payload: { type: 'task_started', turn_id: turnId },
+      }),
+      JSON.stringify({
+        timestamp: '2026-05-06T09:30:03.000Z',
+        payload: {
+          type: 'turn_aborted',
+          turn_id: turnId,
+          completed_at: 1778059803,
+          reason: 'interrupted',
+        },
+      }),
+    ])
+
+    expect(
+      findCodexTurnCompletion({
+        homeDir,
+        sessionId,
+        turnId,
+        startedAt: 1778059801,
+      }),
+    ).toEqual({
+      completedAt: 1778059803,
+      transcriptPath,
+    })
+  })
+
+  it('uses the transcript timestamp when completed_at is floored before a fractional start', () => {
+    const homeDir = mkdtempSync(join(tmpdir(), 'vibetime-core-codex-'))
+    tempDirs.push(homeDir)
+    const sessionId = 'session-fast-stop'
+    const turnId = 'turn-fast-stop'
+    const transcriptPath = writeTranscript(homeDir, '2026/05/06', sessionId, [
+      JSON.stringify({
+        timestamp: '2026-05-06T09:30:01.935Z',
+        payload: { type: 'task_started', turn_id: turnId },
+      }),
+      JSON.stringify({
+        timestamp: '2026-05-06T09:30:01.980Z',
+        payload: { type: 'turn_aborted', turn_id: turnId, completed_at: 1778059801 },
+      }),
+    ])
+
+    expect(
+      findCodexTurnCompletion({
+        homeDir,
+        sessionId,
+        turnId,
+        startedAt: 1778059801.95,
+      }),
+    ).toEqual({
+      completedAt: 1778059801.98,
+      transcriptPath,
+    })
+  })
+
+  it('returns null when the turn has no completion marker', () => {
     const homeDir = mkdtempSync(join(tmpdir(), 'vibetime-core-codex-'))
     tempDirs.push(homeDir)
     const sessionId = 'session-3'
@@ -100,7 +164,7 @@ describe('findCodexTaskCompletion', () => {
     ])
 
     expect(
-      findCodexTaskCompletion({
+      findCodexTurnCompletion({
         homeDir,
         sessionId,
         turnId: 'turn-3',

@@ -4,11 +4,11 @@
 // Both never throw (PRD §7).
 
 import type { Database } from 'bun:sqlite'
-import { findCodexTaskCompletion } from '@vibetime/core'
 import type { NormalizedEvent } from '@vibetime/core'
-import { queryOpenTurns, deleteOpenTurn, persistEvent } from './store.js'
-import { appendLog } from './log.js'
+import { findCodexTurnCompletion } from '@vibetime/core'
 import { STALE_TURN_MAX_AGE } from './constants.js'
+import { appendLog } from './log.js'
+import { deleteOpenTurn, persistEvent, queryOpenTurns } from './store.js'
 
 /**
  * Recover orphaned open_turns for a specific session.
@@ -21,7 +21,7 @@ export function recoverOrphans(db: Database, sessionId: string): void {
 
     for (const orphan of orphans) {
       // Create synthetic turn_end event
-      const syntheticEvent: NormalizedEvent = {
+      const syntheticEvent = {
         agent: orphan.agent as NormalizedEvent['agent'],
         event_type: 'turn_end',
         project: orphan.project,
@@ -38,8 +38,9 @@ export function recoverOrphans(db: Database, sessionId: string): void {
 
       // Reset duration_sec to NULL — persistEvent computes it from open_turns,
       // but for abandoned turns the duration is truly unknown (ts is detection time, not end time)
-      db.query("UPDATE events SET duration_sec = NULL WHERE turn_id = ? AND event_type = 'turn_end'")
-        .run(orphan.turn_id)
+      db.query(
+        "UPDATE events SET duration_sec = NULL WHERE turn_id = ? AND event_type = 'turn_end'",
+      ).run(orphan.turn_id)
 
       // Explicit delete for safety — persistEvent handles turn_end cleanup but
       // we guard against edge cases where the turn_id might not match
@@ -66,7 +67,7 @@ export function sweepStale(db: Database): void {
     for (const turn of allOpenTurns) {
       if (turn.started_at < cutoff) {
         // Create synthetic turn_end event
-        const syntheticEvent: NormalizedEvent = {
+        const syntheticEvent = {
           agent: turn.agent as NormalizedEvent['agent'],
           event_type: 'turn_end',
           project: turn.project,
@@ -83,8 +84,9 @@ export function sweepStale(db: Database): void {
 
         // Reset duration_sec to NULL — persistEvent computes it from open_turns,
         // but for stale turns the duration is truly unknown (ts is sweep time, not end time)
-        db.query("UPDATE events SET duration_sec = NULL WHERE turn_id = ? AND event_type = 'turn_end'")
-          .run(turn.turn_id)
+        db.query(
+          "UPDATE events SET duration_sec = NULL WHERE turn_id = ? AND event_type = 'turn_end'",
+        ).run(turn.turn_id)
 
         // Explicit delete for safety
         deleteOpenTurn(db, turn.turn_id)
@@ -100,7 +102,7 @@ export function sweepStale(db: Database): void {
 
 /**
  * Reconcile Codex open turns using the local Codex session transcript.
- * This closes turns that already emitted `task_complete` in the transcript
+ * This closes turns that already emitted a completion marker in the transcript
  * even when the Stop hook did not fire.
  */
 export function reconcileCodexCompletedTurns(db: Database, sessionId?: string): void {
@@ -108,7 +110,7 @@ export function reconcileCodexCompletedTurns(db: Database, sessionId?: string): 
     const openTurns = queryOpenTurns(db, sessionId).filter((turn) => turn.agent === 'codex')
 
     for (const turn of openTurns) {
-      const completion = findCodexTaskCompletion({
+      const completion = findCodexTurnCompletion({
         sessionId: turn.session_id,
         turnId: turn.turn_id,
         startedAt: turn.started_at,

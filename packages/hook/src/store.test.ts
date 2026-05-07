@@ -1,20 +1,19 @@
 // Tests for SQLite store layer. Covers STORE-01, STORE-02, STORE-03.
 // Uses bun:test — bun built-in test runner (CONTEXT.md D-TEST-HOOK).
 
-import { describe, expect, it, beforeEach, afterEach } from 'bun:test'
-import { Database } from 'bun:sqlite'
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { NormalizedEvent } from '@vibetime/core'
 import {
-  openDatabase,
   closeDatabase,
+  deleteOpenTurn,
+  openDatabase,
   persistEvent,
   queryEvents,
   queryOpenTurns,
-  deleteOpenTurn,
 } from './store.js'
-import type { NormalizedEvent } from '@vibetime/core'
 
 let tmpDir: string
 let dbPath: string
@@ -92,7 +91,7 @@ describe('openDatabase — schema creation (STORE-02)', () => {
   it('creates events table with correct columns', () => {
     const db = openDatabase(dbPath)
     try {
-      const info = db.query("PRAGMA table_info(events)").all() as Array<{ name: string }>
+      const info = db.query('PRAGMA table_info(events)').all() as Array<{ name: string }>
       const colNames = info.map((c) => c.name)
       expect(colNames).toContain('id')
       expect(colNames).toContain('schema_version')
@@ -113,7 +112,7 @@ describe('openDatabase — schema creation (STORE-02)', () => {
   it('creates open_turns table with correct columns', () => {
     const db = openDatabase(dbPath)
     try {
-      const info = db.query("PRAGMA table_info(open_turns)").all() as Array<{ name: string }>
+      const info = db.query('PRAGMA table_info(open_turns)').all() as Array<{ name: string }>
       const colNames = info.map((c) => c.name)
       expect(colNames).toContain('turn_id')
       expect(colNames).toContain('agent')
@@ -130,7 +129,9 @@ describe('openDatabase — schema creation (STORE-02)', () => {
   it('creates all required indices', () => {
     const db = openDatabase(dbPath)
     try {
-      const indices = db.query("SELECT name FROM sqlite_master WHERE type='index'").all() as Array<{ name: string }>
+      const indices = db.query("SELECT name FROM sqlite_master WHERE type='index'").all() as Array<{
+        name: string
+      }>
       const names = indices.map((i) => i.name)
       expect(names).toContain('idx_events_ts')
       expect(names).toContain('idx_events_project')
@@ -207,6 +208,105 @@ describe('persistEvent — event insertion', () => {
     }
   })
 
+  it('discards superseded open turns in the same agent session', () => {
+    const db = openDatabase(dbPath)
+    try {
+      persistEvent(
+        db,
+        makeEvent({
+          event_type: 'turn_start',
+          agent: 'codex',
+          session_id: 'sess-active',
+          turn_id: 'old-turn',
+          ts: 1000,
+        }),
+      )
+      persistEvent(
+        db,
+        makeEvent({
+          event_type: 'turn_start',
+          agent: 'codex',
+          session_id: 'sess-active',
+          turn_id: 'new-turn',
+          ts: 1010,
+        }),
+      )
+
+      const openTurns = queryOpenTurns(db, 'sess-active')
+      expect(openTurns).toHaveLength(1)
+      expect(openTurns[0].turn_id).toBe('new-turn')
+
+      const oldEnd = db
+        .query("SELECT 1 FROM events WHERE turn_id = 'old-turn' AND event_type = 'turn_end'")
+        .get()
+      expect(oldEnd).toBeNull()
+    } finally {
+      closeDatabase(db)
+    }
+  })
+
+  it('keeps active turns from different sessions', () => {
+    const db = openDatabase(dbPath)
+    try {
+      persistEvent(
+        db,
+        makeEvent({
+          event_type: 'turn_start',
+          agent: 'codex',
+          session_id: 'session-a',
+          turn_id: 'turn-a',
+          ts: 1000,
+        }),
+      )
+      persistEvent(
+        db,
+        makeEvent({
+          event_type: 'turn_start',
+          agent: 'codex',
+          session_id: 'session-b',
+          turn_id: 'turn-b',
+          ts: 1010,
+        }),
+      )
+
+      expect(queryOpenTurns(db)).toHaveLength(2)
+    } finally {
+      closeDatabase(db)
+    }
+  })
+
+  it('does not let an older turn_start replace a newer active turn', () => {
+    const db = openDatabase(dbPath)
+    try {
+      persistEvent(
+        db,
+        makeEvent({
+          event_type: 'turn_start',
+          agent: 'codex',
+          session_id: 'sess-active',
+          turn_id: 'new-turn',
+          ts: 1010,
+        }),
+      )
+      persistEvent(
+        db,
+        makeEvent({
+          event_type: 'turn_start',
+          agent: 'codex',
+          session_id: 'sess-active',
+          turn_id: 'old-turn',
+          ts: 1000,
+        }),
+      )
+
+      const openTurns = queryOpenTurns(db, 'sess-active')
+      expect(openTurns).toHaveLength(1)
+      expect(openTurns[0].turn_id).toBe('new-turn')
+    } finally {
+      closeDatabase(db)
+    }
+  })
+
   it('computes duration_sec on turn_end and removes from open_turns', () => {
     const db = openDatabase(dbPath)
     try {
@@ -221,9 +321,37 @@ describe('persistEvent — event insertion', () => {
       expect(openTurns).toHaveLength(0)
 
       // The turn_end event should have duration_sec = 30
-      const rows = db.query("SELECT duration_sec FROM events WHERE event_type = 'turn_end'").all() as Array<{ duration_sec: number | null }>
+      const rows = db
+        .query("SELECT duration_sec FROM events WHERE event_type = 'turn_end'")
+        .all() as Array<{ duration_sec: number | null }>
       expect(rows).toHaveLength(1)
       expect(rows[0].duration_sec).toBe(30)
+    } finally {
+      closeDatabase(db)
+    }
+  })
+
+  it('preserves explicit null duration on synthetic turn_end', () => {
+    const db = openDatabase(dbPath)
+    try {
+      persistEvent(db, makeEvent({ event_type: 'turn_start', turn_id: 'turn-unknown', ts: 1000 }))
+      persistEvent(
+        db,
+        makeEvent({
+          event_type: 'turn_end',
+          turn_id: 'turn-unknown',
+          ts: 1030,
+          duration_sec: null,
+          meta: { abandoned: true },
+        }),
+      )
+
+      expect(queryOpenTurns(db)).toHaveLength(0)
+      const rows = db
+        .query("SELECT duration_sec FROM events WHERE event_type = 'turn_end'")
+        .all() as Array<{ duration_sec: number | null }>
+      expect(rows).toHaveLength(1)
+      expect(rows[0].duration_sec).toBeNull()
     } finally {
       closeDatabase(db)
     }
@@ -250,8 +378,10 @@ describe('persistEvent — event insertion', () => {
       persistEvent(db, makeEvent({ meta: { key: 'value', nested: { a: 1 } } }))
 
       const rows = db.query('SELECT meta FROM events').all() as Array<{ meta: string | null }>
-      expect(rows[0].meta).not.toBeNull()
-      const parsed = JSON.parse(rows[0].meta!)
+      const meta = rows[0].meta
+      expect(meta).not.toBeNull()
+      if (!meta) throw new Error('Expected event meta')
+      const parsed = JSON.parse(meta)
       expect(parsed.key).toBe('value')
       expect(parsed.nested.a).toBe(1)
     } finally {
@@ -266,7 +396,12 @@ describe('persistEvent — event insertion', () => {
       expect(() => persistEvent(db, makeEvent())).not.toThrow()
 
       // Event with undefined optional fields
-      expect(() => persistEvent(db, makeEvent({ turn_id: undefined, duration_sec: undefined, meta: undefined }))).not.toThrow()
+      expect(() =>
+        persistEvent(
+          db,
+          makeEvent({ turn_id: undefined, duration_sec: undefined, meta: undefined }),
+        ),
+      ).not.toThrow()
     } finally {
       closeDatabase(db)
     }
@@ -387,11 +522,14 @@ describe('concurrent writes (STORE-03)', () => {
     try {
       // Simulate multiple hook invocations writing events
       for (let i = 0; i < 50; i++) {
-        persistEvent(db, makeEvent({
-          turn_id: `turn-${i}`,
-          ts: 1000 + i,
-          session_id: `sess-${i % 5}`,
-        }))
+        persistEvent(
+          db,
+          makeEvent({
+            turn_id: `turn-${i}`,
+            ts: 1000 + i,
+            session_id: `sess-${i % 5}`,
+          }),
+        )
       }
 
       const rows = db.query('SELECT COUNT(*) as cnt FROM events').get() as { cnt: number }
