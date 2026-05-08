@@ -110,16 +110,6 @@ pnpm --filter @vibetime/desktop dist:win
 
 Artifacts are written to `packages/desktop/release/`.
 
-## Release Versioning
-
-VibeTime uses date-based semver-compatible versions.
-
-- package version: `2026.5.8`
-- release tag: `v2026.5.8`
-
-Pushing a `v*` tag runs GitHub Actions, builds macOS and Windows packages, and
-uploads them to GitHub Releases.
-
 ## License
 
 MIT
