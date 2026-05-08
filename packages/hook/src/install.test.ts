@@ -337,6 +337,11 @@ describe('installAgent — dispatch', () => {
   })
 
   it('writes commands that point to an existing vibetime-hook binary', () => {
+    const fakeBinaryPath = `${testHome}/bin/vibetime-hook`
+    mkdirSync(`${testHome}/bin`, { recursive: true })
+    writeFileSync(fakeBinaryPath, '')
+    process.env.VIBETIME_HOOK_BINARY = fakeBinaryPath
+
     installAgent('claude-code')
     installAgent('codex')
     installAgent('cursor')
