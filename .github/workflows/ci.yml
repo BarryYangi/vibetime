@@ -46,7 +46,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run CI checks
-        run: pnpm ci
+        run: pnpm run ci
 
   package-mac:
     name: Package macOS arm64

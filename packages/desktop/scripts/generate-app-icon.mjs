@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -102,7 +102,7 @@ execFileSync(
   ],
   { stdio: 'ignore' },
 )
-execFileSync('cp', [renderedSourcePath, previewPath], { stdio: 'ignore' })
+copyFileSync(renderedSourcePath, previewPath)
 
 execFileSync(
   'magick',
@@ -217,6 +217,8 @@ for (const size of windowsSizes) {
 }
 execFileSync('magick', [...icoInputs, icoPath], { stdio: 'ignore' })
 
-execFileSync('iconutil', ['-c', 'icns', iconsetDir, '-o', iconPath], { stdio: 'inherit' })
+if (process.platform === 'darwin') {
+  execFileSync('iconutil', ['-c', 'icns', iconsetDir, '-o', iconPath], { stdio: 'inherit' })
+}
 rmSync(iconsetDir, { recursive: true, force: true })
 rmSync(icoDir, { recursive: true, force: true })
