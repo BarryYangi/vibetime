@@ -1,7 +1,6 @@
-<h1 align="center">
-  <img src="packages/desktop/assets/app-icon-source.svg" alt="VibeTime icon" width="40" height="40" align="absmiddle" />
-  VibeTime
-</h1>
+<p align="center">
+  <img src="packages/desktop/assets/readme-wordmark.svg" alt="VibeTime" width="360" />
+</p>
 
 <p align="center">
   Local-first time tracking for AI coding agents.
