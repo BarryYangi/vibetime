@@ -1,8 +1,7 @@
-<p align="center">
-  <img src="packages/desktop/assets/app-icon-source.svg" alt="VibeTime icon" width="112" height="112" />
-</p>
-
-<h1 align="center">VibeTime</h1>
+<h1 align="center">
+  <img src="packages/desktop/assets/app-icon-source.svg" alt="VibeTime icon" width="40" height="40" />
+  VibeTime
+</h1>
 
 <p align="center">
   Local-first time tracking for AI coding agents.
@@ -23,17 +22,16 @@ agent-assisted work time go today?
 
 ## Download
 
-The first release is `2026.5.8`.
+Download the latest build from [GitHub Releases](https://github.com/BarryYangi/vibetime/releases/latest).
 
-- macOS Apple Silicon: [VibeTime-2026.5.8-arm64.dmg](https://github.com/BarryYangi/vibetime/releases/download/v2026.5.8/VibeTime-2026.5.8-arm64.dmg)
-- Windows x64 installer: [VibeTime-Setup-2026.5.8-x64.exe](https://github.com/BarryYangi/vibetime/releases/download/v2026.5.8/VibeTime-Setup-2026.5.8-x64.exe)
-- Release page: [v2026.5.8](https://github.com/BarryYangi/vibetime/releases/tag/v2026.5.8)
+- macOS Apple Silicon: download the latest `.dmg`
+- Windows x64: download the latest setup `.exe`
 
 ## Install
 
 ### macOS
 
-1. Download `VibeTime-2026.5.8-arm64.dmg`.
+1. Download the latest macOS `.dmg` from Releases.
 2. Open the DMG and drag `VibeTime.app` to `/Applications`.
 3. Launch VibeTime.
 4. Open Settings and enable the agents you want to track.
@@ -43,7 +41,7 @@ and choosing `Open` on first launch.
 
 ### Windows
 
-1. Download `VibeTime-Setup-2026.5.8-x64.exe`.
+1. Download the latest Windows x64 setup `.exe` from Releases.
 2. Run the installer.
 3. Open Settings and enable the agents you want to track.
 
