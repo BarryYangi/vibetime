@@ -1,60 +1,121 @@
-# vibetime
+# VibeTime
 
-Local-first macOS time tracker for AI coding agents (Claude Code / Codex / Cursor).
+Local-first time tracking for AI coding agents.
 
-## Workspace layout
+VibeTime runs quietly in the menu bar and records coding sessions from Claude Code,
+Codex, and Cursor. It is built for answering a simple question well: where did my
+agent-assisted work time go today?
 
-- `packages/core` — pure TypeScript: types, SQL DDL, project resolution. Zero runtime deps.
-- `packages/hook` — Bun-compiled hook and CLI binaries.
-- `packages/desktop` — Electron + React desktop shell.
+## What It Does
 
-## Scripts (run from repo root)
+- Tracks agent sessions and turns locally with SQLite.
+- Shows today's live activity, completed work, and active turns.
+- Provides history views with contribution-style heatmaps and useful project breakdowns.
+- Installs and removes hooks for Claude Code, Codex, and Cursor from the app settings.
+- Keeps data on your machine. No account, cloud sync, or hosted backend is required.
+- Ships a small CLI through `~/.vibetime/bin/vibetime` for local checks and exports.
 
-- `pnpm typecheck`
-- `pnpm lint`
-- `pnpm test`
-- `pnpm depcheck`
-- `pnpm verify:core-zero-deps`
-- `pnpm run ci` (all of the above — note: `pnpm ci` is reserved by pnpm itself, so use `pnpm run ci`)
+## Download
 
-## Build desktop apps
+The first release is `2026.5.8`.
 
-From the repo root:
+- macOS Apple Silicon: [VibeTime-2026.5.8-arm64.dmg](https://github.com/BarryYangi/vibetime/releases/download/v2026.5.8/VibeTime-2026.5.8-arm64.dmg)
+- Windows x64 installer: [VibeTime-Setup-2026.5.8-x64.exe](https://github.com/BarryYangi/vibetime/releases/download/v2026.5.8/VibeTime-Setup-2026.5.8-x64.exe)
+- Release page: [v2026.5.8](https://github.com/BarryYangi/vibetime/releases/tag/v2026.5.8)
 
-- `pnpm --filter @vibetime/desktop pack:mac` builds an unpacked arm64 `.app`.
-- `pnpm --filter @vibetime/desktop dist:mac` builds both `.app` and `.dmg`.
-- `pnpm --filter @vibetime/desktop pack:win` builds an unpacked Windows x64 app.
-- `pnpm --filter @vibetime/desktop dist:win` builds Windows x64 installer artifacts.
+## Install
 
-Artifacts are written under `packages/desktop/release/`.
+### macOS
 
-## Release versioning
+1. Download `VibeTime-2026.5.8-arm64.dmg`.
+2. Open the DMG and drag `VibeTime.app` to `/Applications`.
+3. Launch VibeTime.
+4. Open Settings and enable the agents you want to track.
 
-VibeTime uses semver-compatible date versions. The first release on May 8, 2026 is:
+The app is not notarized yet, so macOS may require right-clicking `VibeTime.app`
+and choosing `Open` on first launch.
+
+### Windows
+
+1. Download `VibeTime-Setup-2026.5.8-x64.exe`.
+2. Run the installer.
+3. Open Settings and enable the agents you want to track.
+
+Windows support currently targets x64.
+
+## Agent Notes
+
+### Codex
+
+VibeTime installs three Codex hooks:
+
+- `SessionStart`
+- `UserPromptSubmit`
+- `Stop`
+
+Codex may require one manual review step after installation. If Codex shows a
+message like `hooks need review`, open `/hooks` in Codex and approve the VibeTime
+hooks. This is Codex's safety boundary; VibeTime does not bypass it.
+
+VibeTime uses Codex's current inline `config.toml` hook format and removes its
+older entries from `~/.codex/hooks.json` to avoid mixed-source warnings.
+
+### Claude Code and Cursor
+
+Claude Code and Cursor hooks can be installed or removed from VibeTime Settings.
+VibeTime preserves unrelated user hooks.
+
+## Local Data
+
+VibeTime stores data under:
+
+- `~/.vibetime/data.db`
+- `~/.vibetime/config.toml`
+- `~/.vibetime/bin/vibetime`
+
+The database is local SQLite. You can remove VibeTime's hooks from Settings before
+uninstalling the app.
+
+## Development
+
+VibeTime is a pnpm workspace:
+
+- `packages/core` - pure TypeScript domain logic and SQLite schema
+- `packages/hook` - Bun-compiled hook and CLI binary
+- `packages/desktop` - Electron, React, and the tray/menu bar app
+
+Useful commands from the repo root:
+
+```sh
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm depcheck
+pnpm verify:core-zero-deps
+pnpm run ci
+```
+
+Desktop builds:
+
+```sh
+pnpm --filter @vibetime/desktop pack:mac
+pnpm --filter @vibetime/desktop dist:mac
+pnpm --filter @vibetime/desktop pack:win
+pnpm --filter @vibetime/desktop dist:win
+```
+
+Artifacts are written to `packages/desktop/release/`.
+
+## Release Versioning
+
+VibeTime uses date-based semver-compatible versions.
 
 - package version: `2026.5.8`
 - release tag: `v2026.5.8`
 
-Pushing a `v*` tag creates a GitHub Release and uploads macOS/Windows artifacts.
+Pushing a `v*` tag runs GitHub Actions, builds macOS and Windows packages, and
+uploads them to GitHub Releases.
 
-## Install and first launch
+## License
 
-1. Open `packages/desktop/release/VibeTime-2026.5.8-arm64.dmg`.
-2. Drag `VibeTime.app` to `/Applications`.
-3. First launch on macOS may require right-clicking `VibeTime.app`, then choosing `Open`.
-4. Open Settings and connect Claude Code, Codex, or Cursor.
-
-The packaged app includes two Bun-compiled binaries:
-
-- `Contents/Resources/bin/vibetime-hook` for agent hooks.
-- `Contents/Resources/bin/vibetime` for CLI subcommands.
-
-Useful packaged checks:
-
-- `codesign --verify --deep --strict --verbose=2 packages/desktop/release/mac-arm64/VibeTime.app`
-- `codesign -dv packages/desktop/release/mac-arm64/VibeTime.app`
-- `packages/desktop/release/mac-arm64/VibeTime.app/Contents/MacOS/VibeTime version`
-
-See `.planning/` for the full plan, requirements, and decisions.
-
-License: MIT.
+MIT
