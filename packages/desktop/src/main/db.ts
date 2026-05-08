@@ -683,6 +683,12 @@ export function queryAgentStatus(): AgentStatus[] {
     const content = readFileSync(path, 'utf-8')
     return /^\s*hooks\s*=\s*true\b/m.test(content)
   }
+  const hasCodexInlineHook = (): boolean => {
+    const path = `${process.env.HOME}/.codex/config.toml`
+    if (!existsSync(path)) return false
+    const content = readFileSync(path, 'utf-8')
+    return content.includes('[[hooks.UserPromptSubmit.hooks]]') && hasVibetimeCommand(content)
+  }
 
   function checkAgent(agent: string): boolean {
     try {
@@ -701,16 +707,7 @@ export function queryAgentStatus(): AgentStatus[] {
         }
         case 'codex': {
           if (!hasCodexHooksFeature()) return false
-          const path = `${process.env.HOME}/.codex/hooks.json`
-          if (!existsSync(path)) return false
-          const data = JSON.parse(readFileSync(path, 'utf-8'))
-          return Object.values((data.hooks ?? {}) as Record<string, unknown[]>).some((groups) =>
-            groups.some((group) =>
-              ((group as { hooks?: Array<{ command?: unknown }> }).hooks ?? []).some((hook) =>
-                hasVibetimeCommand(hook.command),
-              ),
-            ),
-          )
+          return hasCodexInlineHook()
         }
         case 'cursor': {
           const path = `${process.env.HOME}/.cursor/hooks.json`

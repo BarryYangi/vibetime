@@ -3,7 +3,7 @@
 // REC-02: stale sweep on CLI invocation.
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { existsSync, rmSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync } from 'node:fs'
 
 let testHome: string
 let originalHome: string
@@ -133,7 +133,9 @@ describe('runCli — install', () => {
   it('installs codex hooks', async () => {
     await runWithArgs('install', 'codex')
     expect(existsSync(`${testHome}/.codex/config.toml`)).toBe(true)
-    expect(existsSync(`${testHome}/.codex/hooks.json`)).toBe(true)
+    expect(readFileSync(`${testHome}/.codex/config.toml`, 'utf-8')).toContain(
+      '[[hooks.UserPromptSubmit.hooks]]',
+    )
   })
 
   it('installs cursor hooks', async () => {
