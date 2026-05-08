@@ -2,7 +2,7 @@
 // Uses bun:test — bun built-in test runner (CONTEXT.md D-TEST-HOOK).
 
 import { describe, expect, it } from 'bun:test'
-import { detectAgent } from './hook.js'
+import { detectAgent, normalizeProjectCwd, resolveHookProject } from './hook.js'
 
 // ── detectAgent — --source argument ───────────────────────────────────────
 
@@ -141,4 +141,45 @@ describe('detectAgent — property: never throws', () => {
       expect(result === null || ['claude-code', 'codex', 'cursor'].includes(result)).toBe(true)
     })
   }
+})
+
+// ── project resolution — cwd normalization ────────────────────────────────
+
+describe('normalizeProjectCwd', () => {
+  it('uses process cwd when agent reports only the current directory basename', () => {
+    expect(normalizeProjectCwd('vibetime', '/Users/barry/Documents/Project/i/vibetime')).toBe(
+      '/Users/barry/Documents/Project/i/vibetime',
+    )
+  })
+
+  it('resolves relative subdirectories against the hook process cwd', () => {
+    expect(normalizeProjectCwd('packages/hook', '/Users/barry/Documents/Project/i/vibetime')).toBe(
+      '/Users/barry/Documents/Project/i/vibetime/packages/hook',
+    )
+  })
+})
+
+describe('resolveHookProject', () => {
+  it('uses the current git worktree when Codex reports only a bare project name', () => {
+    const result = resolveHookProject({
+      rawCwd: 'vibetime',
+      currentCwd: '/Users/barry/Documents/Project/i/vibetime',
+      readGitRemoteUrl: (cwd) =>
+        cwd === '/Users/barry/Documents/Project/i/vibetime'
+          ? 'https://github.com/BarryYangi/vibetime.git'
+          : null,
+    })
+
+    expect(result).toBe('BarryYangi/vibetime')
+  })
+
+  it('keeps the normalized basename as fallback when a path has no remote', () => {
+    const result = resolveHookProject({
+      rawCwd: 'packages/hook',
+      currentCwd: '/Users/barry/Documents/Project/i/vibetime',
+      readGitRemoteUrl: () => null,
+    })
+
+    expect(result).toBe('hook')
+  })
 })

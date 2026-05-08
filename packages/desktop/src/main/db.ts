@@ -700,17 +700,12 @@ export function queryAgentStatus(): AgentStatus[] {
           )
         }
         case 'codex': {
-          const path = `${process.env.HOME}/.codex/hooks.json`
-          if (!existsSync(path)) return false
           if (!hasCodexHooksFeature()) return false
-          const data = JSON.parse(readFileSync(path, 'utf-8'))
-          return Object.values((data.hooks ?? {}) as Record<string, unknown[]>).some((groups) =>
-            groups.some((group) =>
-              ((group as { hooks?: Array<{ command?: unknown }> }).hooks ?? []).some((hook) =>
-                hasVibetimeCommand(hook.command),
-              ),
-            ),
-          )
+          const path = `${process.env.HOME}/.codex/config.toml`
+          const content = readFileSync(path, 'utf-8')
+          return content
+            .split('\n')
+            .some((line) => line.trimStart().startsWith('command =') && hasVibetimeCommand(line))
         }
         case 'cursor': {
           const path = `${process.env.HOME}/.cursor/hooks.json`

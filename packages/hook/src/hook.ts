@@ -5,6 +5,7 @@
 // REC-01: calls recoverOrphans on session_start.
 // Agent detection: --source arg first, then event name matching.
 
+import { basename, isAbsolute, resolve as resolvePath } from 'node:path'
 import type { Agent, NormalizedEvent } from '@vibetime/core'
 import { adaptClaudeCode, adaptCodex, adaptCursor, resolveProject } from '@vibetime/core'
 import { readConfig } from './config.js'
@@ -70,6 +71,36 @@ function getGitRemoteUrl(cwd: string): string | null {
   }
 }
 
+export function normalizeProjectCwd(rawCwd: string, currentCwd = process.cwd()): string {
+  const cwd = typeof rawCwd === 'string' ? rawCwd.trim() : ''
+
+  if (!cwd || cwd === '.') {
+    return currentCwd
+  }
+
+  if (currentCwd && !isAbsolute(cwd)) {
+    return cwd === basename(currentCwd) ? currentCwd : resolvePath(currentCwd, cwd)
+  }
+
+  return cwd
+}
+
+export function resolveHookProject(input: {
+  rawCwd: string
+  aliases?: Readonly<Record<string, string>>
+  currentCwd?: string
+  readGitRemoteUrl?: (cwd: string) => string | null
+}): string {
+  const cwd = normalizeProjectCwd(input.rawCwd, input.currentCwd ?? process.cwd())
+  const readGitRemoteUrl = input.readGitRemoteUrl ?? getGitRemoteUrl
+
+  return resolveProject({
+    cwd,
+    gitRemoteUrl: readGitRemoteUrl(cwd),
+    ...(input.aliases ? { aliases: input.aliases } : {}),
+  })
+}
+
 /**
  * Adapter dispatch map — maps Agent to the matching core adapter.
  */
@@ -131,11 +162,9 @@ export async function runHook(): Promise<void> {
 
     // 5. Resolve project (Phase 2 decision — hook layer post-processes via resolveProject)
     const config = readConfig()
-    const gitRemoteUrl = getGitRemoteUrl(event.project) // event.project is raw cwd from adapter
-    event.project = resolveProject({
-      cwd: event.project,
+    event.project = resolveHookProject({
+      rawCwd: event.project,
       aliases: config.projects,
-      gitRemoteUrl,
     })
 
     // 6. Persist to SQLite

@@ -54,6 +54,8 @@ function resolveHookCommandPath(): string {
 const CODEX_FEATURE_MARKER = '# vibetime-managed'
 const CODEX_MANAGED_SECTION_MARKER = '# vibetime-managed-section'
 const CODEX_FEATURE_KEY = 'hooks'
+const CODEX_HOOK_MARKER = '# vibetime-managed-codex-hook'
+const CODEX_HOOK_EVENTS = ['SessionStart', 'UserPromptSubmit', 'Stop'] as const
 
 function isVibetimeCommand(command: unknown): command is string {
   if (typeof command !== 'string') return false
@@ -101,6 +103,59 @@ function removeManagedCodexHooksFlag(configContent: string): string {
     'm',
   )
   return configContent.replace(managedLinePattern, '')
+}
+
+function tomlString(value: string): string {
+  return JSON.stringify(value)
+}
+
+function codexHookBlock(event: (typeof CODEX_HOOK_EVENTS)[number], command: string): string {
+  return `[[hooks.${event}]]
+${CODEX_HOOK_MARKER}
+
+[[hooks.${event}.hooks]]
+type = "command"
+command = ${tomlString(command)}
+`
+}
+
+function removeVibetimeCodexTomlHooks(configContent: string): string {
+  const lines = configContent.split('\n')
+  const next: string[] = []
+
+  for (let i = 0; i < lines.length; ) {
+    const start = /^\s*\[\[hooks\.(SessionStart|UserPromptSubmit|Stop)\]\]\s*$/.exec(lines[i] ?? '')
+    if (!start?.[1]) {
+      next.push(lines[i] ?? '')
+      i += 1
+      continue
+    }
+
+    const event = start[1]
+    const childTable = new RegExp(`^\\s*\\[\\[hooks\\.${event}\\.hooks\\]\\]\\s*$`)
+    let end = i + 1
+    while (end < lines.length) {
+      const line = lines[end] ?? ''
+      if (/^\s*\[/.test(line) && !childTable.test(line)) break
+      end += 1
+    }
+
+    const block = lines.slice(i, end)
+    const isManaged = block.some((line) => line.includes(CODEX_HOOK_MARKER))
+    const hasVibetime = block.some((line) => isVibetimeCommand(line))
+    if (!isManaged && !hasVibetime) {
+      next.push(...block)
+    }
+    i = end
+  }
+
+  return next.join('\n')
+}
+
+function ensureCodexTomlHooks(configContent: string, command: string): string {
+  const clean = removeVibetimeCodexTomlHooks(ensureCodexHooksEnabled(configContent))
+  const prefix = clean.length > 0 && !clean.endsWith('\n') ? '\n' : ''
+  return `${clean}${prefix}\n${CODEX_HOOK_EVENTS.map((event) => codexHookBlock(event, command)).join('\n')}`
 }
 
 /**
@@ -181,19 +236,17 @@ export function installClaudeCode(): void {
 
 /**
  * Install hooks for Codex CLI.
- * Configures ~/.codex/hooks.json and ~/.codex/config.toml.
+ * Configures ~/.codex/config.toml.
  * Idempotent — skips if vibetime hook already exists.
  */
 export function installCodex(): void {
-  const hooksPath = `${process.env.HOME}/.codex/hooks.json`
   const configPath = `${process.env.HOME}/.codex/config.toml`
   const hookBinaryPath = resolveHookCommandPath()
 
   try {
     // Ensure directory exists
-    mkdirSync(dirname(hooksPath), { recursive: true })
+    mkdirSync(dirname(configPath), { recursive: true })
 
-    // 1. Ensure config.toml has [features] hooks = true
     let configContent = ''
     if (existsSync(configPath)) {
       configContent = readFileSync(configPath, 'utf-8')
@@ -201,63 +254,11 @@ export function installCodex(): void {
       copyFileSync(configPath, `${configPath}.backup`)
     }
 
-    const nextConfigContent = ensureCodexHooksEnabled(configContent)
-    if (nextConfigContent !== configContent) {
-      configContent = nextConfigContent
-      writeFileSync(configPath, configContent)
-    }
-
-    // 2. Configure hooks.json
-    let hooksData: Record<string, unknown> = { hooks: {} }
-    if (existsSync(hooksPath)) {
-      try {
-        hooksData = JSON.parse(readFileSync(hooksPath, 'utf-8'))
-      } catch {
-        // Backup corrupted file
-        copyFileSync(hooksPath, `${hooksPath}.backup`)
-      }
-    }
-
-    // Backup before modification
-    if (existsSync(hooksPath)) {
-      copyFileSync(hooksPath, `${hooksPath}.backup`)
-    }
-
-    // Initialize hooks structure
-    const hooks = (hooksData.hooks ?? {}) as Record<string, unknown[]>
-    const events = ['SessionStart', 'UserPromptSubmit', 'Stop'] // No SessionEnd for Codex
     const command = `${hookBinaryPath} --source codex`
-
-    for (const event of events) {
-      const arr = (hooks[event] ?? []) as Array<{
-        hooks?: Array<{ type: string; command: string; timeout?: number }>
-      }>
-
-      let hasVibetime = false
-      for (const group of arr) {
-        if (!group.hooks?.some((h) => isVibetimeCommand(h.command))) continue
-        hasVibetime = true
-        group.hooks = group.hooks.map((hook) =>
-          isVibetimeCommand(hook.command)
-            ? { ...hook, type: 'command', command, timeout: 10 }
-            : hook,
-        )
-      }
-      if (hasVibetime) {
-        hooks[event] = arr
-        continue
-      }
-
-      // Add vibetime hook
-      arr.push({
-        hooks: [{ type: 'command', command, timeout: 10 }],
-      })
-
-      hooks[event] = arr
+    const nextConfigContent = ensureCodexTomlHooks(configContent, command)
+    if (nextConfigContent !== configContent) {
+      writeFileSync(configPath, nextConfigContent)
     }
-
-    hooksData.hooks = hooks
-    writeFileSync(hooksPath, JSON.stringify(hooksData, null, 2))
   } catch (err) {
     appendLog(`Error installing Codex hooks: ${err}`)
     throw err
@@ -432,7 +433,9 @@ export function uninstallCodex(): void {
 
     if (existsSync(configPath)) {
       const configContent = readFileSync(configPath, 'utf-8')
-      const nextConfigContent = removeManagedCodexHooksFlag(configContent)
+      const nextConfigContent = removeManagedCodexHooksFlag(
+        removeVibetimeCodexTomlHooks(configContent),
+      )
       if (nextConfigContent !== configContent) {
         copyFileSync(configPath, `${configPath}.backup`)
         writeFileSync(configPath, nextConfigContent)

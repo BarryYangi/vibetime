@@ -167,19 +167,17 @@ describe('installClaudeCode — happy paths', () => {
 })
 
 describe('installCodex — happy paths', () => {
-  it('creates hooks.json with 3 events (no SessionEnd)', () => {
+  it('writes config.toml hooks for 3 events (no SessionEnd)', () => {
     installCodex()
 
-    const hooksPath = `${testHome}/.codex/hooks.json`
-    expect(existsSync(hooksPath)).toBe(true)
+    const configPath = `${testHome}/.codex/config.toml`
+    const content = readFileSync(configPath, 'utf-8')
 
-    const hooksData = JSON.parse(readFileSync(hooksPath, 'utf-8'))
-    expect(hooksData.hooks).toBeDefined()
-    expect(hooksData.hooks.SessionStart).toBeDefined()
-    expect(hooksData.hooks.UserPromptSubmit).toBeDefined()
-    expect(hooksData.hooks.Stop).toBeDefined()
-    // No SessionEnd for Codex
-    expect(hooksData.hooks.SessionEnd).toBeUndefined()
+    expect(content).toContain('[[hooks.SessionStart]]')
+    expect(content).toContain('[[hooks.UserPromptSubmit]]')
+    expect(content).toContain('[[hooks.Stop]]')
+    expect(content).not.toContain('[[hooks.SessionEnd]]')
+    expect(content).toContain(`${testHome}/.vibetime/bin/vibetime --source codex`)
   })
 
   it('sets [features] hooks = true in config.toml', () => {
@@ -196,15 +194,11 @@ describe('installCodex — happy paths', () => {
     installCodex()
     installCodex()
 
-    const hooksPath = `${testHome}/.codex/hooks.json`
-    const hooksData = JSON.parse(readFileSync(hooksPath, 'utf-8'))
+    const configPath = `${testHome}/.codex/config.toml`
+    const content = readFileSync(configPath, 'utf-8')
 
     for (const event of ['SessionStart', 'UserPromptSubmit', 'Stop']) {
-      const vibetimeEntries = hooksData.hooks[event].filter(
-        (g: { hooks?: Array<{ command: string }> }) =>
-          g.hooks?.some((h) => isVibetimeHookCommand(h.command)),
-      )
-      expect(vibetimeEntries.length).toBe(1)
+      expect(content.match(new RegExp(`\\[\\[hooks\\.${event}\\]\\]`, 'g'))?.length).toBe(1)
     }
   })
 
@@ -215,17 +209,11 @@ describe('installCodex — happy paths', () => {
     process.env.VIBETIME_HOOK_BINARY = '/new/bin/vibetime'
     installCodex()
 
-    const hooksPath = `${testHome}/.codex/hooks.json`
-    const hooksData = JSON.parse(readFileSync(hooksPath, 'utf-8'))
+    const configPath = `${testHome}/.codex/config.toml`
+    const content = readFileSync(configPath, 'utf-8')
 
-    for (const event of ['SessionStart', 'UserPromptSubmit', 'Stop']) {
-      const vibetimeHooks = hooksData.hooks[event].flatMap(
-        (group: { hooks?: Array<{ command: string }> }) =>
-          group.hooks?.filter((hook) => isVibetimeHookCommand(hook.command)) ?? [],
-      )
-      expect(vibetimeHooks.length).toBe(1)
-      expect(vibetimeHooks[0].command).toBe(`${testHome}/.vibetime/bin/vibetime --source codex`)
-    }
+    expect(content.match(/--source codex/g)?.length).toBe(3)
+    expect(content).toContain(`${testHome}/.vibetime/bin/vibetime --source codex`)
   })
 
   it('marks hooks changes when enabling a previous false flag', () => {
@@ -241,13 +229,13 @@ describe('installCodex — happy paths', () => {
   })
 
   it('creates backup before modification', () => {
-    const hooksPath = `${testHome}/.codex/hooks.json`
+    const configPath = `${testHome}/.codex/config.toml`
     mkdirSync(`${testHome}/.codex`, { recursive: true })
-    writeFileSync(hooksPath, JSON.stringify({ hooks: {} }))
+    writeFileSync(configPath, '[features]\nhooks = true\n')
 
     installCodex()
 
-    expect(existsSync(`${hooksPath}.backup`)).toBe(true)
+    expect(existsSync(`${configPath}.backup`)).toBe(true)
   })
 })
 
@@ -334,7 +322,7 @@ describe('installAgent — dispatch', () => {
 
   it('dispatches codex correctly', () => {
     installAgent('codex')
-    expect(existsSync(`${testHome}/.codex/hooks.json`)).toBe(true)
+    expect(existsSync(`${testHome}/.codex/config.toml`)).toBe(true)
   })
 
   it('dispatches cursor correctly', () => {
@@ -357,12 +345,15 @@ describe('installAgent — dispatch', () => {
     installAgent('cursor')
 
     const claudeSettings = JSON.parse(readFileSync(`${testHome}/.claude/settings.json`, 'utf-8'))
-    const codexHooks = JSON.parse(readFileSync(`${testHome}/.codex/hooks.json`, 'utf-8'))
+    const codexConfig = readFileSync(`${testHome}/.codex/config.toml`, 'utf-8')
     const cursorHooks = JSON.parse(readFileSync(`${testHome}/.cursor/hooks.json`, 'utf-8'))
+    const codexCommand =
+      /^command = "(.+ --source codex)"$/m.exec(codexConfig)?.[1] ??
+      `${testHome}/.vibetime/bin/vibetime --source codex`
 
     const commands = [
       claudeSettings.hooks.UserPromptSubmit[0].hooks[0].command,
-      codexHooks.hooks.UserPromptSubmit[0].hooks[0].command,
+      codexCommand,
       cursorHooks.hooks.beforeSubmitPrompt[0].command,
     ]
 
@@ -416,21 +407,10 @@ describe('uninstall — removes only vibetime hooks', () => {
     installCodex()
     uninstallCodex()
 
-    const hooksPath = `${testHome}/.codex/hooks.json`
-    const hooksData = JSON.parse(readFileSync(hooksPath, 'utf-8'))
-    const hasVibetime = Object.values(hooksData.hooks as Record<string, unknown[]>).some((groups) =>
-      groups.some((group) =>
-        ((group as { hooks?: Array<{ command: string }> }).hooks ?? []).some((hook) =>
-          isVibetimeHookCommand(hook.command),
-        ),
-      ),
-    )
-
-    expect(hasVibetime).toBe(false)
     expect(readFileSync(configPath, 'utf-8')).toBe(
       '[features]\nhooks = false\nother_flag = false\n',
     )
-    expect(existsSync(`${hooksPath}.backup`)).toBe(true)
+    expect(existsSync(`${configPath}.backup`)).toBe(true)
   })
 
   it('removes Cursor vibetime hooks and preserves unrelated hooks', () => {
