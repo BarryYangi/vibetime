@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
-import type { AppPreferences } from '../../../shared/ipc-types'
+import type { AppPreferences, CliInstallStatus } from '../../../shared/ipc-types'
 import { configAtom, store } from '../store'
 
 const AGENTS = [
@@ -53,6 +53,14 @@ function ConnectAgents({ onSuccessfulConnection }: { onSuccessfulConnection: () 
     setActiveAction(null)
   }
 
+  const handleToggle = (agent: string, checked: boolean) => {
+    if (checked) {
+      void handleInstall(agent)
+      return
+    }
+    void handleUninstall(agent)
+  }
+
   return (
     <section className="space-y-3">
       <h2 className="font-heading font-semibold text-[13px] tracking-[-0.01em] text-foreground">
@@ -68,10 +76,12 @@ function ConnectAgents({ onSuccessfulConnection }: { onSuccessfulConnection: () 
         <CardContent className="flex flex-col gap-2">
           {AGENTS.map(({ id, name, description }) => {
             const status = statuses.find((s) => s.agent === id)
+            const statusKnown = status !== undefined
             const isInstalled = status?.installed ?? false
             const isInstalling = activeAction === `${id}:install`
             const isUninstalling = activeAction === `${id}:uninstall`
             const isBusy = isInstalling || isUninstalling
+            const labelId = `agent-hook-${id}`
 
             return (
               <div
@@ -84,7 +94,9 @@ function ConnectAgents({ onSuccessfulConnection }: { onSuccessfulConnection: () 
                       aria-hidden="true"
                       className={`size-2 shrink-0 rounded-full ${isInstalled ? 'bg-success' : 'bg-muted-foreground'}`}
                     />
-                    <div className="text-[15px] font-medium leading-snug">{name}</div>
+                    <div className="text-[15px] font-medium leading-snug" id={labelId}>
+                      {name}
+                    </div>
                     <span className="text-[11px] text-muted-foreground leading-snug">
                       {isInstalled ? 'Hook installed' : 'Not installed'}
                     </span>
@@ -94,27 +106,12 @@ function ConnectAgents({ onSuccessfulConnection }: { onSuccessfulConnection: () 
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center justify-end gap-2">
-                  {isInstalled ? (
-                    <Button
-                      onClick={() => handleUninstall(id)}
-                      disabled={isBusy}
-                      loading={isUninstalling}
-                      size="sm"
-                      variant="ghost"
-                      className="text-destructive-foreground"
-                    >
-                      Uninstall Hook
-                    </Button>
-                  ) : (
-                    <Button
-                      onClick={() => handleInstall(id)}
-                      disabled={isBusy}
-                      loading={isInstalling}
-                      size="sm"
-                    >
-                      Install
-                    </Button>
-                  )}
+                  <Switch
+                    aria-labelledby={labelId}
+                    checked={isInstalled}
+                    disabled={isBusy || !statusKnown}
+                    onCheckedChange={(checked) => handleToggle(id, checked)}
+                  />
                 </div>
               </div>
             )
@@ -225,6 +222,98 @@ function AppPreferencesSection({
                   Not now
                 </Button>
               </div>
+            </div>
+          )}
+
+          {error && (
+            <div className="rounded-lg bg-destructive/8 px-3 py-2 text-[13px] text-destructive-foreground leading-snug">
+              {error}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </section>
+  )
+}
+
+function displayHomePath(path: string): string {
+  return path.replace(/^\/Users\/[^/]+/, '~')
+}
+
+function CliSection() {
+  const cliLabelId = useId()
+  const [status, setStatus] = useState<CliInstallStatus | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const refreshStatus = useCallback(async () => {
+    const result = await window.api.invoke('getCliInstallStatus')
+    if (result.ok) {
+      setStatus(result.data)
+      setError(null)
+    } else {
+      setError(result.error)
+    }
+  }, [])
+
+  useEffect(() => {
+    refreshStatus()
+  }, [refreshStatus])
+
+  const updateCli = async (checked: boolean) => {
+    setSaving(true)
+    setError(null)
+    const result = await window.api.invoke(checked ? 'installCli' : 'uninstallCli')
+    if (result.ok) {
+      setStatus(result.data)
+    } else {
+      setError(result.error)
+      await refreshStatus()
+    }
+    setSaving(false)
+  }
+
+  const installed = status?.installed ?? false
+
+  return (
+    <section className="space-y-3">
+      <h2 className="font-heading font-semibold text-[13px] tracking-[-0.01em] text-foreground">
+        Command line
+      </h2>
+      <Card>
+        <CardHeader>
+          <CardTitle>CLI</CardTitle>
+          <CardDescription>Expose the stable VibeTime command in your shell.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3 rounded-xl bg-muted/35 p-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="text-[15px] font-medium leading-snug" id={cliLabelId}>
+                Install CLI
+              </div>
+              <p className="mt-1 break-all text-[13px] text-muted-foreground leading-snug">
+                {status
+                  ? `${displayHomePath(status.linkPath)} -> ${displayHomePath(status.targetPath)}`
+                  : 'Checking CLI link...'}
+              </p>
+            </div>
+            <Switch
+              aria-labelledby={cliLabelId}
+              checked={installed}
+              disabled={!status || saving || status.conflict}
+              onCheckedChange={updateCli}
+            />
+          </div>
+
+          {status && !status.binDirInPath && (
+            <div className="rounded-lg bg-muted/35 px-3 py-2 text-[13px] text-muted-foreground leading-snug">
+              Add {displayHomePath(status.binDir)} to PATH to run vibetime from any shell.
+            </div>
+          )}
+
+          {status?.conflict && (
+            <div className="rounded-lg bg-destructive/8 px-3 py-2 text-[13px] text-destructive-foreground leading-snug">
+              {displayHomePath(status.linkPath)} already exists and is not managed by VibeTime.
             </div>
           )}
 
@@ -360,10 +449,10 @@ function About() {
   const [dbPath, setDbPath] = useState('...')
 
   useEffect(() => {
-    window.api.invoke('getConfig').then((result) => {
+    window.api.invoke('getAppInfo').then((result) => {
       if (result.ok) {
-        setVersion('0.0.0-dev')
-        setDbPath('~/.vibetime/data.db')
+        setVersion(result.data.version)
+        setDbPath(displayHomePath(result.data.dbPath))
       }
     })
   }, [])
@@ -414,6 +503,7 @@ export default function Settings() {
       </header>
       <div className="flex flex-col gap-12">
         <AppPreferencesSection key={promptKey} onReadyToPrompt={handleReadyToPrompt} />
+        <CliSection />
         <ConnectAgents onSuccessfulConnection={maybePromptOpenAtLogin} />
         <ProjectAliases />
         <About />

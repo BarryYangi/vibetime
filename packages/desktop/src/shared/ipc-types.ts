@@ -114,6 +114,20 @@ export interface AppPreferences {
   lastView: string
 }
 
+export interface CliInstallStatus {
+  installed: boolean
+  linkPath: string
+  targetPath: string
+  binDir: string
+  binDirInPath: boolean
+  conflict: boolean
+}
+
+export interface AppInfo {
+  version: string
+  dbPath: string
+}
+
 export interface IpcMethods {
   getTodayLiveState: { args: undefined; result: TodayLiveState }
   getHistorySummary: { args: { periodDays: 7 | 30 | 90 | 365 }; result: HistorySummary }
@@ -123,6 +137,10 @@ export interface IpcMethods {
   updateConfig: { args: Partial<VibetimeConfig>; result: undefined }
   getAppPreferences: { args: undefined; result: AppPreferences }
   updateAppPreferences: { args: Partial<AppPreferences>; result: AppPreferences }
+  getCliInstallStatus: { args: undefined; result: CliInstallStatus }
+  installCli: { args: undefined; result: CliInstallStatus }
+  uninstallCli: { args: undefined; result: CliInstallStatus }
+  getAppInfo: { args: undefined; result: AppInfo }
   showMainWindow: { args: { route?: string }; result: undefined }
   installAgent: { args: { agent: string }; result: undefined }
   uninstallAgent: { args: { agent: string }; result: undefined }

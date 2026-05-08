@@ -4,8 +4,16 @@
 // All operations backed up before modification; existing hooks preserved.
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import {
+  type CliInstallStatus,
+  ensureManagedCliShim,
+  getCliInstallStatus,
+  getManagedCliPath,
+  installUserCli,
+  uninstallUserCli,
+} from './cli-link.js'
 import { appendLog } from './log.js'
 
 export function resolveHookBinaryPath(): string {
@@ -18,6 +26,11 @@ export function resolveHookBinaryPath(): string {
     if (existsSync(packagedCliPath)) return packagedCliPath
   }
 
+  const execPath = process.execPath
+  if (/^vibetime(?:\.exe)?$/i.test(basename(execPath)) && existsSync(execPath)) {
+    return execPath
+  }
+
   const moduleDir = dirname(fileURLToPath(import.meta.url))
   const localCliPath = join(moduleDir, '..', cliBinaryName)
   if (existsSync(localCliPath)) return localCliPath
@@ -25,44 +38,37 @@ export function resolveHookBinaryPath(): string {
   return localCliPath
 }
 
+export type { CliInstallStatus }
+export {
+  ensureManagedCliShim,
+  getCliInstallStatus,
+  getManagedCliPath,
+  installUserCli,
+  uninstallUserCli,
+}
+
+function resolveHookCommandPath(): string {
+  return ensureManagedCliShim()
+}
+
 const CODEX_FEATURE_MARKER = '# vibetime-managed'
 const CODEX_MANAGED_SECTION_MARKER = '# vibetime-managed-section'
 const CODEX_FEATURE_KEY = 'hooks'
-const CODEX_FEATURE_KEY_PATTERN = '(?:hooks|codex_hooks)'
 
 function isVibetimeCommand(command: unknown): command is string {
   if (typeof command !== 'string') return false
-  return /\bvibetime(?:\.exe)?\b/i.test(command) && command.includes('--source')
+  return /\bvibetime(?:\.(?:exe|cmd))?\b/i.test(command) && command.includes('--source')
 }
 
 function ensureCodexHooksEnabled(configContent: string): string {
-  const removeLegacyFlags = (content: string) =>
-    content.replace(/^\s*codex_hooks\s*=\s*(?:true|false)\b.*(?:\n|$)/gm, '')
-
   if (/^\s*hooks\s*=\s*true\b/m.test(configContent)) {
-    return removeLegacyFlags(configContent)
+    return configContent
   }
 
   const managedTrueLine = `${CODEX_FEATURE_KEY} = true ${CODEX_FEATURE_MARKER}`
   const falseFlagPattern = /^(\s*)hooks\s*=\s*false\b.*$/m
   if (falseFlagPattern.test(configContent)) {
-    return removeLegacyFlags(
-      configContent.replace(falseFlagPattern, `$1${managedTrueLine}: previous=false`),
-    )
-  }
-
-  const legacyTrueFlagPattern = /^(\s*)codex_hooks\s*=\s*true\b.*$/m
-  if (legacyTrueFlagPattern.test(configContent)) {
-    return removeLegacyFlags(
-      configContent.replace(legacyTrueFlagPattern, `$1${CODEX_FEATURE_KEY} = true`),
-    )
-  }
-
-  const legacyFalseFlagPattern = /^(\s*)codex_hooks\s*=\s*false\b.*$/m
-  if (legacyFalseFlagPattern.test(configContent)) {
-    return removeLegacyFlags(
-      configContent.replace(legacyFalseFlagPattern, `$1${managedTrueLine}: previous=false`),
-    )
+    return configContent.replace(falseFlagPattern, `$1${managedTrueLine}: previous=false`)
   }
 
   if (configContent.includes('[features]')) {
@@ -75,7 +81,7 @@ function ensureCodexHooksEnabled(configContent: string): string {
 
 function removeManagedCodexHooksFlag(configContent: string): string {
   const managedSectionPattern = new RegExp(
-    `\\n?\\[features\\]\\n# vibetime-managed-section\\n\\s*${CODEX_FEATURE_KEY_PATTERN}\\s*=\\s*true\\s*# vibetime-managed[^\\n]*(?:\\n|$)`,
+    `\\n?\\[features\\]\\n# vibetime-managed-section\\n\\s*${CODEX_FEATURE_KEY}\\s*=\\s*true\\s*# vibetime-managed[^\\n]*(?:\\n|$)`,
     'm',
   )
   if (managedSectionPattern.test(configContent)) {
@@ -83,7 +89,7 @@ function removeManagedCodexHooksFlag(configContent: string): string {
   }
 
   const previousFalsePattern = new RegExp(
-    `^(\\s*)${CODEX_FEATURE_KEY_PATTERN}\\s*=\\s*true\\s*#\\s*vibetime-managed:\\s*previous=false[^\\n]*$`,
+    `^(\\s*)${CODEX_FEATURE_KEY}\\s*=\\s*true\\s*#\\s*vibetime-managed:\\s*previous=false[^\\n]*$`,
     'm',
   )
   if (previousFalsePattern.test(configContent)) {
@@ -91,7 +97,7 @@ function removeManagedCodexHooksFlag(configContent: string): string {
   }
 
   const managedLinePattern = new RegExp(
-    `^\\s*${CODEX_FEATURE_KEY_PATTERN}\\s*=\\s*true\\s*#\\s*vibetime-managed[^\\n]*(?:\\n|$)`,
+    `^\\s*${CODEX_FEATURE_KEY}\\s*=\\s*true\\s*#\\s*vibetime-managed[^\\n]*(?:\\n|$)`,
     'm',
   )
   return configContent.replace(managedLinePattern, '')
@@ -104,7 +110,7 @@ function removeManagedCodexHooksFlag(configContent: string): string {
  */
 export function installClaudeCode(): void {
   const settingsPath = `${process.env.HOME}/.claude/settings.json`
-  const hookBinaryPath = resolveHookBinaryPath()
+  const hookBinaryPath = resolveHookCommandPath()
 
   try {
     // Ensure directory exists
@@ -181,7 +187,7 @@ export function installClaudeCode(): void {
 export function installCodex(): void {
   const hooksPath = `${process.env.HOME}/.codex/hooks.json`
   const configPath = `${process.env.HOME}/.codex/config.toml`
-  const hookBinaryPath = resolveHookBinaryPath()
+  const hookBinaryPath = resolveHookCommandPath()
 
   try {
     // Ensure directory exists
@@ -265,7 +271,7 @@ export function installCodex(): void {
  */
 export function installCursor(): void {
   const hooksPath = `${process.env.HOME}/.cursor/hooks.json`
-  const hookBinaryPath = resolveHookBinaryPath()
+  const hookBinaryPath = resolveHookCommandPath()
 
   try {
     // Ensure directory exists

@@ -8,10 +8,9 @@
   "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
-    "predev": "pnpm run patch:electron-name && pnpm --filter @vibetime/hook build && pnpm run rebuild:native",
+    "predev": "pnpm --filter @vibetime/hook build && pnpm run rebuild:native",
     "dev": "electron-vite dev",
     "generate:icons": "node scripts/generate-app-icon.mjs",
-    "patch:electron-name": "node scripts/patch-electron-app-name.mjs",
     "prebuild": "pnpm --filter @vibetime/hook build",
     "build": "electron-vite build",
     "pack:mac": "pnpm run generate:icons && pnpm run build && electron-builder --mac --arm64 --dir",

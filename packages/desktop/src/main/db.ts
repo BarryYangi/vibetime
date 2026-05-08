@@ -9,6 +9,7 @@ import {
   DDL_OPEN_TURNS,
   durationWithinWindow,
 } from '@vibetime/core'
+import { getManagedCliPath } from '@vibetime/hook/install'
 import Database from 'better-sqlite3'
 import { BrowserWindow } from 'electron'
 import type {
@@ -670,15 +671,17 @@ export function queryTodayLiveState(): TodayLiveState {
 
 export function queryAgentStatus(): AgentStatus[] {
   const agents = ['claude-code', 'codex', 'cursor'] as const
+  const managedCliPath = getManagedCliPath()
   const hasVibetimeCommand = (command: unknown): command is string => {
     if (typeof command !== 'string') return false
-    return /\bvibetime(?:\.exe)?\b/i.test(command) && command.includes('--source')
+    if (!existsSync(managedCliPath)) return false
+    return command.includes(managedCliPath) && command.includes('--source')
   }
   const hasCodexHooksFeature = (): boolean => {
     const path = `${process.env.HOME}/.codex/config.toml`
     if (!existsSync(path)) return false
     const content = readFileSync(path, 'utf-8')
-    return /^\s*(?:hooks|codex_hooks)\s*=\s*true\b/m.test(content)
+    return /^\s*hooks\s*=\s*true\b/m.test(content)
   }
 
   function checkAgent(agent: string): boolean {

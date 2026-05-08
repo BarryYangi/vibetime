@@ -1,5 +1,13 @@
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { readConfig, writeConfig } from '@vibetime/hook/config'
-import { installAgent, uninstallAgent } from '@vibetime/hook/install'
+import {
+  getCliInstallStatus,
+  installAgent,
+  installUserCli,
+  uninstallAgent,
+  uninstallUserCli,
+} from '@vibetime/hook/install'
 import { app, ipcMain } from 'electron'
 import type { AppPreferences, IpcResult, VibetimeConfig } from '../shared/ipc-types.js'
 import {
@@ -144,6 +152,56 @@ export function registerIpcHandlers(
         })
         writeConfig(next)
         return { ok: true, data: appPreferencesFromConfig(next) }
+      } catch (err) {
+        return { ok: false, error: String(err) }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'getCliInstallStatus',
+    async (): Promise<IpcResult<ReturnType<typeof getCliInstallStatus>>> => {
+      try {
+        return { ok: true, data: getCliInstallStatus() }
+      } catch (err) {
+        return { ok: false, error: String(err) }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'installCli',
+    async (): Promise<IpcResult<ReturnType<typeof getCliInstallStatus>>> => {
+      try {
+        return { ok: true, data: installUserCli() }
+      } catch (err) {
+        return { ok: false, error: String(err) }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'uninstallCli',
+    async (): Promise<IpcResult<ReturnType<typeof getCliInstallStatus>>> => {
+      try {
+        return { ok: true, data: uninstallUserCli() }
+      } catch (err) {
+        return { ok: false, error: String(err) }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'getAppInfo',
+    async (): Promise<IpcResult<{ version: string; dbPath: string }>> => {
+      try {
+        return {
+          ok: true,
+          data: {
+            version: app.getVersion(),
+            dbPath: join(homedir(), '.vibetime', 'data.db'),
+          },
+        }
       } catch (err) {
         return { ok: false, error: String(err) }
       }
