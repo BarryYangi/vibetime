@@ -133,6 +133,7 @@ describe('runCli — install', () => {
   it('installs codex hooks', async () => {
     await runWithArgs('install', 'codex')
     expect(existsSync(`${testHome}/.codex/config.toml`)).toBe(true)
+    expect(existsSync(`${testHome}/.codex/hooks.json`)).toBe(true)
   })
 
   it('installs cursor hooks', async () => {
