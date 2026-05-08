@@ -133,7 +133,7 @@ jobs:
         run: |
           test -f packages/desktop/build/icon.ico
           test -f packages/desktop/release/win-unpacked/resources/bin/vibetime.exe
-          test -f packages/desktop/release/win-unpacked/resources/bin/vibetime-hook.exe
+          test ! -f packages/desktop/release/win-unpacked/resources/bin/vibetime-hook.exe
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
@@ -176,4 +176,5 @@ jobs:
           name: VibeTime ${{ github.ref_name }}
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, '-') }}
+          overwrite_files: true
           files: release-assets/*

@@ -1,7 +1,9 @@
 // Phase 3 constants — paths, limits, and version.
 // BUILD_VERSION is injected at compile time via bun build --define.
 
-export const VERSION = /* BUILD_VERSION via --define */ '0.0.0-dev'
+declare const BUILD_VERSION: string | undefined
+
+export const VERSION = typeof BUILD_VERSION === 'string' ? BUILD_VERSION : '0.0.0-dev'
 export const DB_PATH = `${process.env.HOME}/.vibetime/data.db`
 export const LOG_PATH = `${process.env.HOME}/.vibetime/hook.log`
 export const CONFIG_PATH = `${process.env.HOME}/.vibetime/config.toml`

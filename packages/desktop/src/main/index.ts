@@ -219,29 +219,17 @@ function resolvePackagedCliBinary(): string | null {
   ])
 }
 
-function resolvePackagedHookBinary(): string | null {
-  const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath
-  const binaryName = platformBinaryName('vibetime-hook')
-  return firstExistingPath([
-    ...(process.env.VIBETIME_HOOK_BINARY ? [process.env.VIBETIME_HOOK_BINARY] : []),
-    ...(resourcesPath ? [join(resourcesPath, 'bin', binaryName)] : []),
-    join(__dirname, '../../../hook', binaryName),
-    join(__dirname, '../../../hook/vibetime-hook'),
-  ])
-}
-
 if (isCliMode) {
   const cliBinaryPath = resolvePackagedCliBinary()
   if (!cliBinaryPath) {
     console.error('Error: VibeTime CLI binary is missing from the app bundle.')
     app.exit(1)
   } else {
-    const hookBinaryPath = resolvePackagedHookBinary()
     const result = spawnSync(cliBinaryPath, cliArgs, {
       stdio: 'inherit',
       env: {
         ...process.env,
-        ...(hookBinaryPath ? { VIBETIME_HOOK_BINARY: hookBinaryPath } : {}),
+        VIBETIME_HOOK_BINARY: cliBinaryPath,
       },
     })
 

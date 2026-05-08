@@ -35,21 +35,6 @@ importers:
 
   packages/desktop:
     dependencies:
-      '@base-ui/react':
-        specifier: ^1.4.1
-        version: 1.4.1(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
-      '@fontsource-variable/inter':
-        specifier: ^5.2.8
-        version: 5.2.8
-      '@fontsource/sn-pro':
-        specifier: ^5.2.6
-        version: 5.2.6
-      '@number-flow/react':
-        specifier: ^0.6.0
-        version: 0.6.0(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
-      '@radix-ui/colors':
-        specifier: ^3.0.0
-        version: 3.0.0
       '@vibetime/core':
         specifier: workspace:*
         version: link:../core
@@ -59,6 +44,40 @@ importers:
       better-sqlite3:
         specifier: ^12.9.0
         version: 12.9.0
+    devDependencies:
+      '@base-ui/react':
+        specifier: ^1.4.1
+        version: 1.4.1(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      '@electron/rebuild':
+        specifier: ^4.0.4
+        version: 4.0.4
+      '@fontsource/sn-pro':
+        specifier: ^5.2.6
+        version: 5.2.6
+      '@number-flow/react':
+        specifier: ^0.6.0
+        version: 0.6.0(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      '@radix-ui/colors':
+        specifier: ^3.0.0
+        version: 3.0.0
+      '@tailwindcss/vite':
+        specifier: ^4.2.4
+        version: 4.2.4(vite@8.0.10(@types/node@22.19.17)(esbuild@0.27.7)(jiti@2.6.1))
+      '@types/better-sqlite3':
+        specifier: ^7.6.13
+        version: 7.6.13
+      '@types/node':
+        specifier: ^22
+        version: 22.19.17
+      '@types/react':
+        specifier: ^19
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19
+        version: 19.2.3(@types/react@19.2.14)
+      '@vitejs/plugin-react':
+        specifier: ^6.0.1
+        version: 6.0.1(vite@8.0.10(@types/node@22.19.17)(esbuild@0.27.7)(jiti@2.6.1))
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -89,28 +108,6 @@ importers:
       tailwind-merge:
         specifier: ^3.5.0
         version: 3.5.0
-    devDependencies:
-      '@electron/rebuild':
-        specifier: ^4.0.4
-        version: 4.0.4
-      '@tailwindcss/vite':
-        specifier: ^4.2.4
-        version: 4.2.4(vite@8.0.10(@types/node@22.19.17)(esbuild@0.27.7)(jiti@2.6.1))
-      '@types/better-sqlite3':
-        specifier: ^7.6.13
-        version: 7.6.13
-      '@types/node':
-        specifier: ^22
-        version: 22.19.17
-      '@types/react':
-        specifier: ^19
-        version: 19.2.14
-      '@types/react-dom':
-        specifier: ^19
-        version: 19.2.3(@types/react@19.2.14)
-      '@vitejs/plugin-react':
-        specifier: ^6.0.1
-        version: 6.0.1(vite@8.0.10(@types/node@22.19.17)(esbuild@0.27.7)(jiti@2.6.1))
       electron:
         specifier: ^41.3.0
         version: 41.3.0
@@ -697,9 +694,6 @@ packages:
 
   '@floating-ui/utils@0.2.11':
     resolution: {integrity: sha512-RiB/yIh78pcIxl6lLMG0CgBXAZ2Y0eVHqMPYugu+9U0AeT6YBeiJpf7lbdJNIugFP5SIjwNRgo4DhR1Qxi26Gg==}
-
-  '@fontsource-variable/inter@5.2.8':
-    resolution: {integrity: sha512-kOfP2D+ykbcX/P3IFnokOhVRNoTozo5/JxhAIVYLpea/UBmCQ/YWPBfWIDuBImXX/15KH+eKh4xpEUyS2sQQGQ==}
 
   '@fontsource/sn-pro@5.2.6':
     resolution: {integrity: sha512-oBhp9tiPQdIoHqnREbbbIq7WzT9ZZZAIwBGMmT7RQ0Kb9AfIhjj4DE6Cdd1WI71QhBx1hhVR2g9fGZPWpYVP+g==}
@@ -3274,8 +3268,6 @@ snapshots:
       react-dom: 19.2.5(react@19.2.5)
 
   '@floating-ui/utils@0.2.11': {}
-
-  '@fontsource-variable/inter@5.2.8': {}
 
   '@fontsource/sn-pro@5.2.6': {}
 

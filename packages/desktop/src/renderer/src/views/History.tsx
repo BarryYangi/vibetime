@@ -1,6 +1,6 @@
-import * as echarts from 'echarts'
 import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { type EChartsCoreOption, echarts } from '@/charts/echarts'
 import { PageShell } from '@/components/PageShell'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
@@ -89,10 +89,7 @@ function quantile(values: number[], q: number): number {
   return (values[base] ?? 0) + rest * (next - (values[base] ?? 0))
 }
 
-function useChart(
-  ref: React.RefObject<HTMLDivElement | null>,
-  options: echarts.EChartsCoreOption | null,
-) {
+function useChart(ref: React.RefObject<HTMLDivElement | null>, options: EChartsCoreOption | null) {
   useEffect(() => {
     if (!ref.current || !options) return
     const chart = echarts.init(ref.current, 'cossNeutral')
@@ -110,7 +107,7 @@ function CalendarHeatmap({ summary }: { summary: HistorySummary }) {
   const ref = useRef<HTMLDivElement>(null)
   const values = summary.calendar.map((day) => [day.date, day.total])
   const max = Math.max(1, ...values.map(([, total]) => Number(total)))
-  const option = useMemo<echarts.EChartsCoreOption>(
+  const option = useMemo<EChartsCoreOption>(
     () => ({
       stateAnimation: { duration: 0 },
       tooltip: {
@@ -167,7 +164,7 @@ function CalendarHeatmap({ summary }: { summary: HistorySummary }) {
 
 function TrendChart({ summary }: { summary: HistorySummary }) {
   const ref = useRef<HTMLDivElement>(null)
-  const option = useMemo<echarts.EChartsCoreOption>(
+  const option = useMemo<EChartsCoreOption>(
     () => ({
       color: chartPalette,
       tooltip: {
@@ -247,7 +244,7 @@ function ProjectShareChart({ summary }: { summary: HistorySummary }) {
     [summary.topProjects],
   )
   const total = rows.reduce((sum, row) => sum + row.total, 0)
-  const option = useMemo<echarts.EChartsCoreOption>(
+  const option = useMemo<EChartsCoreOption>(
     () => ({
       color: ['#262626'],
       tooltip: {
@@ -304,7 +301,7 @@ function ProjectShareChart({ summary }: { summary: HistorySummary }) {
 function HourlyActivityHeatmap({ summary }: { summary: HistorySummary }) {
   const ref = useRef<HTMLDivElement>(null)
   const max = Math.max(1, ...summary.hourlyMatrix.map((cell) => cell.total))
-  const option = useMemo<echarts.EChartsCoreOption>(
+  const option = useMemo<EChartsCoreOption>(
     () => ({
       stateAnimation: { duration: 0 },
       tooltip: {
@@ -374,7 +371,7 @@ function TurnLengthBuckets({ summary }: { summary: HistorySummary }) {
     })
   }, [summary.turnDurations])
   const totalTurns = buckets.reduce((sum, bucket) => sum + bucket.count, 0)
-  const option = useMemo<echarts.EChartsCoreOption>(
+  const option = useMemo<EChartsCoreOption>(
     () => ({
       color: ['#2563eb'],
       tooltip: {

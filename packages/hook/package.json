@@ -13,7 +13,7 @@
   "scripts": {
     "test": "pnpm --filter @vibetime/core build && bun test src",
     "build": "pnpm --filter @vibetime/core build && pnpm run build:js && pnpm run build:bin",
-    "build:js": "bun build src/index.ts src/cli.ts src/config.ts src/install.ts --outdir dist --target=node --format=esm --packages=external",
+    "build:js": "node scripts/clean-dist.mjs && tsc -b --force && bun build src/index.ts src/cli.ts src/config.ts src/install.ts --outdir dist --target=node --format=esm --packages=external",
     "build:bin": "node scripts/build-binaries.mjs"
   },
   "dependencies": {

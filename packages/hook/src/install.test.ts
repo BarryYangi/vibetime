@@ -22,6 +22,10 @@ let originalResourcesPath: string | undefined
 
 const processWithResources = process as NodeJS.Process & { resourcesPath?: string }
 
+function isVibetimeHookCommand(command: string): boolean {
+  return /\bvibetime(?:\.exe)?\b/i.test(command) && command.includes('--source')
+}
+
 beforeEach(() => {
   // Save original HOME and create isolated test directory
   originalHome = process.env.HOME ?? ''
@@ -53,13 +57,13 @@ afterEach(() => {
 
 describe('resolveHookBinaryPath', () => {
   it('prefers explicit environment override', () => {
-    process.env.VIBETIME_HOOK_BINARY = '/tmp/custom-vibetime-hook'
-    expect(resolveHookBinaryPath()).toBe('/tmp/custom-vibetime-hook')
+    process.env.VIBETIME_HOOK_BINARY = '/tmp/custom-vibetime'
+    expect(resolveHookBinaryPath()).toBe('/tmp/custom-vibetime')
   })
 
-  it('prefers packaged Electron resources path when present', () => {
+  it('prefers packaged Electron CLI binary when present', () => {
     const resourcesPath = `${testHome}/resources`
-    const binaryPath = `${resourcesPath}/bin/vibetime-hook`
+    const binaryPath = `${resourcesPath}/bin/${process.platform === 'win32' ? 'vibetime.exe' : 'vibetime'}`
     mkdirSync(`${resourcesPath}/bin`, { recursive: true })
     writeFileSync(binaryPath, '')
 
@@ -85,9 +89,9 @@ describe('installClaudeCode — happy paths', () => {
       expect(Array.isArray(settings.hooks[event])).toBe(true)
       const group = settings.hooks[event].find((g: { matcher?: string }) => g.matcher === '*')
       expect(group).toBeDefined()
-      expect(
-        group.hooks.some((h: { command: string }) => h.command.includes('vibetime-hook')),
-      ).toBe(true)
+      expect(group.hooks.some((h: { command: string }) => isVibetimeHookCommand(h.command))).toBe(
+        true,
+      )
     }
   })
 
@@ -101,7 +105,7 @@ describe('installClaudeCode — happy paths', () => {
     for (const event of ['UserPromptSubmit', 'Stop', 'SessionStart', 'SessionEnd']) {
       const group = settings.hooks[event].find((g: { matcher?: string }) => g.matcher === '*')
       const vibetimeHooks = group.hooks.filter((h: { command: string }) =>
-        h.command.includes('vibetime-hook'),
+        isVibetimeHookCommand(h.command),
       )
       expect(vibetimeHooks.length).toBe(1)
     }
@@ -133,7 +137,7 @@ describe('installClaudeCode — happy paths', () => {
       (g: { matcher?: string }) => g.matcher === '*',
     )
     expect(group.hooks.some((h: { command: string }) => h.command === 'existing-hook')).toBe(true)
-    expect(group.hooks.some((h: { command: string }) => h.command.includes('vibetime-hook'))).toBe(
+    expect(group.hooks.some((h: { command: string }) => isVibetimeHookCommand(h.command))).toBe(
       true,
     )
   })
@@ -198,7 +202,7 @@ describe('installCodex — happy paths', () => {
     for (const event of ['SessionStart', 'UserPromptSubmit', 'Stop']) {
       const vibetimeEntries = hooksData.hooks[event].filter(
         (g: { hooks?: Array<{ command: string }> }) =>
-          g.hooks?.some((h) => h.command.includes('vibetime-hook')),
+          g.hooks?.some((h) => isVibetimeHookCommand(h.command)),
       )
       expect(vibetimeEntries.length).toBe(1)
     }
@@ -254,9 +258,7 @@ describe('installCursor — happy paths', () => {
       expect(hooksData.hooks[event]).toBeDefined()
       expect(Array.isArray(hooksData.hooks[event])).toBe(true)
       expect(
-        hooksData.hooks[event].some((h: { command: string }) =>
-          h.command.includes('vibetime-hook'),
-        ),
+        hooksData.hooks[event].some((h: { command: string }) => isVibetimeHookCommand(h.command)),
       ).toBe(true)
     }
   })
@@ -270,7 +272,7 @@ describe('installCursor — happy paths', () => {
 
     for (const event of ['beforeSubmitPrompt', 'stop', 'sessionStart', 'sessionEnd']) {
       const vibetimeHooks = hooksData.hooks[event].filter((h: { command: string }) =>
-        h.command.includes('vibetime-hook'),
+        isVibetimeHookCommand(h.command),
       )
       expect(vibetimeHooks.length).toBe(1)
     }
@@ -300,7 +302,7 @@ describe('installCursor — happy paths', () => {
     ).toBe(true)
     expect(
       hooksData.hooks.beforeSubmitPrompt.some((h: { command: string }) =>
-        h.command.includes('vibetime-hook'),
+        isVibetimeHookCommand(h.command),
       ),
     ).toBe(true)
   })
@@ -336,8 +338,8 @@ describe('installAgent — dispatch', () => {
     expect(() => installAgent('unknown')).toThrow('Unknown agent')
   })
 
-  it('writes commands that point to an existing vibetime-hook binary', () => {
-    const fakeBinaryPath = `${testHome}/bin/vibetime-hook`
+  it('writes commands that point to an existing hook-capable binary', () => {
+    const fakeBinaryPath = `${testHome}/bin/vibetime`
     mkdirSync(`${testHome}/bin`, { recursive: true })
     writeFileSync(fakeBinaryPath, '')
     process.env.VIBETIME_HOOK_BINARY = fakeBinaryPath
@@ -358,7 +360,7 @@ describe('installAgent — dispatch', () => {
 
     for (const command of commands) {
       const binaryPath = command.replace(/\s+--source.*$/, '')
-      expect(binaryPath).toContain('vibetime-hook')
+      expect(isVibetimeHookCommand(command)).toBe(true)
       expect(existsSync(binaryPath)).toBe(true)
     }
   })
@@ -377,7 +379,7 @@ describe('uninstall — removes only vibetime hooks', () => {
               matcher: '*',
               hooks: [
                 { type: 'command', command: 'existing-hook' },
-                { type: 'command', command: 'vibetime-hook --source claude-code' },
+                { type: 'command', command: 'vibetime --source claude-code' },
               ],
             },
           ],
@@ -392,7 +394,7 @@ describe('uninstall — removes only vibetime hooks', () => {
       (g: { matcher?: string }) => g.matcher === '*',
     )
     expect(group.hooks.some((h: { command: string }) => h.command === 'existing-hook')).toBe(true)
-    expect(group.hooks.some((h: { command: string }) => h.command.includes('vibetime-hook'))).toBe(
+    expect(group.hooks.some((h: { command: string }) => isVibetimeHookCommand(h.command))).toBe(
       false,
     )
     expect(existsSync(`${settingsPath}.backup`)).toBe(true)
@@ -411,7 +413,7 @@ describe('uninstall — removes only vibetime hooks', () => {
     const hasVibetime = Object.values(hooksData.hooks as Record<string, unknown[]>).some((groups) =>
       groups.some((group) =>
         ((group as { hooks?: Array<{ command: string }> }).hooks ?? []).some((hook) =>
-          hook.command.includes('vibetime-hook'),
+          isVibetimeHookCommand(hook.command),
         ),
       ),
     )
@@ -433,7 +435,7 @@ describe('uninstall — removes only vibetime hooks', () => {
         hooks: {
           beforeSubmitPrompt: [
             { command: 'existing-hook' },
-            { command: 'vibetime-hook --source cursor' },
+            { command: 'vibetime --source cursor' },
           ],
         },
       }),
@@ -449,7 +451,7 @@ describe('uninstall — removes only vibetime hooks', () => {
     ).toBe(true)
     expect(
       hooksData.hooks.beforeSubmitPrompt.some((h: { command: string }) =>
-        h.command.includes('vibetime-hook'),
+        isVibetimeHookCommand(h.command),
       ),
     ).toBe(false)
     expect(existsSync(`${hooksPath}.backup`)).toBe(true)

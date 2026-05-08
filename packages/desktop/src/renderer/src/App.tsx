@@ -1,15 +1,19 @@
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { HashRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import Sidebar from './components/Sidebar'
 import { handlePush } from './store'
-import History from './views/History'
 import Live from './views/Live'
 import Settings from './views/Settings'
 import Today from './views/Today'
 
 const isMac = window.api.platform === 'darwin'
 const LAST_VIEW_ROUTES = new Set(['/', '/live', '/history', '/settings'])
+const History = lazy(() => import('./views/History'))
+
+function RouteFallback() {
+  return <div className="h-full bg-background" />
+}
 
 function AppRoutes() {
   const location = useLocation()
@@ -38,12 +42,14 @@ function AppRoutes() {
           )}
         >
           <div className="h-full overflow-auto scroll-smooth">
-            <Routes>
-              <Route path="/" element={<Today />} />
-              <Route path="/live" element={<Live />} />
-              <Route path="/history" element={<History />} />
-              <Route path="/settings" element={<Settings />} />
-            </Routes>
+            <Suspense fallback={<RouteFallback />}>
+              <Routes>
+                <Route path="/" element={<Today />} />
+                <Route path="/live" element={<Live />} />
+                <Route path="/history" element={<History />} />
+                <Route path="/settings" element={<Settings />} />
+              </Routes>
+            </Suspense>
           </div>
         </main>
       </div>

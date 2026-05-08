@@ -670,8 +670,10 @@ export function queryTodayLiveState(): TodayLiveState {
 
 export function queryAgentStatus(): AgentStatus[] {
   const agents = ['claude-code', 'codex', 'cursor'] as const
-  const hasVibetimeCommand = (command: unknown): command is string =>
-    typeof command === 'string' && command.includes('vibetime-hook')
+  const hasVibetimeCommand = (command: unknown): command is string => {
+    if (typeof command !== 'string') return false
+    return /\bvibetime(?:\.exe)?\b/i.test(command) && command.includes('--source')
+  }
   const hasCodexHooksFeature = (): boolean => {
     const path = `${process.env.HOME}/.codex/config.toml`
     if (!existsSync(path)) return false

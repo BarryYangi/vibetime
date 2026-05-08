@@ -8,18 +8,32 @@ directories:
 files:
   - out/**/*
   - package.json
+  - "!node_modules/@vibetime/hook/vibetime"
+  - "!node_modules/@vibetime/hook/vibetime-hook"
+  - "!node_modules/@vibetime/hook/build/**/*"
+  - "!node_modules/@vibetime/hook/scripts/**/*"
+  - "!node_modules/@vibetime/hook/src/**/*"
+  - "!node_modules/@vibetime/hook/dist/**/*.map"
+  - "!node_modules/@vibetime/hook/dist/**/*.test.*"
+  - "!node_modules/@vibetime/hook/*.tsbuildinfo"
+  - "!node_modules/@vibetime/hook/tsconfig.json"
+  - "!node_modules/@vibetime/hook/vitest.config.ts"
+  - "!node_modules/@vibetime/core/dist/**/*.map"
+  - "!node_modules/@vibetime/core/dist/**/*.test.*"
 
 asar: true
 asarUnpack:
   - node_modules/better-sqlite3/**/*
+
+electronLanguages:
+  - en-US
+  - zh-CN
 
 mac:
   category: public.app-category.developer-tools
   icon: build/AppIcon.icon
   identity: "-"
   extraResources:
-    - from: ../hook/vibetime-hook
-      to: bin/vibetime-hook
     - from: ../hook/vibetime
       to: bin/vibetime
   target:
@@ -34,8 +48,6 @@ mac:
 win:
   icon: build/icon.ico
   extraResources:
-    - from: ../hook/build/win-x64/vibetime-hook.exe
-      to: bin/vibetime-hook.exe
     - from: ../hook/build/win-x64/vibetime.exe
       to: bin/vibetime.exe
   target:

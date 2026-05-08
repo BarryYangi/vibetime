@@ -1,4 +1,4 @@
-import * as echarts from 'echarts'
+import { echarts } from './echarts'
 
 const cossNeutralTheme = {
   color: ['#262626', '#737373', '#3b82f6', '#10b981', '#f59e0b', '#ef4444'],

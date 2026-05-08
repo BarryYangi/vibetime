@@ -6,6 +6,7 @@ import { PageShell } from '@/components/PageShell'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import type { ActiveTurn, TodayLiveState } from '../../../shared/ipc-types'
+import { useDocumentVisible } from '../hooks/useDocumentVisible'
 import { useIpcQuery } from '../hooks/useIpcQuery'
 import { setTodayLiveState, todayLiveStateAtom } from '../store'
 
@@ -161,6 +162,7 @@ export default function Live() {
   } = useIpcQuery('getTodayLiveState', todayLiveStateAtom, setTodayLiveState)
   const [now, setNow] = useState(() => Date.now() / 1000)
   const activeTurnCount = liveState?.activeTurns.length ?? 0
+  const documentVisible = useDocumentVisible()
 
   useEffect(() => {
     if (!liveState) return
@@ -168,10 +170,12 @@ export default function Live() {
   }, [liveState])
 
   useEffect(() => {
-    if (activeTurnCount === 0) return
-    const timer = window.setInterval(() => setNow(Date.now() / 1000), TICK_MS)
+    if (activeTurnCount === 0 || !documentVisible) return
+    const tick = () => setNow(Date.now() / 1000)
+    tick()
+    const timer = window.setInterval(tick, TICK_MS)
     return () => window.clearInterval(timer)
-  }, [activeTurnCount])
+  }, [activeTurnCount, documentVisible])
 
   const turns = useMemo(() => liveState?.activeTurns ?? [], [liveState])
 

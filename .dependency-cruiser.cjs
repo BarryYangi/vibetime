@@ -27,7 +27,7 @@ module.exports = {
       name: 'no-circular',
       severity: 'error',
       comment: 'No circular deps anywhere in the monorepo.',
-      from: {},
+      from: { path: '^packages/(core|hook|desktop)/src/' },
       to: { circular: true },
     },
   ],

@@ -11,25 +11,26 @@ import { appendLog } from './log.js'
 export function resolveHookBinaryPath(): string {
   if (process.env.VIBETIME_HOOK_BINARY) return process.env.VIBETIME_HOOK_BINARY
 
-  const binaryName = process.platform === 'win32' ? 'vibetime-hook.exe' : 'vibetime-hook'
+  const cliBinaryName = process.platform === 'win32' ? 'vibetime.exe' : 'vibetime'
   const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath
   if (resourcesPath) {
-    const packagedBinaryPath = join(resourcesPath, 'bin', binaryName)
-    if (existsSync(packagedBinaryPath)) return packagedBinaryPath
+    const packagedCliPath = join(resourcesPath, 'bin', cliBinaryName)
+    if (existsSync(packagedCliPath)) return packagedCliPath
   }
 
   const moduleDir = dirname(fileURLToPath(import.meta.url))
-  const localBinaryPath = join(moduleDir, '..', binaryName)
-  if (existsSync(localBinaryPath)) return localBinaryPath
+  const localCliPath = join(moduleDir, '..', cliBinaryName)
+  if (existsSync(localCliPath)) return localCliPath
 
-  return localBinaryPath
+  return localCliPath
 }
 
 const CODEX_FEATURE_MARKER = '# vibetime-managed'
 const CODEX_MANAGED_SECTION_MARKER = '# vibetime-managed-section'
 
 function isVibetimeCommand(command: unknown): command is string {
-  return typeof command === 'string' && command.includes('vibetime-hook')
+  if (typeof command !== 'string') return false
+  return /\bvibetime(?:\.exe)?\b/i.test(command) && command.includes('--source')
 }
 
 function ensureCodexHooksEnabled(configContent: string): string {
@@ -109,7 +110,7 @@ export function installClaudeCode(): void {
       const existing = arr.find((g) => g.matcher === '*')
       if (existing) {
         // Check if vibetime hook already exists (idempotent)
-        const hasVibetime = existing.hooks?.some((h) => h.command.includes('vibetime-hook'))
+        const hasVibetime = existing.hooks?.some((h) => isVibetimeCommand(h.command))
         if (hasVibetime) continue
 
         // Add vibetime hook to existing group
@@ -191,7 +192,7 @@ export function installCodex(): void {
       }>
 
       // Check if vibetime hook already exists (idempotent)
-      const hasVibetime = arr.some((g) => g.hooks?.some((h) => h.command.includes('vibetime-hook')))
+      const hasVibetime = arr.some((g) => g.hooks?.some((h) => isVibetimeCommand(h.command)))
       if (hasVibetime) continue
 
       // Add vibetime hook
@@ -247,7 +248,7 @@ export function installCursor(): void {
       const arr = (hooks[event] ?? []) as Array<{ command: string }>
 
       // Check if vibetime hook already exists (idempotent)
-      const hasVibetime = arr.some((h) => h.command.includes('vibetime-hook'))
+      const hasVibetime = arr.some((h) => isVibetimeCommand(h.command))
       if (hasVibetime) continue
 
       // Add vibetime hook (append to array)
@@ -286,7 +287,7 @@ export function installAgent(agent: string): void {
 
 /**
  * Uninstall vibetime hooks for Claude Code.
- * Preserves unrelated user hooks and only removes commands containing vibetime-hook.
+ * Preserves unrelated user hooks and only removes VibeTime hook commands.
  */
 export function uninstallClaudeCode(): void {
   const settingsPath = `${process.env.HOME}/.claude/settings.json`
