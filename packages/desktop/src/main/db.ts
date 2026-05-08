@@ -681,7 +681,7 @@ export function queryAgentStatus(): AgentStatus[] {
     const path = `${process.env.HOME}/.codex/config.toml`
     if (!existsSync(path)) return false
     const content = readFileSync(path, 'utf-8')
-    return /^\s*codex_hooks\s*=\s*true\b/m.test(content)
+    return /^\s*hooks\s*=\s*true\b/m.test(content)
   }
 
   function checkAgent(agent: string): boolean {

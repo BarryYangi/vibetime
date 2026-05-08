@@ -60,7 +60,7 @@ Each requirement maps to exactly one roadmap phase. See `## Traceability` below.
 ### CLI
 
 - [x] **CLI-01**: `vibetime install <agent>` and `vibetime uninstall <agent>` configure or remove hooks for one agent (claude-code | codex | cursor). Both are idempotent. Uninstall removes only Vibetime-managed hook commands and preserves unrelated user-defined hooks.
-- [x] **CLI-02**: For Codex specifically, `vibetime install codex` writes `[features] codex_hooks = true` into `~/.codex/config.toml` (preserving any other config). If Vibetime temporarily flips a prior `false`, uninstall restores the original `false` rather than guessing user intent.
+- [x] **CLI-02**: For Codex specifically, `vibetime install codex` writes `[features] hooks = true` into `~/.codex/config.toml` (preserving any other config). If Vibetime temporarily flips a prior `false`, uninstall restores the original `false` rather than guessing user intent.
 - [x] **CLI-03**: `vibetime today` prints a plain-text per-project breakdown of today's agent time and exits.
 - [x] **CLI-04**: `vibetime project <name> [--days=N]` prints a per-day + per-agent breakdown for one project. Default `--days=7`.
 - [x] **CLI-05**: `vibetime export [--format=json|csv] [--out=<path>] [--from=YYYY-MM-DD] [--to=YYYY-MM-DD]` prints/writes raw events. Default JSON to stdout. CSV is well-formed. `--out` writes to file. `--from/--to` bound the result.

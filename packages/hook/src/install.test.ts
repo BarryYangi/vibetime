@@ -184,14 +184,14 @@ describe('installCodex — happy paths', () => {
     expect(hooksData.hooks.SessionEnd).toBeUndefined()
   })
 
-  it('sets [features] codex_hooks = true in config.toml', () => {
+  it('sets [features] hooks = true in config.toml', () => {
     installCodex()
 
     const configPath = `${testHome}/.codex/config.toml`
     expect(existsSync(configPath)).toBe(true)
 
     const content = readFileSync(configPath, 'utf-8')
-    expect(content).toContain('codex_hooks = true')
+    expect(content).toContain('hooks = true')
   })
 
   it('is idempotent — second run does not duplicate hooks', () => {
@@ -229,22 +229,53 @@ describe('installCodex — happy paths', () => {
     expect(commands).toContain(`${testHome}/.vibetime/bin/vibetime --source codex`)
   })
 
-  it('marks codex_hooks changes when enabling a previous false flag', () => {
+  it('marks hooks changes when enabling a previous false flag', () => {
     const configPath = `${testHome}/.codex/config.toml`
     mkdirSync(`${testHome}/.codex`, { recursive: true })
-    writeFileSync(configPath, '[features]\ncodex_hooks = false\nother_flag = false\n')
+    writeFileSync(configPath, '[features]\nhooks = false\nother_flag = false\n')
 
     installCodex()
 
     const content = readFileSync(configPath, 'utf-8')
-    expect(content).toContain('codex_hooks = true # vibetime-managed: previous=false')
+    expect(content).toContain('hooks = true # vibetime-managed: previous=false')
+    expect(content).toContain('other_flag = false')
+  })
+
+  it('replaces a managed deprecated codex_hooks flag with hooks', () => {
+    const configPath = `${testHome}/.codex/config.toml`
+    mkdirSync(`${testHome}/.codex`, { recursive: true })
+    writeFileSync(
+      configPath,
+      '[features]\ncodex_hooks = true # vibetime-managed\nother_flag = false\n',
+    )
+
+    installCodex()
+
+    const content = readFileSync(configPath, 'utf-8')
+    expect(content).toContain('hooks = true # vibetime-managed')
+    expect(content).not.toContain('codex_hooks')
+    expect(content).toContain('other_flag = false')
+  })
+
+  it('removes managed deprecated codex_hooks flag on uninstall', () => {
+    const configPath = `${testHome}/.codex/config.toml`
+    mkdirSync(`${testHome}/.codex`, { recursive: true })
+    writeFileSync(
+      configPath,
+      '[features]\ncodex_hooks = true # vibetime-managed\nother_flag = false\n',
+    )
+
+    uninstallCodex()
+
+    const content = readFileSync(configPath, 'utf-8')
+    expect(content).not.toContain('codex_hooks')
     expect(content).toContain('other_flag = false')
   })
 
   it('creates backup before modification', () => {
     const configPath = `${testHome}/.codex/config.toml`
     mkdirSync(`${testHome}/.codex`, { recursive: true })
-    writeFileSync(configPath, '[features]\ncodex_hooks = true\n')
+    writeFileSync(configPath, '[features]\nhooks = true\n')
 
     installCodex()
 
@@ -414,13 +445,13 @@ describe('uninstall — removes only vibetime hooks', () => {
   it('removes Codex vibetime hooks and restores managed hooks false flag', () => {
     const configPath = `${testHome}/.codex/config.toml`
     mkdirSync(`${testHome}/.codex`, { recursive: true })
-    writeFileSync(configPath, '[features]\ncodex_hooks = false\nother_flag = false\n')
+    writeFileSync(configPath, '[features]\nhooks = false\nother_flag = false\n')
 
     installCodex()
     uninstallCodex()
 
     expect(readFileSync(configPath, 'utf-8')).toBe(
-      '[features]\ncodex_hooks = false\nother_flag = false\n',
+      '[features]\nhooks = false\nother_flag = false\n',
     )
     expect(existsSync(`${configPath}.backup`)).toBe(true)
 

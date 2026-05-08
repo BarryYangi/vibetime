@@ -68,8 +68,8 @@ Accurately and silently record agent coding time per project on the developer's 
 - `core` package boundary keeps adapters / project resolution / SQL builders reusable
 
 **Hook payload caveats GSD must verify during implementation:**
-- Codex requires `[features] codex_hooks = true` in `~/.codex/config.toml` (the `vibetime install codex` command sets this)
-- Codex uninstall must not guess ownership of `codex_hooks`; Vibetime only restores the flag when it can prove it previously changed it
+- Codex Desktop 0.129+ requires `[features] hooks = true` in `~/.codex/config.toml` (the `vibetime install codex` command sets this)
+- Codex uninstall must not guess ownership of `hooks`; Vibetime only restores the flag when it can prove it previously changed it
 - Cursor's `workspace_roots` is an array; V0 uses `[0]` only — documented known limitation
 - Codex `SessionEnd` is not GA; use process-exit fallback
 - Codex `Stop` is not fully reliable in all terminal outcomes; Vibetime reconciles open turns against the local Codex transcript `task_complete` records

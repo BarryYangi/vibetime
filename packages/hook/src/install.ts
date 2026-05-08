@@ -1,6 +1,6 @@
 // Install hooks for AI coding agents (Claude Code, Codex, Cursor).
 // CLI-01: idempotent — skips if vibetime hook already exists.
-// CLI-02: Codex requires [features] codex_hooks = true in config.toml.
+// CLI-02: Codex requires [features] hooks = true in config.toml.
 // All operations backed up before modification; existing hooks preserved.
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -53,7 +53,8 @@ function resolveHookCommandPath(): string {
 
 const CODEX_FEATURE_MARKER = '# vibetime-managed'
 const CODEX_MANAGED_SECTION_MARKER = '# vibetime-managed-section'
-const CODEX_FEATURE_KEY = 'codex_hooks'
+const CODEX_FEATURE_KEY = 'hooks'
+const DEPRECATED_CODEX_FEATURE_KEY = 'codex_hooks'
 const CODEX_HOOK_EVENTS = ['SessionStart', 'UserPromptSubmit', 'Stop'] as const
 
 function isVibetimeCommand(command: unknown): command is string {
@@ -62,27 +63,29 @@ function isVibetimeCommand(command: unknown): command is string {
 }
 
 function ensureCodexHooksEnabled(configContent: string): string {
-  if (/^\s*codex_hooks\s*=\s*true\b/m.test(configContent)) {
-    return configContent
+  const nextContent = removeManagedCodexFeatureFlag(configContent, DEPRECATED_CODEX_FEATURE_KEY)
+
+  if (/^\s*hooks\s*=\s*true\b/m.test(nextContent)) {
+    return nextContent
   }
 
   const managedTrueLine = `${CODEX_FEATURE_KEY} = true ${CODEX_FEATURE_MARKER}`
-  const falseFlagPattern = /^(\s*)codex_hooks\s*=\s*false\b.*$/m
-  if (falseFlagPattern.test(configContent)) {
-    return configContent.replace(falseFlagPattern, `$1${managedTrueLine}: previous=false`)
+  const falseFlagPattern = /^(\s*)hooks\s*=\s*false\b.*$/m
+  if (falseFlagPattern.test(nextContent)) {
+    return nextContent.replace(falseFlagPattern, `$1${managedTrueLine}: previous=false`)
   }
 
-  if (configContent.includes('[features]')) {
-    return configContent.replace(/\[features\]/, `[features]\n${managedTrueLine}`)
+  if (nextContent.includes('[features]')) {
+    return nextContent.replace(/\[features\]/, `[features]\n${managedTrueLine}`)
   }
 
-  const prefix = configContent.length > 0 && !configContent.endsWith('\n') ? '\n' : ''
-  return `${configContent}${prefix}\n[features]\n${CODEX_MANAGED_SECTION_MARKER}\n${managedTrueLine}\n`
+  const prefix = nextContent.length > 0 && !nextContent.endsWith('\n') ? '\n' : ''
+  return `${nextContent}${prefix}\n[features]\n${CODEX_MANAGED_SECTION_MARKER}\n${managedTrueLine}\n`
 }
 
-function removeManagedCodexHooksFlag(configContent: string): string {
+function removeManagedCodexFeatureFlag(configContent: string, featureKey: string): string {
   const managedSectionPattern = new RegExp(
-    `\\n?\\[features\\]\\n# vibetime-managed-section\\n\\s*${CODEX_FEATURE_KEY}\\s*=\\s*true\\s*# vibetime-managed[^\\n]*(?:\\n|$)`,
+    `\\n?\\[features\\]\\n# vibetime-managed-section\\n\\s*${featureKey}\\s*=\\s*true\\s*# vibetime-managed[^\\n]*(?:\\n|$)`,
     'm',
   )
   if (managedSectionPattern.test(configContent)) {
@@ -90,18 +93,23 @@ function removeManagedCodexHooksFlag(configContent: string): string {
   }
 
   const previousFalsePattern = new RegExp(
-    `^(\\s*)${CODEX_FEATURE_KEY}\\s*=\\s*true\\s*#\\s*vibetime-managed:\\s*previous=false[^\\n]*$`,
+    `^(\\s*)${featureKey}\\s*=\\s*true\\s*#\\s*vibetime-managed:\\s*previous=false[^\\n]*$`,
     'm',
   )
   if (previousFalsePattern.test(configContent)) {
-    return configContent.replace(previousFalsePattern, `$1${CODEX_FEATURE_KEY} = false`)
+    return configContent.replace(previousFalsePattern, `$1${featureKey} = false`)
   }
 
   const managedLinePattern = new RegExp(
-    `^\\s*${CODEX_FEATURE_KEY}\\s*=\\s*true\\s*#\\s*vibetime-managed[^\\n]*(?:\\n|$)`,
+    `^\\s*${featureKey}\\s*=\\s*true\\s*#\\s*vibetime-managed[^\\n]*(?:\\n|$)`,
     'm',
   )
   return configContent.replace(managedLinePattern, '')
+}
+
+function removeManagedCodexHooksFlag(configContent: string): string {
+  const withoutCurrent = removeManagedCodexFeatureFlag(configContent, CODEX_FEATURE_KEY)
+  return removeManagedCodexFeatureFlag(withoutCurrent, DEPRECATED_CODEX_FEATURE_KEY)
 }
 
 /**

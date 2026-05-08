@@ -54,7 +54,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Depends on**: Phase 2
 **Requirements**: STORE-01, STORE-02, STORE-03, REC-01, REC-02, HOOK-01, HOOK-02, HOOK-03, HOOK-04, FS-01, FS-02, FS-03, CLI-01, CLI-02
 **Success Criteria** (what must be TRUE):
-  1. `vibetime install <agent>` (claude-code | codex | cursor) configures hooks idempotently, preserves any existing user-defined hooks, and for Codex writes `[features] codex_hooks = true` into `~/.codex/config.toml`
+  1. `vibetime install <agent>` (claude-code | codex | cursor) configures hooks idempotently, preserves any existing user-defined hooks, and for Codex writes `[features] hooks = true` into `~/.codex/config.toml`
   2. Running a real Claude Code, Codex, and Cursor session each produces `events` rows with the correct agent, project (resolved per first-match rule), session_id, turn_id, ts, timezone, and `schema_version=1`
   3. The `vibetime-hook` Bun binary cold-starts in <50ms typical / <100ms worst case, produces no stdout/stderr, exits 0 on every invocation (including parse failures), and routes errors only to `~/.vibetime/hook.log` (with ~10MB rotation)
   4. Two agents in different terminals running concurrent turns produce no DB corruption; both turns appear in `events` (concurrency stress test passes)

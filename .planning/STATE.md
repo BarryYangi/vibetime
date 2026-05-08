@@ -92,7 +92,7 @@ Recent decisions affecting current work:
 - coss ui is a copy-paste component registry (not npm). Current desktop UI has migrated away from the old Tokyo Night custom token set and uses coss-style semantic components / neutral light-dark baseline.
 - Hook package needs `exports` field in package.json for desktop subpath imports (./cli, ./config, ./install)
 - CSS bars for Today view (lighter than ECharts for simple horizontal bars); ECharts reserved for Phase 5 History view
-- Codex install/uninstall must preserve user ownership of `~/.codex/config.toml` `codex_hooks`; Vibetime now marks only self-managed flips and restores the prior value on uninstall.
+- Codex install/uninstall must preserve user ownership of `~/.codex/config.toml` `hooks`; Vibetime now marks only self-managed flips and restores the prior value on uninstall.
 - Codex stop recovery no longer relies on freeze heuristics. Open Codex turns are reconciled against local transcript `task_complete` records, and duplicate `turn_start` rows are ignored while a turn is already open.
 - Today view refresh is event-driven and live: DB invalidations push into renderer, open turns tick locally every second, and duration formatting is compact (`8m28s`).
 - Phase 5 Tray behavior uses Electron native `Menu` for both left and right click. The custom `/menubar` BrowserWindow dropdown was removed because it caused focus/highlight mismatch and auto-focus problems; native menu is the selected V0 behavior.
