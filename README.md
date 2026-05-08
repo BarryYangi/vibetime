@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="packages/desktop/assets/app-icon-source.svg" alt="VibeTime icon" width="40" height="40" />
+  <img src="packages/desktop/assets/app-icon-source.svg" alt="VibeTime icon" width="40" height="40" align="absmiddle" />
   VibeTime
 </h1>
 
