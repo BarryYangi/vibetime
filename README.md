@@ -1,6 +1,12 @@
-# VibeTime
+<p align="center">
+  <img src="packages/desktop/assets/app-icon-source.svg" alt="VibeTime icon" width="112" height="112" />
+</p>
 
-Local-first time tracking for AI coding agents.
+<h1 align="center">VibeTime</h1>
+
+<p align="center">
+  Local-first time tracking for AI coding agents.
+</p>
 
 VibeTime runs quietly in the menu bar and records coding sessions from Claude Code,
 Codex, and Cursor. It is built for answering a simple question well: where did my
