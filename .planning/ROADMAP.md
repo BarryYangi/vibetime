@@ -2,7 +2,7 @@
 
 ## Overview
 
-vibetime ships in six phases tracking the locked ~5-week budget (DEC-008): Phase 1 satisfies the PRD §16 process gate (a user-approved `DECISIONS.md`) and stands up the monorepo + pure `core` package; Phase 2 delivers the three agent adapters as pure logic; Phase 3 produces the Bun-compiled `vibetime-hook` binary, the SQLite store with crash recovery, the `~/.vibetime/` filesystem, and the install commands — closing the data-capture loop end-to-end; Phase 4 brings up the Electron desktop shell with IPC, the Today view, the full CLI surface, and minimal Settings; Phase 5 delivers the visual showpiece (Live + History views), the menubar widget, the auto-launch toggle, and the close-to-menubar lifecycle; Phase 6 packages the macOS arm64 .app + .dmg with ad-hoc signing and validates every V0 acceptance criterion. Phase boundaries deliberately follow the W1–W5 budget while inserting the §16 gate.
+vibetime ships in six phases tracking the locked ~5-week budget (DEC-008): Phase 1 satisfies the PRD §16 process gate (a user-approved `DECISIONS.md`) and stands up the monorepo + pure `core` package; Phase 2 delivers the three agent adapters as pure logic; Phase 3 produces the Bun-compiled `vibetime-hook` binary, the SQLite store with crash recovery, the `~/.vibetime/` filesystem, and the install commands — closing the data-capture loop end-to-end; Phase 4 brings up the Electron desktop shell with IPC, the Today view, the full CLI surface, and minimal Settings; Phase 5 delivers the visual showpiece (Live + History views), the menubar widget, the auto-launch toggle, and the close-to-menubar lifecycle; Phase 6 packages the macOS arm64 .app + .dmg, adds Windows x64 assets, publishes GitHub Release `v2026.5.8`, and validates V0 acceptance criteria. Phase boundaries deliberately follow the W1–W5 budget while inserting the §16 gate.
 
 ## Phases
 
@@ -12,12 +12,12 @@ vibetime ships in six phases tracking the locked ~5-week budget (DEC-008): Phase
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundations & Decisions Gate** - DECISIONS.md approved, monorepo stood up, `core` package skeleton (types + SQL builders + project resolution) shippable in isolation
+- [x] **Phase 1: Foundations & Decisions Gate** - DECISIONS.md approved, monorepo stood up, `core` package skeleton (types + SQL builders + project resolution) shippable in isolation
 - [x] **Phase 2: Agent Adapters in `core`** - Three pure adapters (Claude Code / Codex / Cursor) with fixture-based tests covering `NormalizedEvent` mapping (completed 2026-04-28)
 - [x] **Phase 3: Hook Binary, Store & Install** - Bun-compiled `vibetime-hook`, SQLite WAL store, crash-recovery rules, `~/.vibetime/` layout, `vibetime install <agent>` — first end-to-end agent capture works (completed 2026-04-29)
 - [x] **Phase 4: Desktop Shell, Today View & CLI** - Electron app with IPC, Today view as default landing, complete CLI surface (`today / project / export / version / install`) running headless, minimal Settings (completed 2026-04-29)
 - [x] **Phase 5: Live, History, Menubar & Lifecycle** - Live view content-asset quality (≥30fps), History view (heatmap + trends + table), persistent menubar widget, close-to-menubar + auto-launch toggle (verified 2026-05-07)
-- [ ] **Phase 6: Packaging & V0 Acceptance** - macOS arm64 .app + .dmg and ad-hoc signing automated checks pass; manual packaged-app UAT remains
+- [x] **Phase 6: Packaging & V0 Acceptance** - macOS arm64 .app + .dmg, Windows x64 assets, GitHub Release automation, ad-hoc signing, and V0 acceptance evidence complete (completed 2026-05-08)
 
 ## Phase Details
 
@@ -116,7 +116,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. The `.app` is ad-hoc self-signed; `codesign --verify` confirms an ad-hoc signature; README and the installer/DMG document the first-launch self-authorization flow (right-click → Open) for fresh installs
   3. Every PRD §14 acceptance criterion (with the notarization criterion replaced by ad-hoc signing + documented self-auth) passes on a fresh macOS arm64 machine — verified by a checklist run that records evidence for: install idempotency, real-session capture for all three agents, concurrent-write integrity, crash + stale-sweep recovery, all three views rendering, menubar format transitions, Live view ≥30fps, calendar 365-day render, ad-hoc signing + self-auth documented, and close ≠ quit / `Cmd+Q` quits
 **Plans**: 1 plan
-- [ ] 06-01-PLAN.md — Restore root CI, add electron-builder mac arm64 packaging, bundle `vibetime-hook`, ad-hoc sign, document first launch, and run V0 acceptance — automated gates pass; manual UAT remains
+- [x] 06-01-PLAN.md — Restore root CI, add electron-builder mac arm64 packaging, bundle `vibetime-hook`, ad-hoc sign, document first launch, publish GitHub Release, and run V0 acceptance — completed 2026-05-08
 
 ## Progress
 
@@ -125,9 +125,9 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundations & Decisions Gate | 3/3 | Implementation complete (awaits verifier) | - |
+| 1. Foundations & Decisions Gate | 3/3 | Complete | 2026-04-28 |
 | 2. Agent Adapters in `core` | 1/1 | Complete | 2026-04-28 |
 | 3. Hook Binary, Store & Install | 4/4 | Complete | 2026-04-29 |
 | 4. Desktop Shell, Today View & CLI | 6/6 | Complete | 2026-04-29 |
 | 5. Live, History, Menubar & Lifecycle | 4/4 | Complete | 2026-05-07 |
-| 6. Packaging & V0 Acceptance | 0/1 | Automated gates pass; manual UAT remains | - |
+| 6. Packaging & V0 Acceptance | 1/1 | Complete | 2026-05-08 |

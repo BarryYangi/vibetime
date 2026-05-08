@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: active
-stopped_at: Phase 6 packaged app now includes a generated macOS icon; manual exact-checklist UAT remains
-last_updated: "2026-05-07T10:05:00Z"
-last_activity: 2026-05-07
+status: complete
+stopped_at: Milestone v1.0 complete; VibeTime v2026.5.8 released
+last_updated: "2026-05-08T06:40:00Z"
+last_activity: 2026-05-08
 progress:
   total_phases: 6
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 19
-  completed_plans: 18
-  percent: 95
+  completed_plans: 19
+  percent: 100
 ---
 
 # Project State
@@ -21,24 +21,24 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-07)
 
 **Core value:** Accurately and silently record agent coding time per project on the developer's machine, then surface it in a visual surface good enough to live on a livestream — with zero network calls.
-**Current focus:** Phase 06 — packaging-v0-acceptance
+**Current focus:** Milestone v1.0 complete; release `v2026.5.8` published
 
 ## Current Position
 
-Phase: 06 (packaging-v0-acceptance) — IN UAT
-Plan: 0 of 1
-Status: Automated packaging, signing, DMG, app icon, bundled binaries, root CI, and packaged CLI smoke pass; manual exact-checklist UAT remains
-Last activity: 2026-05-07
+Phase: 06 (packaging-v0-acceptance) — COMPLETE
+Plan: 1 of 1
+Status: GitHub Release `v2026.5.8` created with macOS arm64 and Windows x64 assets; Phase 6 UAT/verification recorded as PASS
+Last activity: 2026-05-08
 
-Progress: [█████████░] 95%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 10
-- Average duration: ~5.5 min
-- Total execution time: ~56 min
+- Total plans completed: 19
+- Average duration: phase-level summaries recorded; Phase 6 included multi-step release/debug time
+- Total execution time: see per-plan SUMMARY files
 
 **By Phase:**
 
@@ -48,6 +48,8 @@ Progress: [█████████░] 95%
 | 2. Agent Adapters in `core`     | 1 | ~7 min  | ~7 min   |
 | 3. Hook Binary, Store & Install | 4 | ~15 min | ~3.75 min |
 | 4. Desktop Shell, Today & CLI   | 6 | ~30 min | ~5 min   |
+| 5. Live, History, Menubar & Lifecycle | 4 | ~100 min | ~25 min |
+| 6. Packaging & V0 Acceptance | 1 | ~1 day elapsed | integrated release plan |
 
 **Recent Trend:**
 
@@ -96,13 +98,13 @@ Recent decisions affecting current work:
 - Phase 5 Tray behavior uses Electron native `Menu` for both left and right click. The custom `/menubar` BrowserWindow dropdown was removed because it caused focus/highlight mismatch and auto-focus problems; native menu is the selected V0 behavior.
 - Tray title refresh is event-driven plus visible minute-boundary timers while active, not fixed high-frequency polling.
 - Phase 5 UAT completed 2026-05-07 with 9/9 checks passed. Open at login uses a coss/Base UI Switch; only the switch itself toggles. Renderer controls intentionally keep the default arrow cursor rather than pointer cursor.
-- Phase 6 packaging now uses the user-provided deterministic SVG macOS app icon. The source lives at `packages/desktop/build/app-icon-source.svg`; `pnpm --filter @vibetime/desktop run generate:icons` renders `build/app-icon-source.png`, generates `build/icon.icns`, and packaged `Info.plist` references `CFBundleIconFile => icon.icns`.
+- Phase 6 packaging now uses the user-provided deterministic SVG macOS app icon. The source lives at `packages/desktop/assets/app-icon-source.svg`; `pnpm --filter @vibetime/desktop run generate:icons` renders `build/app-icon-source.png` and generates modern macOS `build/AppIcon.icon` / packaged `Assets.car`.
+- Release versioning for V0 uses date version `2026.5.8` and tag `v2026.5.8`.
+- GitHub Actions tag workflow builds macOS arm64 and Windows x64 packages and creates GitHub Release assets.
 
 ### Pending Todos
 
-- Record exact Phase 6 manual packaged-app UAT results in `06-UAT.md`.
-- Verify Settings install path.
-- Verify real Claude Code, Codex, and Cursor capture when available.
+None for milestone v1.0.
 
 ### Blockers/Concerns
 
@@ -114,7 +116,7 @@ None yet. (Phase 1 must produce DECISIONS.md before Phase 1 implementation can a
 |----------|------|--------|-------------|
 | Distribution | Apple Developer notarization | Deferred to V0.1+ | 2026-04-28 |
 | Distribution | Auto-update mechanism | Deferred to V0.1+ | 2026-04-28 |
-| Platform | Linux / Windows binaries | Deferred to V0.1+ | 2026-04-28 |
+| Platform | Linux and Windows arm64 binaries | Deferred to V0.1+ | 2026-04-28 |
 | Metrics | Token / cost tracking | Deferred to V0.1+ | 2026-04-28 |
 | Metrics | `agent_ratio` (Toggl integration) | Deferred to V0.1+ | 2026-04-28 |
 | Surface | Web UI consuming `core` | Deferred to V0.1+ | 2026-04-28 |
@@ -122,6 +124,6 @@ None yet. (Phase 1 must produce DECISIONS.md before Phase 1 implementation can a
 
 ## Session Continuity
 
-Last session: 2026-05-07T10:05:00Z
-Stopped at: Phase 6 packaged app now includes a generated macOS icon; manual exact-checklist UAT remains
+Last session: 2026-05-08T06:40:00Z
+Stopped at: Milestone v1.0 complete; release `v2026.5.8` published
 Resume file: None
