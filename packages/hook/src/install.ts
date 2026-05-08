@@ -1,6 +1,6 @@
 // Install hooks for AI coding agents (Claude Code, Codex, Cursor).
 // CLI-01: idempotent — skips if vibetime hook already exists.
-// CLI-02: Codex requires [features] codex_hooks = true in config.toml.
+// CLI-02: Codex requires [features] hooks = true in config.toml.
 // All operations backed up before modification; existing hooks preserved.
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -27,6 +27,8 @@ export function resolveHookBinaryPath(): string {
 
 const CODEX_FEATURE_MARKER = '# vibetime-managed'
 const CODEX_MANAGED_SECTION_MARKER = '# vibetime-managed-section'
+const CODEX_FEATURE_KEY = 'hooks'
+const CODEX_FEATURE_KEY_PATTERN = '(?:hooks|codex_hooks)'
 
 function isVibetimeCommand(command: unknown): command is string {
   if (typeof command !== 'string') return false
@@ -34,12 +36,33 @@ function isVibetimeCommand(command: unknown): command is string {
 }
 
 function ensureCodexHooksEnabled(configContent: string): string {
-  if (/^\s*codex_hooks\s*=\s*true\b/m.test(configContent)) return configContent
+  const removeLegacyFlags = (content: string) =>
+    content.replace(/^\s*codex_hooks\s*=\s*(?:true|false)\b.*(?:\n|$)/gm, '')
 
-  const managedTrueLine = `codex_hooks = true ${CODEX_FEATURE_MARKER}`
-  const falseFlagPattern = /^(\s*)codex_hooks\s*=\s*false\b.*$/m
+  if (/^\s*hooks\s*=\s*true\b/m.test(configContent)) {
+    return removeLegacyFlags(configContent)
+  }
+
+  const managedTrueLine = `${CODEX_FEATURE_KEY} = true ${CODEX_FEATURE_MARKER}`
+  const falseFlagPattern = /^(\s*)hooks\s*=\s*false\b.*$/m
   if (falseFlagPattern.test(configContent)) {
-    return configContent.replace(falseFlagPattern, `$1${managedTrueLine}: previous=false`)
+    return removeLegacyFlags(
+      configContent.replace(falseFlagPattern, `$1${managedTrueLine}: previous=false`),
+    )
+  }
+
+  const legacyTrueFlagPattern = /^(\s*)codex_hooks\s*=\s*true\b.*$/m
+  if (legacyTrueFlagPattern.test(configContent)) {
+    return removeLegacyFlags(
+      configContent.replace(legacyTrueFlagPattern, `$1${CODEX_FEATURE_KEY} = true`),
+    )
+  }
+
+  const legacyFalseFlagPattern = /^(\s*)codex_hooks\s*=\s*false\b.*$/m
+  if (legacyFalseFlagPattern.test(configContent)) {
+    return removeLegacyFlags(
+      configContent.replace(legacyFalseFlagPattern, `$1${managedTrueLine}: previous=false`),
+    )
   }
 
   if (configContent.includes('[features]')) {
@@ -51,19 +74,26 @@ function ensureCodexHooksEnabled(configContent: string): string {
 }
 
 function removeManagedCodexHooksFlag(configContent: string): string {
-  const managedSectionPattern =
-    /\n?\[features\]\n# vibetime-managed-section\n\s*codex_hooks\s*=\s*true\s*# vibetime-managed[^\n]*(?:\n|$)/m
+  const managedSectionPattern = new RegExp(
+    `\\n?\\[features\\]\\n# vibetime-managed-section\\n\\s*${CODEX_FEATURE_KEY_PATTERN}\\s*=\\s*true\\s*# vibetime-managed[^\\n]*(?:\\n|$)`,
+    'm',
+  )
   if (managedSectionPattern.test(configContent)) {
     return configContent.replace(managedSectionPattern, '')
   }
 
-  const previousFalsePattern =
-    /^(\s*)codex_hooks\s*=\s*true\s*#\s*vibetime-managed:\s*previous=false[^\n]*$/m
+  const previousFalsePattern = new RegExp(
+    `^(\\s*)${CODEX_FEATURE_KEY_PATTERN}\\s*=\\s*true\\s*#\\s*vibetime-managed:\\s*previous=false[^\\n]*$`,
+    'm',
+  )
   if (previousFalsePattern.test(configContent)) {
-    return configContent.replace(previousFalsePattern, '$1codex_hooks = false')
+    return configContent.replace(previousFalsePattern, `$1${CODEX_FEATURE_KEY} = false`)
   }
 
-  const managedLinePattern = /^\s*codex_hooks\s*=\s*true\s*#\s*vibetime-managed[^\n]*(?:\n|$)/m
+  const managedLinePattern = new RegExp(
+    `^\\s*${CODEX_FEATURE_KEY_PATTERN}\\s*=\\s*true\\s*#\\s*vibetime-managed[^\\n]*(?:\\n|$)`,
+    'm',
+  )
   return configContent.replace(managedLinePattern, '')
 }
 
@@ -99,6 +129,7 @@ export function installClaudeCode(): void {
     // Initialize hooks structure
     const hooks = (settings.hooks ?? {}) as Record<string, unknown[]>
     const events = ['UserPromptSubmit', 'Stop', 'SessionStart', 'SessionEnd']
+    const command = `${hookBinaryPath} --source claude-code`
 
     for (const event of events) {
       const arr = (hooks[event] ?? []) as Array<{
@@ -109,21 +140,25 @@ export function installClaudeCode(): void {
       // Find or create matcher group with matcher: "*"
       const existing = arr.find((g) => g.matcher === '*')
       if (existing) {
-        // Check if vibetime hook already exists (idempotent)
-        const hasVibetime = existing.hooks?.some((h) => isVibetimeCommand(h.command))
-        if (hasVibetime) continue
+        existing.hooks = existing.hooks ?? []
+        const hasVibetime = existing.hooks.some((h) => isVibetimeCommand(h.command))
+        if (hasVibetime) {
+          existing.hooks = existing.hooks.map((hook) =>
+            isVibetimeCommand(hook.command) ? { ...hook, command } : hook,
+          )
+          continue
+        }
 
         // Add vibetime hook to existing group
-        existing.hooks = existing.hooks ?? []
         existing.hooks.push({
           type: 'command',
-          command: `${hookBinaryPath} --source claude-code`,
+          command,
         })
       } else {
         // Create new matcher group
         arr.push({
           matcher: '*',
-          hooks: [{ type: 'command', command: `${hookBinaryPath} --source claude-code` }],
+          hooks: [{ type: 'command', command }],
         })
       }
 
@@ -152,7 +187,7 @@ export function installCodex(): void {
     // Ensure directory exists
     mkdirSync(dirname(hooksPath), { recursive: true })
 
-    // 1. Ensure config.toml has [features] codex_hooks = true
+    // 1. Ensure config.toml has [features] hooks = true
     let configContent = ''
     if (existsSync(configPath)) {
       configContent = readFileSync(configPath, 'utf-8')
@@ -185,19 +220,31 @@ export function installCodex(): void {
     // Initialize hooks structure
     const hooks = (hooksData.hooks ?? {}) as Record<string, unknown[]>
     const events = ['SessionStart', 'UserPromptSubmit', 'Stop'] // No SessionEnd for Codex
+    const command = `${hookBinaryPath} --source codex`
 
     for (const event of events) {
       const arr = (hooks[event] ?? []) as Array<{
         hooks?: Array<{ type: string; command: string; timeout?: number }>
       }>
 
-      // Check if vibetime hook already exists (idempotent)
-      const hasVibetime = arr.some((g) => g.hooks?.some((h) => isVibetimeCommand(h.command)))
-      if (hasVibetime) continue
+      let hasVibetime = false
+      for (const group of arr) {
+        if (!group.hooks?.some((h) => isVibetimeCommand(h.command))) continue
+        hasVibetime = true
+        group.hooks = group.hooks.map((hook) =>
+          isVibetimeCommand(hook.command)
+            ? { ...hook, type: 'command', command, timeout: 10 }
+            : hook,
+        )
+      }
+      if (hasVibetime) {
+        hooks[event] = arr
+        continue
+      }
 
       // Add vibetime hook
       arr.push({
-        hooks: [{ type: 'command', command: `${hookBinaryPath} --source codex`, timeout: 10 }],
+        hooks: [{ type: 'command', command, timeout: 10 }],
       })
 
       hooks[event] = arr
@@ -243,16 +290,21 @@ export function installCursor(): void {
     // Initialize hooks structure
     const hooks = (hooksData.hooks ?? {}) as Record<string, unknown[]>
     const events = ['beforeSubmitPrompt', 'stop', 'sessionStart', 'sessionEnd']
+    const command = `${hookBinaryPath} --source cursor`
 
     for (const event of events) {
       const arr = (hooks[event] ?? []) as Array<{ command: string }>
 
-      // Check if vibetime hook already exists (idempotent)
       const hasVibetime = arr.some((h) => isVibetimeCommand(h.command))
-      if (hasVibetime) continue
+      if (hasVibetime) {
+        hooks[event] = arr.map((hook) =>
+          isVibetimeCommand(hook.command) ? { ...hook, command } : hook,
+        )
+        continue
+      }
 
       // Add vibetime hook (append to array)
-      arr.push({ command: `${hookBinaryPath} --source cursor` })
+      arr.push({ command })
 
       hooks[event] = arr
     }
@@ -335,7 +387,7 @@ export function uninstallClaudeCode(): void {
 
 /**
  * Uninstall vibetime hooks for Codex CLI.
- * Preserves unrelated hooks and only restores codex_hooks when Vibetime
+ * Preserves unrelated hooks and only restores hooks when Vibetime
  * marked the feature flag as one it changed during install.
  */
 export function uninstallCodex(): void {
