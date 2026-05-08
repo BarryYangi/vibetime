@@ -8,6 +8,7 @@ import {
   installClaudeCode,
   installCodex,
   installCursor,
+  resolveHookBinaryPath,
   uninstallAgent,
   uninstallClaudeCode,
   uninstallCodex,
@@ -16,20 +17,56 @@ import {
 
 let testHome: string
 let originalHome: string
+let originalHookBinary: string | undefined
+let originalResourcesPath: string | undefined
+
+const processWithResources = process as NodeJS.Process & { resourcesPath?: string }
 
 beforeEach(() => {
   // Save original HOME and create isolated test directory
   originalHome = process.env.HOME ?? ''
+  originalHookBinary = process.env.VIBETIME_HOOK_BINARY
+  originalResourcesPath = processWithResources.resourcesPath
   testHome = `${originalHome}/.vibetime-test-install-${Date.now()}`
   process.env.HOME = testHome
+  delete process.env.VIBETIME_HOOK_BINARY
+  delete processWithResources.resourcesPath
 })
 
 afterEach(() => {
   // Restore original HOME and cleanup
   process.env.HOME = originalHome
+  if (originalHookBinary === undefined) {
+    delete process.env.VIBETIME_HOOK_BINARY
+  } else {
+    process.env.VIBETIME_HOOK_BINARY = originalHookBinary
+  }
+  if (originalResourcesPath === undefined) {
+    delete processWithResources.resourcesPath
+  } else {
+    processWithResources.resourcesPath = originalResourcesPath
+  }
   if (existsSync(testHome)) {
     rmSync(testHome, { recursive: true, force: true })
   }
+})
+
+describe('resolveHookBinaryPath', () => {
+  it('prefers explicit environment override', () => {
+    process.env.VIBETIME_HOOK_BINARY = '/tmp/custom-vibetime-hook'
+    expect(resolveHookBinaryPath()).toBe('/tmp/custom-vibetime-hook')
+  })
+
+  it('prefers packaged Electron resources path when present', () => {
+    const resourcesPath = `${testHome}/resources`
+    const binaryPath = `${resourcesPath}/bin/vibetime-hook`
+    mkdirSync(`${resourcesPath}/bin`, { recursive: true })
+    writeFileSync(binaryPath, '')
+
+    processWithResources.resourcesPath = resourcesPath
+
+    expect(resolveHookBinaryPath()).toBe(binaryPath)
+  })
 })
 
 describe('installClaudeCode — happy paths', () => {

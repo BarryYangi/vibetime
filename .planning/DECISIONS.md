@@ -36,8 +36,8 @@
 |----|----------|--------|------------------------|------------------|--------|
 | D-IPC | Electron IPC method signatures and types | TBD by Phase 4 | Wait until Today/Live/History view requirements drive the surface; deciding now risks over-design (RESEARCH.md §G). | 4 | deferred |
 | D-ANIM | Live view animation library | TBD by Phase 5 | Pick after a Live view design prototype proves the 60fps / ≥30fps acceptance bar; candidates include framer-motion / GSAP / hand-rolled requestAnimationFrame (RESEARCH.md §G). | 5 | deferred |
-| D-PKG | Packaging tool (electron-builder vs electron-forge) | TBD by Phase 6 | Choose after a Phase 5 packaging dry-run reveals which one handles `vibetime-hook` bundling + ad-hoc signing more cleanly (RESEARCH.md §G). | 6 | deferred |
-| D-SIGN | Ad-hoc signing scripting | TBD by Phase 6 | Locked: ad-hoc only (NOT Apple notarization, per user decision). Scripting choice — `codesign` shell script vs electron-builder built-in vs a Node script — deferred until packaging tool is chosen (RESEARCH.md §G). | 6 | deferred |
+| D-PKG | Packaging tool | `electron-builder` | Best fit for the existing Electron Vite build: mac `dmg` target, `extraResources` for bundling `vibetime-hook`, and built-in ad-hoc mac signing support. | 6 | approved |
+| D-SIGN | Ad-hoc signing scripting | `electron-builder` `mac.identity = "-"` plus explicit `codesign` verification | Keeps V0 ad-hoc and Apple-Developer-free while still producing a signed app that can be verified during acceptance. | 6 | approved |
 | D-TEST-HOOK | Test runner for `hook` package | TBD by Phase 3 | `bun test` is the natural choice for `bun:sqlite`-touching code, but cross-runtime portability questions need a Phase 3 decision (RESEARCH.md A2). | 3 | deferred |
 
 ## 4. Locked decisions (replicated for traceability — NOT up for debate)

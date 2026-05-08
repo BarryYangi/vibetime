@@ -5,13 +5,13 @@
 // REC-01: calls recoverOrphans on session_start.
 // Agent detection: --source arg first, then event name matching.
 
-import { adaptClaudeCode, adaptCodex, adaptCursor, resolveProject } from '@vibetime/core'
 import type { Agent, NormalizedEvent } from '@vibetime/core'
-import { openDatabase, persistEvent, closeDatabase } from './store.js'
-import { notifyDesktop } from './notify.js'
-import { reconcileCodexCompletedTurns, recoverOrphans } from './recovery.js'
+import { adaptClaudeCode, adaptCodex, adaptCursor, resolveProject } from '@vibetime/core'
 import { readConfig } from './config.js'
 import { appendLog } from './log.js'
+import { notifyDesktop } from './notify.js'
+import { reconcileCodexCompletedTurns, recoverOrphans } from './recovery.js'
+import { closeDatabase, openDatabase, persistEvent } from './store.js'
 
 /**
  * Detect agent type from event name or --source argument.
@@ -22,8 +22,9 @@ import { appendLog } from './log.js'
 export function detectAgent(payload: Record<string, unknown>, argv: string[]): Agent | null {
   // Check --source argument first
   const sourceIdx = argv.indexOf('--source')
-  if (sourceIdx !== -1 && argv[sourceIdx + 1]) {
-    const source = argv[sourceIdx + 1].toLowerCase()
+  const sourceArg = sourceIdx === -1 ? undefined : argv[sourceIdx + 1]
+  if (sourceArg) {
+    const source = sourceArg.toLowerCase()
     if (source === 'claude' || source === 'claude-code') return 'claude-code'
     if (source === 'codex') return 'codex'
     if (source === 'cursor') return 'cursor'
@@ -72,10 +73,13 @@ function getGitRemoteUrl(cwd: string): string | null {
 /**
  * Adapter dispatch map — maps Agent to the matching core adapter.
  */
-const adapters: Record<Agent, (rawPayload: Record<string, unknown>, eventName: string) => NormalizedEvent | null> = {
+const adapters: Record<
+  Agent,
+  (rawPayload: Record<string, unknown>, eventName: string) => NormalizedEvent | null
+> = {
   'claude-code': adaptClaudeCode,
-  'codex': adaptCodex,
-  'cursor': adaptCursor,
+  codex: adaptCodex,
+  cursor: adaptCursor,
 }
 
 /**
@@ -131,7 +135,7 @@ export async function runHook(): Promise<void> {
     event.project = resolveProject({
       cwd: event.project,
       aliases: config.projects,
-      gitRemoteUrl: gitRemoteUrl ?? undefined,
+      gitRemoteUrl,
     })
 
     // 6. Persist to SQLite

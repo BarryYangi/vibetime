@@ -5,8 +5,7 @@ const cossNeutralTheme = {
   backgroundColor: 'transparent',
   textStyle: {
     color: '#262626',
-    fontFamily:
-      '"SN Pro", -apple-system, BlinkMacSystemFont, system-ui, ui-sans-serif, sans-serif',
+    fontFamily: '"SN Pro", -apple-system, BlinkMacSystemFont, system-ui, ui-sans-serif, sans-serif',
   },
   title: { textStyle: { color: '#262626' }, subtextStyle: { color: '#737373' } },
   legend: { textStyle: { color: '#737373' } },

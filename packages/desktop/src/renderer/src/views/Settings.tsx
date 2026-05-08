@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useId, useState } from 'react'
+import { PageShell } from '@/components/PageShell'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { PageShell } from '@/components/PageShell'
+import { Switch } from '@/components/ui/switch'
 import type { AppPreferences } from '../../../shared/ipc-types'
 import { configAtom, store } from '../store'
 
@@ -88,7 +89,9 @@ function ConnectAgents({ onSuccessfulConnection }: { onSuccessfulConnection: () 
                       {isInstalled ? 'Hook installed' : 'Not installed'}
                     </span>
                   </div>
-                  <div className="mt-1 text-[13px] text-muted-foreground leading-snug">{description}</div>
+                  <div className="mt-1 text-[13px] text-muted-foreground leading-snug">
+                    {description}
+                  </div>
                 </div>
                 <div className="flex shrink-0 items-center justify-end gap-2">
                   {isInstalled ? (
@@ -132,6 +135,7 @@ function AppPreferencesSection({
 }: {
   onReadyToPrompt: (preferences: AppPreferences) => void
 }) {
+  const openAtLoginLabelId = useId()
   const [preferences, setPreferences] = useState<AppPreferences | null>(null)
   const [showPrompt, setShowPrompt] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -180,23 +184,21 @@ function AppPreferencesSection({
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-col gap-3 rounded-xl bg-muted/35 p-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="text-[15px] font-medium leading-snug">Open at login</div>
+              <div className="text-[15px] font-medium leading-snug" id={openAtLoginLabelId}>
+                Open at login
+              </div>
               <p className="mt-1 text-[13px] text-muted-foreground leading-snug">
                 Keep VibeTime available in the menu bar after sign in.
               </p>
             </div>
-            <Button
-              aria-pressed={openAtLogin}
+            <Switch
+              aria-labelledby={openAtLoginLabelId}
+              checked={openAtLogin}
               disabled={!preferences || saving}
-              loading={saving}
-              onClick={() =>
-                updatePreferences({ openAtLogin: !openAtLogin, autoLaunchPrompted: true })
+              onCheckedChange={(checked) =>
+                updatePreferences({ openAtLogin: checked, autoLaunchPrompted: true })
               }
-              size="sm"
-              variant={openAtLogin ? 'default' : 'outline'}
-            >
-              {openAtLogin ? 'On' : 'Off'}
-            </Button>
+            />
           </div>
 
           {showPrompt && preferences && !preferences.autoLaunchPrompted && (
@@ -313,7 +315,9 @@ function ProjectAliases() {
               </div>
             ))}
             {Object.keys(aliases).length === 0 && (
-              <p className="text-[13px] text-muted-foreground italic leading-snug">No aliases configured.</p>
+              <p className="text-[13px] text-muted-foreground italic leading-snug">
+                No aliases configured.
+              </p>
             )}
           </div>
 
@@ -370,7 +374,9 @@ function About() {
         <h2 className="font-heading font-semibold text-[13px] tracking-[-0.01em] text-foreground">
           About
         </h2>
-        <p className="mt-0.5 text-[13px] text-muted-foreground leading-snug">Build and local data</p>
+        <p className="mt-0.5 text-[13px] text-muted-foreground leading-snug">
+          Build and local data
+        </p>
       </div>
       <dl className="grid max-w-lg gap-x-8 gap-y-3 text-[13px] leading-snug sm:grid-cols-[7rem_1fr]">
         <dt className="text-muted-foreground">Version</dt>
@@ -407,10 +413,7 @@ export default function Settings() {
         </p>
       </header>
       <div className="flex flex-col gap-12">
-        <AppPreferencesSection
-          key={promptKey}
-          onReadyToPrompt={handleReadyToPrompt}
-        />
+        <AppPreferencesSection key={promptKey} onReadyToPrompt={handleReadyToPrompt} />
         <ConnectAgents onSuccessfulConnection={maybePromptOpenAtLogin} />
         <ProjectAliases />
         <About />

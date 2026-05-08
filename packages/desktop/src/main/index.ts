@@ -1,11 +1,19 @@
+import { spawnSync } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { readConfig } from '@vibetime/hook/config'
 import type { MenuItemConstructorOptions } from 'electron'
 import { app, BrowserWindow, Menu } from 'electron'
-import { readConfig } from '@vibetime/hook/config'
 import { setDbChangeListener, startDbChangeWatcher, stopDbChangeWatcher } from './db.js'
 import { registerIpcHandlers } from './ipc-handlers'
 import { startNotifyServer, stopNotifyServer } from './notify-server.js'
 import { createMenubarTray, destroyMenubarTray, refreshMenubarTray } from './tray.js'
+import {
+  configureSessionSecurity,
+  hardenWindow,
+  normalizeAppRoute,
+  trustedRendererUrl,
+} from './window-security.js'
 
 const APP_NAME = 'VibeTime'
 const MIN_WINDOW_WIDTH = 960
@@ -16,7 +24,7 @@ let isQuitting = false
 
 function configureAppIdentity() {
   app.setName(APP_NAME)
-  app.setAppUserModelId('ee.yct.vibetime')
+  app.setAppUserModelId('com.barryyangi.vibetime')
   app.setAboutPanelOptions({
     applicationName: APP_NAME,
   })
@@ -94,22 +102,19 @@ function configureApplicationMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
-function normalizedHash(route: string): string {
-  return route.startsWith('/') ? route : `/${route}`
-}
-
 function lastViewRoute(): string {
   try {
-    return readConfig().app.last_view || '/'
+    return normalizeAppRoute(readConfig().app.last_view)
   } catch {
     return '/'
   }
 }
 
 function loadRendererRoute(win: BrowserWindow, route: string): void {
-  const hash = normalizedHash(route)
-  if (process.env.ELECTRON_RENDERER_URL) {
-    void win.loadURL(`${process.env.ELECTRON_RENDERER_URL}#${hash}`)
+  const hash = normalizeAppRoute(route)
+  const rendererUrl = trustedRendererUrl()
+  if (rendererUrl) {
+    void win.loadURL(`${rendererUrl}#${hash}`)
   } else {
     void win.loadFile(join(__dirname, '../renderer/index.html'), { hash })
   }
@@ -140,6 +145,8 @@ function createMainWindow(route = lastViewRoute()): BrowserWindow {
     },
   })
 
+  hardenWindow(mainWindow)
+
   mainWindow.on('close', (event) => {
     if (isQuitting) return
     event.preventDefault()
@@ -157,7 +164,7 @@ function showMainWindow(route?: string): void {
   const targetRoute = route ?? lastViewRoute()
   const win = createMainWindow(targetRoute)
   if (route) {
-    loadRendererRoute(win, route)
+    loadRendererRoute(win, normalizeAppRoute(route))
   }
   if (win.isMinimized()) win.restore()
   win.show()
@@ -173,25 +180,89 @@ function quitApp(): void {
   app.quit()
 }
 
-// CLI subcommands that should run headless
-const CLI_COMMANDS = ['today', 'project', 'export', 'version', 'install', 'uninstall', 'help']
-const cliCommand = process.argv.find((arg) => CLI_COMMANDS.includes(arg))
-const isCliMode = !!cliCommand && !process.argv.some((arg) => arg.includes('electron'))
+// CLI subcommands that should run headless.
+const CLI_COMMANDS = new Set([
+  'today',
+  'project',
+  'export',
+  'version',
+  'install',
+  'uninstall',
+  'help',
+])
+
+function extractCliArgs(argv: string[]): string[] {
+  const candidateArgs = argv.slice(1)
+  const commandIndex = candidateArgs.findIndex((arg) => CLI_COMMANDS.has(arg))
+  return commandIndex === -1 ? [] : candidateArgs.slice(commandIndex)
+}
+
+const cliArgs = extractCliArgs(process.argv)
+const isCliMode = cliArgs.length > 0
+
+function firstExistingPath(paths: string[]): string | null {
+  return paths.find((path) => existsSync(path)) ?? null
+}
+
+function platformBinaryName(name: string): string {
+  return process.platform === 'win32' ? `${name}.exe` : name
+}
+
+function resolvePackagedCliBinary(): string | null {
+  const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath
+  const binaryName = platformBinaryName('vibetime')
+  return firstExistingPath([
+    ...(process.env.VIBETIME_CLI_BINARY ? [process.env.VIBETIME_CLI_BINARY] : []),
+    ...(resourcesPath ? [join(resourcesPath, 'bin', binaryName)] : []),
+    join(__dirname, '../../../hook', binaryName),
+    join(__dirname, '../../../hook/vibetime'),
+  ])
+}
+
+function resolvePackagedHookBinary(): string | null {
+  const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath
+  const binaryName = platformBinaryName('vibetime-hook')
+  return firstExistingPath([
+    ...(process.env.VIBETIME_HOOK_BINARY ? [process.env.VIBETIME_HOOK_BINARY] : []),
+    ...(resourcesPath ? [join(resourcesPath, 'bin', binaryName)] : []),
+    join(__dirname, '../../../hook', binaryName),
+    join(__dirname, '../../../hook/vibetime-hook'),
+  ])
+}
 
 if (isCliMode) {
-  const { runCli } = await import('@vibetime/hook/cli')
-  await runCli()
-  app.quit()
+  const cliBinaryPath = resolvePackagedCliBinary()
+  if (!cliBinaryPath) {
+    console.error('Error: VibeTime CLI binary is missing from the app bundle.')
+    app.exit(1)
+  } else {
+    const hookBinaryPath = resolvePackagedHookBinary()
+    const result = spawnSync(cliBinaryPath, cliArgs, {
+      stdio: 'inherit',
+      env: {
+        ...process.env,
+        ...(hookBinaryPath ? { VIBETIME_HOOK_BINARY: hookBinaryPath } : {}),
+      },
+    })
+
+    if (result.error) {
+      console.error(`Error: ${result.error.message}`)
+      app.exit(1)
+    }
+
+    app.exit(result.status ?? 0)
+  }
 } else {
   configureAppIdentity()
 
   app.whenReady().then(() => {
     configureApplicationMenu()
+    configureSessionSecurity()
     registerIpcHandlers({ showMainWindow })
     startNotifyServer()
     startDbChangeWatcher()
     createMenubarTray({
-      openApp: () => showMainWindow(),
+      openApp: (route) => showMainWindow(route),
       openSettings: () => showMainWindow('/settings'),
       quitApp,
     })

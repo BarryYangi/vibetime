@@ -1,0 +1,57 @@
+appId: com.barryyangi.vibetime
+productName: VibeTime
+copyright: Copyright © 2026 Barry
+
+directories:
+  output: release
+
+files:
+  - out/**/*
+  - package.json
+
+asar: true
+asarUnpack:
+  - node_modules/better-sqlite3/**/*
+
+mac:
+  category: public.app-category.developer-tools
+  icon: build/AppIcon.icon
+  identity: "-"
+  extraResources:
+    - from: ../hook/vibetime-hook
+      to: bin/vibetime-hook
+    - from: ../hook/vibetime
+      to: bin/vibetime
+  target:
+    - target: dir
+      arch:
+        - arm64
+    - target: dmg
+      arch:
+        - arm64
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+win:
+  icon: build/icon.ico
+  extraResources:
+    - from: ../hook/build/win-x64/vibetime-hook.exe
+      to: bin/vibetime-hook.exe
+    - from: ../hook/build/win-x64/vibetime.exe
+      to: bin/vibetime.exe
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+dmg:
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  artifactName: ${productName}-Setup-${version}-${arch}.${ext}

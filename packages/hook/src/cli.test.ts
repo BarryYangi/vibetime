@@ -2,8 +2,8 @@
 // CLI-01: install dispatch. CLI-02: Codex features flag via install.
 // REC-02: stale sweep on CLI invocation.
 
-import { describe, expect, it, beforeEach, afterEach } from 'bun:test'
-import { mkdirSync, existsSync, rmSync, readFileSync } from 'node:fs'
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
+import { existsSync, rmSync } from 'node:fs'
 
 let testHome: string
 let originalHome: string
@@ -28,8 +28,12 @@ beforeEach(() => {
   // Capture console output
   logSpy = console.log
   errorSpy = console.error
-  console.log = (...args: unknown[]) => { consoleOutput.push(args.join(' ')) }
-  console.error = (...args: unknown[]) => { consoleError.push(args.join(' ')) }
+  console.log = (...args: unknown[]) => {
+    consoleOutput.push(args.join(' '))
+  }
+  console.error = (...args: unknown[]) => {
+    consoleError.push(args.join(' '))
+  }
 
   // Prevent actual process.exit
   process.exit = ((code?: number) => {
@@ -60,26 +64,39 @@ async function runWithArgs(...args: string[]): Promise<void> {
   await runCli()
 }
 
+async function runWithExplicitArgs(...args: string[]): Promise<void> {
+  const { runCli } = await import(`./cli.js?test=${Date.now()}-${Math.random()}`)
+  await runCli(args)
+}
+
 describe('runCli — help', () => {
   it('shows help on no arguments', async () => {
     await runWithArgs()
-    expect(consoleOutput.some((line) => line.includes('vibetime — Agent coding time tracker'))).toBe(true)
+    expect(
+      consoleOutput.some((line) => line.includes('vibetime — Agent coding time tracker')),
+    ).toBe(true)
     expect(consoleOutput.some((line) => line.includes('install'))).toBe(true)
   })
 
   it('shows help on "help" command', async () => {
     await runWithArgs('help')
-    expect(consoleOutput.some((line) => line.includes('vibetime — Agent coding time tracker'))).toBe(true)
+    expect(
+      consoleOutput.some((line) => line.includes('vibetime — Agent coding time tracker')),
+    ).toBe(true)
   })
 
   it('shows help on "--help" flag', async () => {
     await runWithArgs('--help')
-    expect(consoleOutput.some((line) => line.includes('vibetime — Agent coding time tracker'))).toBe(true)
+    expect(
+      consoleOutput.some((line) => line.includes('vibetime — Agent coding time tracker')),
+    ).toBe(true)
   })
 
   it('shows help on "-h" flag', async () => {
     await runWithArgs('-h')
-    expect(consoleOutput.some((line) => line.includes('vibetime — Agent coding time tracker'))).toBe(true)
+    expect(
+      consoleOutput.some((line) => line.includes('vibetime — Agent coding time tracker')),
+    ).toBe(true)
   })
 })
 
@@ -95,13 +112,22 @@ describe('runCli — version', () => {
     // VERSION defaults to '0.0.0-dev'
     expect(consoleOutput.some((line) => line.includes('0.0.0-dev'))).toBe(true)
   })
+
+  it('accepts explicit args from packaged Electron argv parsing', async () => {
+    process.argv = ['/Applications/VibeTime.app/Contents/MacOS/VibeTime', 'version']
+    await runWithExplicitArgs('version')
+    expect(consoleOutput.some((line) => line.includes('vibetime'))).toBe(true)
+    expect(consoleOutput.some((line) => line.includes('Database:'))).toBe(true)
+  })
 })
 
 describe('runCli — install', () => {
   it('installs claude-code hooks', async () => {
     await runWithArgs('install', 'claude-code')
     expect(existsSync(`${testHome}/.claude/settings.json`)).toBe(true)
-    expect(consoleOutput.some((line) => line.includes('Installed vibetime hooks for claude-code'))).toBe(true)
+    expect(
+      consoleOutput.some((line) => line.includes('Installed vibetime hooks for claude-code')),
+    ).toBe(true)
   })
 
   it('installs codex hooks', async () => {
@@ -166,14 +192,17 @@ describe('runCli — export', () => {
     await runWithArgs('export', '--format=csv')
     // CSV output should have header row with these columns
     const csvOutput = consoleOutput.join('\n')
-    const hasHeader = csvOutput.includes('schema_version') && csvOutput.includes('agent') && csvOutput.includes('event_type')
+    const hasHeader =
+      csvOutput.includes('schema_version') &&
+      csvOutput.includes('agent') &&
+      csvOutput.includes('event_type')
     const hasError = consoleError.some((line) => line.includes('Error:'))
     expect(hasHeader || hasError).toBe(true)
   })
 
   it('writes to file when --out is specified', async () => {
     const outPath = `${testHome}/export-test.json`
-    await runWithArgs('export', '--out=' + outPath)
+    await runWithArgs('export', `--out=${outPath}`)
     // If no error, file should exist or we get an error message
     const hasExportMsg = consoleOutput.some((line) => line.includes('Exported'))
     const hasError = consoleError.some((line) => line.includes('Error:'))

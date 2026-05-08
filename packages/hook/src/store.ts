@@ -20,8 +20,10 @@ export interface StoredOpenTurn {
   meta: string | null
 }
 
-export type PersistableEvent = Omit<NormalizedEvent, 'duration_sec'> & {
-  duration_sec?: number | null
+export type PersistableEvent = Omit<NormalizedEvent, 'duration_sec' | 'meta' | 'turn_id'> & {
+  duration_sec?: number | null | undefined
+  meta?: Record<string, unknown> | undefined
+  turn_id?: string | undefined
 }
 
 /**
@@ -171,7 +173,7 @@ export function queryEvents(
 ): NormalizedEvent[] {
   try {
     let sql = 'SELECT * FROM events WHERE 1=1'
-    const params: Record<string, unknown> = {}
+    const params: Record<string, string | number> = {}
 
     if (options.from) {
       sql += ' AND ts >= $from'
@@ -192,7 +194,7 @@ export function queryEvents(
 
     sql += ' ORDER BY ts ASC'
 
-    return db.query(sql).all(params) as NormalizedEvent[]
+    return db.query<NormalizedEvent, Record<string, string | number>>(sql).all(params)
   } catch (err) {
     appendLog(`Error querying events: ${err}`)
     return []

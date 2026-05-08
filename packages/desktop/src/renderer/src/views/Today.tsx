@@ -264,7 +264,7 @@ export default function Today() {
 
         <div className="grid gap-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
           <div className="min-w-0">
-            <p className="text-[13px] text-muted-foreground leading-snug">Total coding time</p>
+            <p className="text-[13px] text-muted-foreground leading-snug">Total agent time</p>
             <div className="mt-1 leading-none">
               <TotalDurationFlow seconds={liveTotal} />
             </div>

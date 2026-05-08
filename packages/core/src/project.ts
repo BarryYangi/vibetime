@@ -30,16 +30,16 @@ export function parseGitRemoteUrl(url: string | null | undefined): string | null
 
   // SSH form is most specific (the colon is not a port). Try it first.
   const ssh = SSH_RE.exec(trimmed)
-  if (ssh && ssh[2]) return ssh[2]
+  if (ssh?.[2]) return ssh[2]
 
   const sshUri = SSH_URI_RE.exec(trimmed)
-  if (sshUri && sshUri[1]) return sshUri[1]
+  if (sshUri?.[1]) return sshUri[1]
 
   const gitUri = GIT_URI_RE.exec(trimmed)
-  if (gitUri && gitUri[1]) return gitUri[1]
+  if (gitUri?.[1]) return gitUri[1]
 
   const https = HTTPS_RE.exec(trimmed)
-  if (https && https[1]) return https[1]
+  if (https?.[1]) return https[1]
 
   return null
 }

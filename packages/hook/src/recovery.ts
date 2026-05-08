@@ -5,9 +5,10 @@
 
 import type { Database } from 'bun:sqlite'
 import type { NormalizedEvent } from '@vibetime/core'
-import { findCodexTurnCompletion } from '@vibetime/core'
+import { findCodexTurnCompletion } from './codex-transcript.js'
 import { STALE_TURN_MAX_AGE } from './constants.js'
 import { appendLog } from './log.js'
+import type { PersistableEvent } from './store.js'
 import { deleteOpenTurn, persistEvent, queryOpenTurns } from './store.js'
 
 /**
@@ -21,7 +22,7 @@ export function recoverOrphans(db: Database, sessionId: string): void {
 
     for (const orphan of orphans) {
       // Create synthetic turn_end event
-      const syntheticEvent = {
+      const syntheticEvent: PersistableEvent = {
         agent: orphan.agent as NormalizedEvent['agent'],
         event_type: 'turn_end',
         project: orphan.project,
@@ -67,7 +68,7 @@ export function sweepStale(db: Database): void {
     for (const turn of allOpenTurns) {
       if (turn.started_at < cutoff) {
         // Create synthetic turn_end event
-        const syntheticEvent = {
+        const syntheticEvent: PersistableEvent = {
           agent: turn.agent as NormalizedEvent['agent'],
           event_type: 'turn_end',
           project: turn.project,

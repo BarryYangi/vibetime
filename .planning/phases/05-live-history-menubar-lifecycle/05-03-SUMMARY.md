@@ -13,19 +13,18 @@ requires:
     provides: renderer routes
 provides:
   - Persistent Electron Tray with duration title
-  - Right-click Open / Settings / Quit context menu
-  - Left-click compact menubar dropdown
+  - Native status menu with Today, running turns, Top project, Open, Settings, and Quit
+  - Unified left-click and right-click Tray behavior
   - Close-to-menubar lifecycle with explicit quit path
 affects: [phase-05-menubar, phase-05-lifecycle]
 
 tech-stack:
   added: []
-  patterns: [retained-browser-window, tray-owned-dropdown, db-change-listener]
+  patterns: [native-tray-menu, retained-main-window, db-change-listener]
 
 key-files:
   created:
     - packages/desktop/src/main/tray.ts
-    - packages/desktop/src/renderer/src/views/Menubar.tsx
   modified:
     - packages/desktop/src/main/index.ts
     - packages/desktop/src/main/db.ts
@@ -35,8 +34,10 @@ key-files:
 
 key-decisions:
   - "Tray refresh is wired through a DB change listener instead of importing tray from db.ts, avoiding circular module ownership."
-  - "The menubar dropdown uses a separate compact /menubar route, not the full Today shell."
-  - "DB push now broadcasts to all BrowserWindow instances so the main window and dropdown both refresh."
+  - "The custom /menubar dropdown was removed after UX review; native Tray Menu is the V0 behavior."
+  - "Left-click and right-click now use the same native status menu, avoiding focus theft and status-item highlight mismatch."
+  - "Active title refresh is event-driven with minute-boundary timers rather than fixed polling."
+  - "DB push now refreshes the Tray title and broadcasts renderer invalidation to the main window."
 
 requirements-completed: [MENU-01, MENU-02, MENU-03, MENU-04, MENU-05, MENU-06, LIFE-01, LIFE-02]
 
@@ -46,7 +47,7 @@ completed: 2026-05-07
 
 # Phase 05 Plan 03: Menubar and Close Lifecycle Summary
 
-**Native menubar behavior is implemented with a persistent Tray, compact dropdown, and explicit quit semantics.**
+**Native menubar behavior is implemented with a persistent Tray, unified native status menu, and explicit quit semantics.**
 
 ## Performance
 
@@ -60,25 +61,41 @@ completed: 2026-05-07
 - Refactored the main process around retained `mainWindow`, `isQuitting`, `createMainWindow`, `showMainWindow`, `hideMainWindow`, and `quitApp`.
 - Added close-to-menubar behavior: normal close hides the app; Cmd+Q and Tray Quit fully quit.
 - Added persistent Electron Tray with title formatting from `formatMenubarTitle(queryMenubarState())`.
-- Added right-click context menu with exact labels `Open`, `Settings`, and `Quit`.
-- Added left-click compact dropdown as a frameless `BrowserWindow` loading `/menubar`.
-- Added compact renderer view showing Today total, Top 3 projects, active turns, and `Open vibetime`.
-- Added `showMainWindow` IPC for the dropdown button.
-- Broadcast DB push events to every window and refresh Tray title on DB change.
+- Added native status menu with Today total, active turns, Top project rows, and exact action labels `Open`, `Settings`, and `Quit`.
+- Unified left-click and right-click behavior on the native status menu.
+- Replaced fixed active polling with DB-change refresh plus minute-boundary active title updates.
+- Added route-aware `showMainWindow` behavior so Tray menu actions can open Today, Live, History, or Settings.
+- Broadcast DB push events to renderer windows and refresh Tray title on DB change.
 
 ## Files Created/Modified
 
-- `packages/desktop/src/main/tray.ts` - Tray lifecycle, title refresh, right-click menu, and dropdown window.
-- `packages/desktop/src/renderer/src/views/Menubar.tsx` - Compact dropdown renderer.
+- `packages/desktop/src/main/tray.ts` - Tray lifecycle, title refresh, native status menu, and route actions.
 - `packages/desktop/src/main/index.ts` - Retained main window lifecycle and Tray bootstrapping.
 - `packages/desktop/src/main/db.ts` - DB change listener and multi-window push broadcast.
 - `packages/desktop/src/main/ipc-handlers.ts` - `showMainWindow` IPC handler.
 - `packages/desktop/src/shared/ipc-types.ts` - `showMainWindow` IPC contract.
-- `packages/desktop/src/renderer/src/App.tsx` - Compact `/menubar` route outside the normal sidebar shell.
+- `packages/desktop/src/renderer/src/App.tsx` - Main route persistence and route shell.
+
+## Post-Implementation UX Refinement
+
+Manual review rejected the custom `/menubar` BrowserWindow dropdown. The final V0 Tray design uses Electron's native `Menu` for both left and right click because it provides correct status-item activation, avoids auto-focus on renderer controls, and keeps the resident app lower risk.
+
+Final menu structure:
+
+- `Today · <duration>` with clock icon, clickable to Today.
+- Disabled grey `N running` / `No turn running` section label with no icon.
+- Active turn rows with activity icon, clickable to Live.
+- Disabled grey `Top project` / `No project today` section label with no icon.
+- Project rows with folder icon, clickable to History.
+- `Open`, `Settings`, `Quit` actions with native macOS template icons.
+
+The removed `/menubar` route and renderer file are intentional cleanup, not an accidental regression.
+
+User visually reviewed and accepted this final native menu direction on 2026-05-07.
 
 ## Deviations from Plan
 
-None.
+The shipped behavior deliberately diverges from the original compact dropdown task. Native menu behavior is the selected V0 tradeoff because Electron custom popovers cannot provide native status-item highlight/focus semantics without platform-specific hacks.
 
 ## Verification
 
@@ -87,7 +104,7 @@ None.
 
 ## Manual Follow-up
 
-- Manual macOS Tray inspection remains pending: launch app, verify Tray item appears, left-click opens dropdown, right-click shows Open / Settings / Quit, close hides, Cmd+Q quits.
+- Manual macOS Tray inspection remains pending: launch app, verify Tray item appears, left/right click open the native status menu, route actions work, close hides, Cmd+Q quits.
 
 ## Next Phase Readiness
 

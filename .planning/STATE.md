@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Completed 05-04-PLAN.md; Phase 5 code-complete, manual verification partial
-last_updated: "2026-05-07T05:21:31.686Z"
+status: active
+stopped_at: Phase 6 packaged app now includes a generated macOS icon; manual exact-checklist UAT remains
+last_updated: "2026-05-07T10:05:00Z"
 last_activity: 2026-05-07
 progress:
   total_phases: 6
   completed_phases: 5
-  total_plans: 18
+  total_plans: 19
   completed_plans: 18
-  percent: 100
+  percent: 95
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-07)
 
 **Core value:** Accurately and silently record agent coding time per project on the developer's machine, then surface it in a visual surface good enough to live on a livestream — with zero network calls.
-**Current focus:** Phase 05 — live-history-menubar-lifecycle
+**Current focus:** Phase 06 — packaging-v0-acceptance
 
 ## Current Position
 
-Phase: 05 (live-history-menubar-lifecycle) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
+Phase: 06 (packaging-v0-acceptance) — IN UAT
+Plan: 0 of 1
+Status: Automated packaging, signing, DMG, app icon, bundled binaries, root CI, and packaged CLI smoke pass; manual exact-checklist UAT remains
 Last activity: 2026-05-07
 
-Progress: [██████████] 100%
+Progress: [█████████░] 95%
 
 ## Performance Metrics
 
@@ -93,11 +93,16 @@ Recent decisions affecting current work:
 - Codex install/uninstall must preserve user ownership of `~/.codex/config.toml` `codex_hooks`; Vibetime now marks only self-managed flips and restores the prior value on uninstall.
 - Codex stop recovery no longer relies on freeze heuristics. Open Codex turns are reconciled against local transcript `task_complete` records, and duplicate `turn_start` rows are ignored while a turn is already open.
 - Today view refresh is event-driven and live: DB invalidations push into renderer, open turns tick locally every second, and duration formatting is compact (`8m28s`).
+- Phase 5 Tray behavior uses Electron native `Menu` for both left and right click. The custom `/menubar` BrowserWindow dropdown was removed because it caused focus/highlight mismatch and auto-focus problems; native menu is the selected V0 behavior.
+- Tray title refresh is event-driven plus visible minute-boundary timers while active, not fixed high-frequency polling.
+- Phase 5 UAT completed 2026-05-07 with 9/9 checks passed. Open at login uses a coss/Base UI Switch; only the switch itself toggles. Renderer controls intentionally keep the default arrow cursor rather than pointer cursor.
+- Phase 6 packaging now uses the user-provided deterministic SVG macOS app icon. The source lives at `packages/desktop/build/app-icon-source.svg`; `pnpm --filter @vibetime/desktop run generate:icons` renders `build/app-icon-source.png`, generates `build/icon.icns`, and packaged `Info.plist` references `CFBundleIconFile => icon.icns`.
 
 ### Pending Todos
 
-- Phase 5 planning: Live / History / menubar / lifecycle
-- Re-run Phase 4 visual pass after the latest COSS theme cleanup and Connect Agents uninstall flow changes
+- Record exact Phase 6 manual packaged-app UAT results in `06-UAT.md`.
+- Verify Settings install path.
+- Verify real Claude Code, Codex, and Cursor capture when available.
 
 ### Blockers/Concerns
 
@@ -117,6 +122,6 @@ None yet. (Phase 1 must produce DECISIONS.md before Phase 1 implementation can a
 
 ## Session Continuity
 
-Last session: 2026-05-07T05:21:31.470Z
-Stopped at: Completed 05-04-PLAN.md; Phase 5 code-complete, manual verification partial
+Last session: 2026-05-07T10:05:00Z
+Stopped at: Phase 6 packaged app now includes a generated macOS icon; manual exact-checklist UAT remains
 Resume file: None

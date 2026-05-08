@@ -32,6 +32,7 @@ created: 2026-05-07
 - History Top Projects must use the local coss `Table`.
 - Menubar right-click is native Electron menu, not a renderer-styled menu.
 - Renderer app surfaces must keep the current neutral theme and must not reintroduce Tokyo Night styling.
+- Interactive app controls use the default arrow cursor rather than the hand pointer cursor. Keep text-entry cursors for inputs, but do not use `cursor-pointer` for buttons, switches, badges, links, tabs, or menu-like controls.
 
 ---
 
@@ -115,9 +116,11 @@ Accent reserved for: active Live indicator, Motion sweep, chart series, selected
 | History heading | `History` |
 | History empty state heading | `No history yet` |
 | History empty state body | `Captured turns will appear here after your first completed session.` |
-| Menubar open button | `Open vibetime` |
-| Menubar active section | `Active now` |
-| Menubar projects section | `Today` |
+| Menubar primary action | `Open` |
+| Menubar settings action | `Settings` |
+| Menubar quit action | `Quit` |
+| Menubar active section | `{N} running` / `No turn running` |
+| Menubar projects section | `Top project` / `No project today` |
 | Auto-launch setting label | `Open at login` |
 | Auto-launch prompt heading | `Open VibeTime at login?` |
 | Auto-launch prompt body | `Keep the menubar timer available after you sign in.` |
@@ -157,16 +160,17 @@ Accent reserved for: active Live indicator, Motion sweep, chart series, selected
 ### Menubar Widget
 
 - Title states: idle `●`, idle with total `<dot> 47m`, and `● 5h 23m` when >= 1h.
-- Dot pulses softly only while an active turn exists.
-- Left click opens compact dropdown: today's total, Top 3 projects, active turns, Open vibetime.
-- Right click opens native menu: Open, Settings, Quit.
-- Menubar title refreshes on DB push and approximately every 10 seconds while active turns exist.
+- Active turn state is indicated by the dot/title state; native pulsing is not required for V0 because Electron native Tray no longer exposes a supported highlight/pulse API.
+- Left click and right click both open the same native Electron menu.
+- Native menu contains Today, running-turn status rows, Top project rows, Open, Settings, and Quit.
+- Section labels are disabled/grey with no icon; concrete turn/project rows are clickable and use native macOS template icons.
+- Menubar title refreshes on DB push and at visible minute-boundaries while active turns exist; avoid high-frequency polling in the resident app.
 
 ### Lifecycle & Auto-launch
 
 - Window close hides the main window and keeps menubar alive.
 - Quit only via menubar Quit or Cmd+Q.
-- Open vibetime restores last active view; first-run default is Today.
+- Open restores last active view; first-run default is Today.
 - Settings includes `Open at login` toggle.
 - First opt-in prompt appears after the user has context, such as first successful Settings open or first successful agent connection.
 

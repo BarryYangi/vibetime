@@ -92,9 +92,15 @@ describe('formatMenubarTitle', () => {
   it('formats idle and duration threshold states', async () => {
     const { formatMenubarTitle } = await loadDbModule()
 
-    expect(formatMenubarTitle({ todayTotal: 0, active: false, projects: [], activeTurns: [] })).toBe(
-      '●',
+    expect(
+      formatMenubarTitle({ todayTotal: 0, active: false, projects: [], activeTurns: [] }),
+    ).toBe('●')
+    expect(formatMenubarTitle({ todayTotal: 0, active: true, projects: [], activeTurns: [] })).toBe(
+      '● <1m',
     )
+    expect(
+      formatMenubarTitle({ todayTotal: 42, active: true, projects: [], activeTurns: [] }),
+    ).toBe('● <1m')
     expect(
       formatMenubarTitle({ todayTotal: 47 * 60, active: false, projects: [], activeTurns: [] }),
     ).toBe('● 47m')
@@ -106,5 +112,8 @@ describe('formatMenubarTitle', () => {
         activeTurns: [],
       }),
     ).toBe('● 5h 23m')
+    expect(
+      formatMenubarTitle({ todayTotal: 5 * 3600, active: false, projects: [], activeTurns: [] }),
+    ).toBe('● 5h')
   })
 })

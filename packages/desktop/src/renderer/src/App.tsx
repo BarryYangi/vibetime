@@ -5,7 +5,6 @@ import Sidebar from './components/Sidebar'
 import { handlePush } from './store'
 import History from './views/History'
 import Live from './views/Live'
-import Menubar from './views/Menubar'
 import Settings from './views/Settings'
 import Today from './views/Today'
 
@@ -19,16 +18,6 @@ function AppRoutes() {
     if (!LAST_VIEW_ROUTES.has(location.pathname)) return
     void window.api.invoke('updateAppPreferences', { lastView: location.pathname })
   }, [location.pathname])
-
-  if (location.pathname === '/menubar') {
-    return (
-      <div className="h-screen min-h-[360px] min-w-[320px] overflow-hidden bg-popover">
-        <Routes>
-          <Route path="/menubar" element={<Menubar />} />
-        </Routes>
-      </div>
-    )
-  }
 
   return (
     <div

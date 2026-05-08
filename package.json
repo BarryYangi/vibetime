@@ -1,6 +1,6 @@
 {
   "name": "vibetime",
-  "version": "0.0.0",
+  "version": "2026.5.8",
   "private": true,
   "description": "Local-first macOS time tracker for AI coding agents (Claude Code / Codex / Cursor).",
   "license": "MIT",
@@ -13,7 +13,7 @@
     "typecheck": "tsc -b",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "test": "NODE_OPTIONS=--experimental-require-module vitest run",
+    "test": "NODE_OPTIONS=--experimental-require-module vitest run --project @vibetime/core --project @vibetime/desktop && pnpm --filter @vibetime/hook test",
     "depcheck": "depcruise --config .dependency-cruiser.cjs packages",
     "verify:core-zero-deps": "node -e \"const p=require('./packages/core/package.json');if(Object.keys(p.dependencies||{}).length){console.error('core must have empty dependencies');process.exit(1)}\"",
     "ci": "pnpm typecheck && pnpm lint && pnpm test && pnpm depcheck && pnpm verify:core-zero-deps"

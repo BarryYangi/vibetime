@@ -4,7 +4,7 @@ import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 
 const APP_NAME = 'VibeTime'
-const BUNDLE_ID = 'ee.yct.vibetime'
+const BUNDLE_ID = 'com.barryyangi.vibetime'
 
 if (process.platform !== 'darwin') {
   process.exit(0)

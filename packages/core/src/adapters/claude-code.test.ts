@@ -141,7 +141,7 @@ describe('adaptClaudeCode — turn_id derivation (PRD §8 + RESEARCH §G.7)', ()
     vi.useRealTimers()
   })
 
-  it('derives turn_id as `${session_id}-${ts}` with sub-second precision', () => {
+  it('derives turn_id from session_id and timestamp with sub-second precision', () => {
     const event = adaptClaudeCode(
       { session_id: 'sid', cwd: '/x', hook_event_name: 'UserPromptSubmit' },
       'UserPromptSubmit',

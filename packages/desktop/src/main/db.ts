@@ -8,7 +8,6 @@ import {
   DDL_INDICES,
   DDL_OPEN_TURNS,
   durationWithinWindow,
-  findCodexTurnCompletion,
 } from '@vibetime/core'
 import Database from 'better-sqlite3'
 import { BrowserWindow } from 'electron'
@@ -21,6 +20,7 @@ import type {
   TodayLiveState,
   TodaySummary,
 } from '../shared/ipc-types.js'
+import { findCodexTurnCompletion } from './codex-transcript.js'
 
 type DbEvent = Omit<NormalizedEvent, 'duration_sec' | 'meta'> & {
   duration_sec: number | null
@@ -322,9 +322,8 @@ function allocateDurationByLocalHour(input: {
   rangeStart: number
   rangeEnd: number
 }): Array<{ hourStart: number; duration: number }> {
-  const rawStart = input.startTs ?? (
-    input.durationSec === null ? input.endTs : input.endTs - input.durationSec
-  )
+  const rawStart =
+    input.startTs ?? (input.durationSec === null ? input.endTs : input.endTs - input.durationSec)
   const start = Math.max(rawStart, input.rangeStart)
   const end = Math.min(input.endTs, input.rangeEnd)
   if (end <= start) return []
@@ -427,7 +426,7 @@ export function buildHistorySummaryFromEvents(
     turnDurations.push({
       project: ev.project,
       agent: ev.agent,
-      turnId: ev.turn_id,
+      turnId: ev.turn_id ?? null,
       startedAt,
       endedAt: ev.ts,
       duration: periodDuration,
@@ -506,9 +505,7 @@ export function buildHistorySummaryFromEvents(
         total: hourlyTotals.get(`${weekday}:${hour}`) ?? 0,
       })),
     ).flat(),
-    turnDurations: turnDurations
-      .sort((a, b) => a.endedAt - b.endedAt)
-      .slice(-500),
+    turnDurations: turnDurations.sort((a, b) => a.endedAt - b.endedAt).slice(-500),
     projectAgentTotals: [...projectAgentTotals.values()]
       .sort((a, b) => b.total - a.total || a.project.localeCompare(b.project))
       .map((project) => ({
@@ -570,7 +567,8 @@ export function queryMenubarState(): MenubarState {
     .slice(0, 3)
 
   return {
-    todayTotal: liveState.completed.grandTotal + [...activeTotals.values()].reduce((a, b) => a + b, 0),
+    todayTotal:
+      liveState.completed.grandTotal + [...activeTotals.values()].reduce((a, b) => a + b, 0),
     active: liveState.activeTurns.length > 0,
     projects,
     activeTurns: liveState.activeTurns,
@@ -579,11 +577,15 @@ export function queryMenubarState(): MenubarState {
 
 export function formatMenubarTitle(state: MenubarState): string {
   const total = Math.max(0, Math.floor(state.todayTotal))
-  if (total <= 0) return '●'
+  if (total <= 0) return state.active ? '● <1m' : '●'
+  if (total < 60) return '● <1m'
+
   const minutes = Math.floor(total / 60)
   if (minutes < 60) return `● ${minutes}m`
+
   const hours = Math.floor(minutes / 60)
   const remainingMinutes = minutes % 60
+  if (remainingMinutes <= 0) return `● ${hours}h`
   return `● ${hours}h ${remainingMinutes}m`
 }
 

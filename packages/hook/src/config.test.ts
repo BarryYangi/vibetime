@@ -1,8 +1,8 @@
-import { describe, expect, it, beforeEach, afterEach } from 'bun:test'
-import { mkdtempSync, rmSync, readFileSync, existsSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { readConfig, writeConfig, type VibetimeConfig } from './config.js'
+import { join } from 'node:path'
+import { readConfig, type VibetimeConfig, writeConfig } from './config.js'
 
 let tempHome: string
 let origHome: string | undefined

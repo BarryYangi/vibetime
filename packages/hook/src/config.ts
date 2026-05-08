@@ -1,7 +1,7 @@
 // Config read/write for ~/.vibetime/config.toml.
 // FS-02: config.toml with [projects] and [display].timezone defaults.
 
-import { readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { ensureVibetimeDir } from './fs.js'
 
 // Compute at call time so tests can override process.env.HOME
@@ -92,7 +92,7 @@ function serializeToml(config: VibetimeConfig): string {
   lines.push(`open_at_login = ${config.app.open_at_login}`)
   lines.push(`auto_launch_prompted = ${config.app.auto_launch_prompted}`)
   lines.push(`last_view = "${config.app.last_view}"`)
-  return lines.join('\n') + '\n'
+  return `${lines.join('\n')}\n`
 }
 
 /**
@@ -113,16 +113,17 @@ function parseToml(raw: string): Partial<VibetimeConfig> {
       if (currentSectionName) {
         result[currentSectionName] = currentSection
       }
-      currentSectionName = sectionMatch[1]
+      currentSectionName = sectionMatch[1] ?? ''
       currentSection = {}
       continue
     }
 
     const kvMatch = trimmed.match(/^(\w+)\s*=\s*"?(.+?)"?$/)
     if (kvMatch && currentSectionName) {
-      const rawValue = kvMatch[2].replace(/^"|"$/g, '')
-      currentSection[kvMatch[1]] =
-        rawValue === 'true' ? true : rawValue === 'false' ? false : rawValue
+      const key = kvMatch[1]
+      const rawValue = kvMatch[2]?.replace(/^"|"$/g, '')
+      if (!key || rawValue === undefined) continue
+      currentSection[key] = rawValue === 'true' ? true : rawValue === 'false' ? false : rawValue
     }
   }
 

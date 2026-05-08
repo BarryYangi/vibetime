@@ -61,7 +61,7 @@ describe('recoverOrphans — orphan sweep on session_start (REC-01)', () => {
         .query("SELECT * FROM events WHERE event_type = 'turn_end' AND turn_id = 'orphan-1'")
         .all() as Array<Record<string, unknown>>
       expect(rows).toHaveLength(1)
-      const meta = JSON.parse(rows[0].meta as string)
+      const meta = JSON.parse(rows[0]?.meta as string)
       expect(meta.abandoned).toBe(true)
     } finally {
       closeDatabase(db)
@@ -82,7 +82,7 @@ describe('recoverOrphans — orphan sweep on session_start (REC-01)', () => {
         .query("SELECT duration_sec FROM events WHERE event_type = 'turn_end'")
         .all() as Array<{ duration_sec: number | null }>
       expect(rows).toHaveLength(1)
-      expect(rows[0].duration_sec).toBeNull()
+      expect(rows[0]?.duration_sec).toBeNull()
     } finally {
       closeDatabase(db)
     }
@@ -180,7 +180,7 @@ describe('sweepStale — stale sweep at CLI/desktop launch (REC-02)', () => {
         .query("SELECT * FROM events WHERE event_type = 'turn_end' AND turn_id = 'stale-1'")
         .all() as Array<Record<string, unknown>>
       expect(rows).toHaveLength(1)
-      const meta = JSON.parse(rows[0].meta as string)
+      const meta = JSON.parse(rows[0]?.meta as string)
       expect(meta.reason).toBe('stale_sweep')
     } finally {
       closeDatabase(db)
@@ -199,7 +199,7 @@ describe('sweepStale — stale sweep at CLI/desktop launch (REC-02)', () => {
         .query("SELECT duration_sec FROM events WHERE event_type = 'turn_end'")
         .all() as Array<{ duration_sec: number | null }>
       expect(rows).toHaveLength(1)
-      expect(rows[0].duration_sec).toBeNull()
+      expect(rows[0]?.duration_sec).toBeNull()
     } finally {
       closeDatabase(db)
     }
@@ -248,7 +248,7 @@ describe('sweepStale — stale sweep at CLI/desktop launch (REC-02)', () => {
       // Only stale turn should be swept
       const remaining = queryOpenTurns(db)
       expect(remaining).toHaveLength(1)
-      expect(remaining[0].turn_id).toBe('fresh-1')
+      expect(remaining[0]?.turn_id).toBe('fresh-1')
 
       const turnEnds = db.query("SELECT * FROM events WHERE event_type = 'turn_end'").all()
       expect(turnEnds).toHaveLength(1)

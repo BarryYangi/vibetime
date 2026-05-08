@@ -2,7 +2,11 @@
 node_modules/
 dist/
 packages/*/out/
+packages/*/release/
+packages/desktop/build/
+packages/hook/build/
 *.tsbuildinfo
 coverage/
 
+vibetime
 vibetime-hook

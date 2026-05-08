@@ -6,11 +6,8 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "outDir": "./out"
+    "outDir": "./out",
+    "rootDir": "./src"
   },
-  "include": [
-    "src/main/**/*.ts",
-    "src/preload/**/*.ts",
-    "src/shared/**/*.ts"
-  ]
+  "include": ["src/main/**/*.ts", "src/preload/**/*.ts", "src/shared/**/*.ts"]
 }

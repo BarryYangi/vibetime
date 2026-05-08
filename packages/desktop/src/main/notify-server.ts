@@ -1,9 +1,9 @@
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { createServer, type Server } from 'node:net'
-import { join } from 'node:path'
 import { homedir } from 'node:os'
-import { notifyRenderer } from './db.js'
+import { join } from 'node:path'
 import type { IpcPushEvent } from '../shared/ipc-types.js'
+import { notifyRenderer } from './db.js'
 
 const SOCKET_DIR = join(homedir(), '.vibetime')
 const SOCKET_PATH = join(SOCKET_DIR, 'notify.sock')

@@ -75,11 +75,6 @@ function sumTrendDay(day: HistorySummary['trends'][number]): number {
   return Object.values(day.projects).reduce((sum, value) => sum + value, 0)
 }
 
-function weekdayIndex(date: string): number {
-  const day = new Date(`${date}T00:00:00`).getDay()
-  return day === 0 ? 6 : day - 1
-}
-
 function formatHourWindow(weekday: number, hour: number): string {
   return `${weekdayLabels[weekday] ?? '-'} ${String(hour).padStart(2, '0')}:00`
 }
@@ -132,28 +127,25 @@ function CalendarHeatmap({ summary }: { summary: HistorySummary }) {
         inRange: { color: githubHeatmapPalette },
       },
       calendar: {
-        top: 24,
-        left: 44,
-        right: 10,
-        bottom: 6,
-        cellSize: [13, 13],
-        range: [
-          summary.calendar[0]?.date,
-          summary.calendar[summary.calendar.length - 1]?.date,
-        ],
+        top: 22,
+        left: 36,
+        right: 8,
+        bottom: 4,
+        cellSize: [11, 11],
+        range: [summary.calendar[0]?.date, summary.calendar[summary.calendar.length - 1]?.date],
         splitLine: { show: false },
         itemStyle: {
-          borderWidth: 3,
+          borderWidth: 2,
           borderColor: '#ffffff',
-          borderRadius: 3,
+          borderRadius: 2,
         },
         yearLabel: { show: false },
-        monthLabel: { color: '#737373', fontSize: 12, margin: 8 },
+        monthLabel: { color: '#737373', fontSize: 11, margin: 7 },
         dayLabel: {
           color: '#a3a3a3',
           firstDay: 1,
-          fontSize: 11,
-          margin: 8,
+          fontSize: 10,
+          margin: 7,
           nameMap: ['S', 'M', 'T', 'W', 'T', 'F', 'S'],
         },
       },
@@ -163,14 +155,14 @@ function CalendarHeatmap({ summary }: { summary: HistorySummary }) {
           coordinateSystem: 'calendar',
           data: values,
           emphasis: heatmapHoverEmphasis,
-          itemStyle: { borderRadius: 3 },
+          itemStyle: { borderRadius: 2 },
         },
       ],
     }),
     [max, summary.calendar, values],
   )
   useChart(ref, option)
-  return <div ref={ref} className="h-[156px] w-full" />
+  return <div ref={ref} className="h-[138px] w-full" />
 }
 
 function TrendChart({ summary }: { summary: HistorySummary }) {
@@ -184,7 +176,9 @@ function TrendChart({ summary }: { summary: HistorySummary }) {
         confine: true,
         extraCssText: 'box-shadow: 0 8px 24px rgba(0,0,0,0.10); border-radius: 8px;',
         axisPointer: { type: 'shadow', shadowStyle: { color: '#0000000a' } },
-        formatter: (params: Array<{ marker: string; seriesName: string; value: number; axisValue: string }>) => {
+        formatter: (
+          params: Array<{ marker: string; seriesName: string; value: number; axisValue: string }>,
+        ) => {
           const rows = params
             .filter((item) => item.value > 0)
             .map(
@@ -234,10 +228,7 @@ function TrendChart({ summary }: { summary: HistorySummary }) {
         barMaxWidth: 18,
         barMinWidth: summary.trends.length > 120 ? 1 : 4,
         itemStyle: {
-          borderRadius:
-            index === summary.trendProjects.length - 1
-              ? [3, 3, 0, 0]
-              : 0,
+          borderRadius: index === summary.trendProjects.length - 1 ? [3, 3, 0, 0] : 0,
         },
         emphasis: { focus: 'series' },
         data: summary.trends.map((day) => day.projects[project] ?? 0),
@@ -252,10 +243,7 @@ function TrendChart({ summary }: { summary: HistorySummary }) {
 function ProjectShareChart({ summary }: { summary: HistorySummary }) {
   const ref = useRef<HTMLDivElement>(null)
   const rows = useMemo(
-    () =>
-      [...summary.topProjects]
-        .sort((a, b) => a.total - b.total)
-        .slice(-6),
+    () => [...summary.topProjects].sort((a, b) => a.total - b.total).slice(-6),
     [summary.topProjects],
   )
   const total = rows.reduce((sum, row) => sum + row.total, 0)
@@ -280,7 +268,10 @@ function ProjectShareChart({ summary }: { summary: HistorySummary }) {
         type: 'value',
         axisLine: { show: false },
         axisTick: { show: false },
-        axisLabel: { ...axisLabelStyle, formatter: (value: number) => formatTooltipDuration(value) },
+        axisLabel: {
+          ...axisLabelStyle,
+          formatter: (value: number) => formatTooltipDuration(value),
+        },
         splitLine: { lineStyle: splitLineStyle },
       },
       yAxis: {
@@ -295,7 +286,10 @@ function ProjectShareChart({ summary }: { summary: HistorySummary }) {
           type: 'bar',
           data: rows.map((row, index) => ({
             value: row.total,
-            itemStyle: { color: chartPalette[index % chartPalette.length], borderRadius: [0, 4, 4, 0] },
+            itemStyle: {
+              color: chartPalette[index % chartPalette.length],
+              borderRadius: [0, 4, 4, 0],
+            },
           })),
           barWidth: 10,
         },
@@ -457,16 +451,17 @@ function AgentContributionBars({ summary }: { summary: HistorySummary }) {
   const agentColorByName = useMemo(
     () =>
       new Map(
-        agentTotals.map(([agent], index) => [
-          agent,
-          chartPalette[index % chartPalette.length],
-        ]),
+        agentTotals.map(([agent], index) => [agent, chartPalette[index % chartPalette.length]]),
       ),
     [agentTotals],
   )
 
   if (rows.length === 0) {
-    return <div className="py-8 text-[13px] text-muted-foreground">No agent activity in this period.</div>
+    return (
+      <div className="py-8 text-[13px] text-muted-foreground">
+        No agent activity in this period.
+      </div>
+    )
   }
 
   return (
@@ -490,7 +485,8 @@ function AgentContributionBars({ summary }: { summary: HistorySummary }) {
                     style={{
                       width: `${pct}%`,
                       backgroundColor:
-                        agentColorByName.get(agent.agent) ?? chartPalette[index % chartPalette.length],
+                        agentColorByName.get(agent.agent) ??
+                        chartPalette[index % chartPalette.length],
                     }}
                     title={`${agent.agent}: ${formatDuration(agent.total)} (${Math.round(pct)}%)`}
                   />
@@ -506,7 +502,10 @@ function AgentContributionBars({ summary }: { summary: HistorySummary }) {
             <span
               aria-hidden
               className="size-2.5 rounded-sm"
-              style={{ backgroundColor: agentColorByName.get(agent) ?? chartPalette[index % chartPalette.length] }}
+              style={{
+                backgroundColor:
+                  agentColorByName.get(agent) ?? chartPalette[index % chartPalette.length],
+              }}
             />
             <span className="text-muted-foreground">{agent}</span>
             <span className="font-mono tabular-nums">{formatDuration(total)}</span>
@@ -601,7 +600,10 @@ function InsightBar({
               ? 'border-amber-200/80 bg-amber-50/60 text-amber-950 dark:border-amber-950 dark:bg-amber-950/20 dark:text-amber-100'
               : 'border-border/45 bg-muted/35 text-foreground'
         return (
-          <div className={`rounded-md border px-3 py-2 ${toneClass}`} key={`${item.label}-${item.value}`}>
+          <div
+            className={`rounded-md border px-3 py-2 ${toneClass}`}
+            key={`${item.label}-${item.value}`}
+          >
             <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
               {item.label}
             </p>
@@ -677,16 +679,13 @@ export default function History() {
     const p75Turn = quantile(turnDurations, 0.75)
     const focusTurns = turnDurations.filter((duration) => duration >= 25 * 60).length
     const shortTurnRate =
-      turnCount > 0
-        ? turnDurations.filter((duration) => duration < 5 * 60).length / turnCount
-        : 0
+      turnCount > 0 ? turnDurations.filter((duration) => duration < 5 * 60).length / turnCount : 0
     const peakHour = summary.hourlyMatrix.reduce(
       (best, cell) => (cell.total > best.total ? cell : best),
       { weekday: 0, hour: 0, total: 0 },
     )
     const topProject = summary.topProjects[0]
-    const topProjectShare =
-      topProject && periodTotal > 0 ? topProject.total / periodTotal : 0
+    const topProjectShare = topProject && periodTotal > 0 ? topProject.total / periodTotal : 0
     return {
       activeDays,
       averageActiveDay: activeDays > 0 ? periodTotal / activeDays : 0,
@@ -706,14 +705,11 @@ export default function History() {
   const insights = useMemo(() => {
     if (!summary || !stats) return null
     const activeCalendarDays = summary.calendar.filter((day) => day.total > 0).length
-    const currentStreak = [...summary.calendar].reverse().reduce(
-      (state, day) => {
-        if (state.done) return state
-        if (day.total <= 0) return { ...state, done: true }
-        return { count: state.count + 1, done: false }
-      },
-      { count: 0, done: false },
-    ).count
+    let currentStreak = 0
+    for (const day of [...summary.calendar].reverse()) {
+      if (day.total <= 0) break
+      currentStreak += 1
+    }
     const bestCalendarDay = summary.calendar.reduce(
       (best, day) => (day.total > best.total ? day : best),
       { date: '', total: 0 },
@@ -857,7 +853,8 @@ export default function History() {
                   label: 'Change',
                   value: formatDelta(summary.periodCompare.deltaRatio),
                   tone:
-                    summary.periodCompare.deltaRatio === null || summary.periodCompare.deltaRatio >= 0
+                    summary.periodCompare.deltaRatio === null ||
+                    summary.periodCompare.deltaRatio >= 0
                       ? 'good'
                       : 'warn',
                 },
@@ -1040,7 +1037,9 @@ export default function History() {
               {sortedRows.map((row: TopProjectRow) => (
                 <TableRow className="border-border/25" key={row.project}>
                   <TableCell className="px-3 py-3">{row.project}</TableCell>
-                  <TableCell className="px-3 py-3 font-mono tabular-nums">{formatDuration(row.total)}</TableCell>
+                  <TableCell className="px-3 py-3 font-mono tabular-nums">
+                    {formatDuration(row.total)}
+                  </TableCell>
                   <TableCell className="px-3 py-3 font-mono tabular-nums">{row.turns}</TableCell>
                   <TableCell className="px-3 py-3">{formatLastActive(row.lastActive)}</TableCell>
                 </TableRow>

@@ -2,10 +2,11 @@
 
 export { adaptClaudeCode, adaptCodex, adaptCursor } from './adapters/index.js'
 export type {
+  CodexTranscriptCandidate,
   CodexTurnCompletion,
-  FindCodexTurnCompletionInput,
+  FindCodexTurnCompletionInTranscriptsInput,
 } from './codex-transcript.js'
-export { findCodexTurnCompletion } from './codex-transcript.js'
+export { findCodexTurnCompletionInTranscripts } from './codex-transcript.js'
 export type { AdapterFn, Agent, EventType, NormalizedEvent } from './events.js'
 export type { ResolveProjectInput } from './project.js'
 export { parseGitRemoteUrl, resolveProject } from './project.js'

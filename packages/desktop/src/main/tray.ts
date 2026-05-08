@@ -1,121 +1,184 @@
-import { join } from 'node:path'
-import { BrowserWindow, Menu, nativeImage, screen, Tray } from 'electron'
+import type { MenuItemConstructorOptions, NativeImage } from 'electron'
+import { Menu, nativeImage, Tray } from 'electron'
+import type { MenubarState } from '../shared/ipc-types.js'
 import { formatMenubarTitle, queryMenubarState } from './db.js'
 
-const DROPDOWN_WIDTH = 320
-const DROPDOWN_HEIGHT = 360
-const ACTIVE_REFRESH_MS = 10_000
+const MINUTE_SECONDS = 60
+const FALLBACK_TITLE = '●'
+const MENU_ICON_SIZE = 13
 
 let tray: Tray | null = null
-let dropdownWindow: BrowserWindow | null = null
-let activeRefreshTimer: ReturnType<typeof setInterval> | null = null
+let activeRefreshTimer: ReturnType<typeof setTimeout> | null = null
 let trayActions: {
-  openApp: () => void
+  openApp: (route?: string) => void
   openSettings: () => void
   quitApp: () => void
 } | null = null
 
-function normalizedHash(route: string): string {
-  return route.startsWith('/') ? route : `/${route}`
+type IconName = 'activity' | 'clock' | 'folder' | 'open' | 'settings' | 'power' | 'warning'
+
+const MACOS_SYMBOLS: Record<IconName, string> = {
+  activity: 'waveform.path.ecg',
+  clock: 'clock',
+  folder: 'folder',
+  open: 'macwindow',
+  settings: 'gearshape',
+  power: 'power',
+  warning: 'exclamationmark.triangle',
 }
 
-function loadRendererRoute(win: BrowserWindow, route: string): void {
-  const hash = normalizedHash(route)
-  if (process.env.ELECTRON_RENDERER_URL) {
-    void win.loadURL(`${process.env.ELECTRON_RENDERER_URL}#${hash}`)
-  } else {
-    void win.loadFile(join(__dirname, '../renderer/index.html'), { hash })
+const menuIcons = new Map<IconName, NativeImage>()
+
+function prepareTemplateImage(image: NativeImage, size: number): NativeImage {
+  const resized = image.resize({
+    width: size,
+    height: size,
+    quality: 'best',
+  })
+  resized.setTemplateImage(true)
+  return resized
+}
+
+function icon(name: IconName): NativeImage {
+  const cached = menuIcons.get(name)
+  if (cached) return cached
+
+  const systemImage = nativeImage.createFromNamedImage(MACOS_SYMBOLS[name])
+  const image = prepareTemplateImage(systemImage, MENU_ICON_SIZE)
+  menuIcons.set(name, image)
+  return image
+}
+
+function formatDuration(seconds: number): string {
+  const whole = Math.max(0, Math.floor(seconds))
+  if (whole < 60) return `${whole}s`
+  if (whole < 3600) return `${Math.floor(whole / 60)}m`
+
+  const hours = Math.floor(whole / 3600)
+  const minutes = Math.floor((whole % 3600) / 60)
+  return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`
+}
+
+function activeElapsedSeconds(turn: MenubarState['activeTurns'][number]): number {
+  return Math.max(0, Date.now() / 1000 - turn.started_at)
+}
+
+function truncateLabel(value: string, maxLength = 48): string {
+  if (value.length <= maxLength) return value
+  return `${value.slice(0, maxLength - 1)}…`
+}
+
+function openRoute(route?: string): void {
+  trayActions?.openApp(route)
+}
+
+function labelWithDuration(label: string, seconds: number): string {
+  return `${label} · ${formatDuration(seconds)}`
+}
+
+function readMenubarState(): MenubarState | null {
+  try {
+    return queryMenubarState()
+  } catch {
+    return null
   }
 }
 
 function stopActiveRefresh(): void {
   if (activeRefreshTimer) {
-    clearInterval(activeRefreshTimer)
+    clearTimeout(activeRefreshTimer)
     activeRefreshTimer = null
   }
 }
 
-function positionDropdown(): void {
-  if (!tray || !dropdownWindow) return
-
-  const trayBounds = tray.getBounds()
-  const display = screen.getDisplayNearestPoint({
-    x: trayBounds.x + trayBounds.width / 2,
-    y: trayBounds.y + trayBounds.height / 2,
-  })
-  const { workArea } = display
-  const centeredX = trayBounds.x + trayBounds.width / 2 - DROPDOWN_WIDTH / 2
-  const x = Math.round(
-    Math.min(Math.max(centeredX, workArea.x + 8), workArea.x + workArea.width - DROPDOWN_WIDTH - 8),
-  )
-  const y =
-    process.platform === 'darwin'
-      ? Math.round(trayBounds.y + trayBounds.height + 6)
-      : Math.round(trayBounds.y - DROPDOWN_HEIGHT - 6)
-
-  dropdownWindow.setBounds({ x, y, width: DROPDOWN_WIDTH, height: DROPDOWN_HEIGHT })
+function nextVisibleRefreshDelayMs(todayTotal: number): number {
+  const total = Math.max(0, Math.floor(todayTotal))
+  const remainder = total % MINUTE_SECONDS
+  const secondsUntilNextMinute = remainder === 0 ? MINUTE_SECONDS : MINUTE_SECONDS - remainder
+  return secondsUntilNextMinute * 1000
 }
 
-function getDropdownWindow(): BrowserWindow {
-  if (dropdownWindow && !dropdownWindow.isDestroyed()) return dropdownWindow
+function scheduleActiveRefresh(state: MenubarState): void {
+  stopActiveRefresh()
 
-  dropdownWindow = new BrowserWindow({
-    title: 'VibeTime Menubar',
-    width: DROPDOWN_WIDTH,
-    height: DROPDOWN_HEIGHT,
-    show: false,
-    frame: false,
-    resizable: false,
-    movable: false,
-    fullscreenable: false,
-    skipTaskbar: true,
-    alwaysOnTop: true,
-    backgroundColor: '#00000000',
-    transparent: process.platform === 'darwin',
-    vibrancy: process.platform === 'darwin' ? 'popover' : undefined,
-    visualEffectState: process.platform === 'darwin' ? 'active' : undefined,
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.mjs'),
-      contextIsolation: true,
-      sandbox: false,
-      nodeIntegration: false,
-    },
-  })
-
-  dropdownWindow.on('blur', () => {
-    dropdownWindow?.hide()
-  })
-  dropdownWindow.on('closed', () => {
-    dropdownWindow = null
-  })
-  loadRendererRoute(dropdownWindow, '/menubar')
-  return dropdownWindow
+  activeRefreshTimer = setTimeout(() => {
+    activeRefreshTimer = null
+    refreshMenubarTray()
+  }, nextVisibleRefreshDelayMs(state.todayTotal))
+  activeRefreshTimer.unref?.()
 }
 
-function toggleDropdown(): void {
-  const win = getDropdownWindow()
-  if (win.isVisible()) {
-    win.hide()
-    return
+function setMenubarTrayTitle(title: string): void {
+  if (!tray || tray.isDestroyed()) return
+  tray.setTitle(title)
+}
+
+function buildStatusMenu(): Menu {
+  const state = readMenubarState()
+  if (!state) {
+    return Menu.buildFromTemplate([
+      { label: 'VibeTime', sublabel: 'Unable to read today’s activity', icon: icon('warning') },
+      { type: 'separator' },
+      { label: 'Open', icon: icon('open'), click: () => openRoute() },
+      { label: 'Settings', icon: icon('settings'), click: () => trayActions?.openSettings() },
+      { type: 'separator' },
+      { label: 'Quit', icon: icon('power'), click: () => trayActions?.quitApp() },
+    ])
   }
 
-  positionDropdown()
-  refreshMenubarTray()
-  win.show()
-  win.focus()
+  const projectItems =
+    state.projects.length > 0
+      ? state.projects.map((project) => ({
+          label: labelWithDuration(truncateLabel(project.name), project.total),
+          icon: icon('folder'),
+          click: () => openRoute('/history'),
+        }))
+      : []
+
+  const activeItems =
+    state.activeTurns.length > 0
+      ? state.activeTurns.map((turn) => ({
+          label: labelWithDuration(truncateLabel(turn.project), activeElapsedSeconds(turn)),
+          icon: icon('activity'),
+          click: () => openRoute('/live'),
+        }))
+      : []
+
+  const template: MenuItemConstructorOptions[] = [
+    {
+      label: labelWithDuration('Today', state.todayTotal),
+      icon: icon('clock'),
+      click: () => openRoute('/'),
+    },
+    { type: 'separator' },
+    {
+      label: state.active ? `${state.activeTurns.length} running` : 'No turn running',
+      enabled: false,
+    },
+    ...activeItems,
+    { type: 'separator' },
+    {
+      label: state.projects.length > 0 ? 'Top project' : 'No project today',
+      enabled: false,
+    },
+    ...projectItems,
+    { type: 'separator' },
+    { label: 'Open', icon: icon('open'), click: () => openRoute() },
+    { label: 'Settings', icon: icon('settings'), click: () => trayActions?.openSettings() },
+    { type: 'separator' },
+    { label: 'Quit', icon: icon('power'), click: () => trayActions?.quitApp() },
+  ]
+
+  return Menu.buildFromTemplate(template)
 }
 
-function buildContextMenu(): Menu {
-  return Menu.buildFromTemplate([
-    { label: 'Open', click: () => trayActions?.openApp() },
-    { label: 'Settings', click: () => trayActions?.openSettings() },
-    { type: 'separator' },
-    { label: 'Quit', click: () => trayActions?.quitApp() },
-  ])
+function showStatusMenu(): void {
+  if (!tray || tray.isDestroyed()) return
+  tray.popUpContextMenu(buildStatusMenu())
 }
 
 export function createMenubarTray(actions: {
-  openApp: () => void
+  openApp: (route?: string) => void
   openSettings: () => void
   quitApp: () => void
 }): void {
@@ -123,11 +186,9 @@ export function createMenubarTray(actions: {
   if (!tray || tray.isDestroyed()) {
     tray = new Tray(nativeImage.createEmpty())
     tray.setToolTip('VibeTime')
-    tray.on('click', toggleDropdown)
-    tray.on('right-click', () => {
-      dropdownWindow?.hide()
-      tray?.popUpContextMenu(buildContextMenu())
-    })
+    tray.setIgnoreDoubleClickEvents(true)
+    tray.on('click', showStatusMenu)
+    tray.on('right-click', showStatusMenu)
   }
 
   refreshMenubarTray()
@@ -136,20 +197,24 @@ export function createMenubarTray(actions: {
 export function refreshMenubarTray(): void {
   if (!tray || tray.isDestroyed()) return
 
-  const state = queryMenubarState()
-  tray.setTitle(formatMenubarTitle(state))
+  const state = readMenubarState()
+  if (!state) {
+    setMenubarTrayTitle(FALLBACK_TITLE)
+    stopActiveRefresh()
+    return
+  }
 
-  if (state.active && !activeRefreshTimer) {
-    activeRefreshTimer = setInterval(refreshMenubarTray, ACTIVE_REFRESH_MS)
-  } else if (!state.active) {
+  setMenubarTrayTitle(formatMenubarTitle(state))
+
+  if (state.active) {
+    scheduleActiveRefresh(state)
+  } else {
     stopActiveRefresh()
   }
 }
 
 export function destroyMenubarTray(): void {
   stopActiveRefresh()
-  dropdownWindow?.destroy()
-  dropdownWindow = null
   tray?.destroy()
   tray = null
   trayActions = null

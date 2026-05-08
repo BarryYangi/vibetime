@@ -16,8 +16,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 2: Agent Adapters in `core`** - Three pure adapters (Claude Code / Codex / Cursor) with fixture-based tests covering `NormalizedEvent` mapping (completed 2026-04-28)
 - [x] **Phase 3: Hook Binary, Store & Install** - Bun-compiled `vibetime-hook`, SQLite WAL store, crash-recovery rules, `~/.vibetime/` layout, `vibetime install <agent>` — first end-to-end agent capture works (completed 2026-04-29)
 - [x] **Phase 4: Desktop Shell, Today View & CLI** - Electron app with IPC, Today view as default landing, complete CLI surface (`today / project / export / version / install`) running headless, minimal Settings (completed 2026-04-29)
-- [ ] **Phase 5: Live, History, Menubar & Lifecycle** - Live view content-asset quality (≥30fps), History view (heatmap + trends + table), persistent menubar widget, close-to-menubar + auto-launch toggle
-- [ ] **Phase 6: Packaging & V0 Acceptance** - macOS arm64 .app + .dmg, ad-hoc signing, first-launch self-auth documentation, every §14 acceptance criterion verified
+- [x] **Phase 5: Live, History, Menubar & Lifecycle** - Live view content-asset quality (≥30fps), History view (heatmap + trends + table), persistent menubar widget, close-to-menubar + auto-launch toggle (verified 2026-05-07)
+- [ ] **Phase 6: Packaging & V0 Acceptance** - macOS arm64 .app + .dmg and ad-hoc signing automated checks pass; manual packaged-app UAT remains
 
 ## Phase Details
 
@@ -97,10 +97,14 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Success Criteria** (what must be TRUE):
   1. With at least one active turn, Live view shows project name (large), agent + model (medium muted), per-second monospace elapsed timer, ~1Hz breathing pulse, moving sweep bar, and today's project total in footer; concurrent turns stack vertically and are simultaneously visible; idle state shows a quiet "no active turn" with subtle ambient animation; sustained ≥30fps without jank on a 2019 MacBook Pro
   2. History view renders a 365-day ECharts native calendar heatmap (no custom SVG) without performance issues, plus a 30-day stacked-area trends chart and a sortable Top Projects table (Project / Total / Turns / Last Active) using coss ui `Table`; period selector (7d / 30d / 90d / 365d) switches the active range across applicable sub-charts
-  3. Persistent macOS menubar item displays today's cumulative agent time per the format states — idle `●` / `● 47m` / `● 5h 23m` — with the `●` pulsing softly only during an active turn and recomputing approximately every 10 seconds during active turns
-  4. Menubar left-click opens a dropdown showing today's per-project totals, currently active turns, and an "Open vibetime" button; right-click shows Open / Settings / Quit context menu
+  3. Persistent macOS menubar item displays today's cumulative agent time per the format states — idle `●` / `● 47m` / `● 5h 23m` — with active state represented by the title dot and recomputing from DB push plus visible minute-boundary timers during active turns
+  4. Menubar left-click and right-click open the same native status menu showing Today, active turns, Top project rows, and Open / Settings / Quit actions
   5. Closing the main window keeps the menubar widget alive; quit happens only via the menubar context menu or `Cmd+Q`; an Auto-launch on Login toggle exists in Settings (default OFF) and a first-launch prompt invites the user to opt in
-**Plans**: TBD
+**Plans**: 4 plans
+- [x] 05-01-PLAN.md — Data contracts for Live, History, and menubar state
+- [x] 05-02-PLAN.md — Live and History renderer surfaces
+- [x] 05-03-PLAN.md — Native Tray, menubar lifecycle, and close-to-menubar behavior
+- [x] 05-04-PLAN.md — Open-at-login preferences, last-view restore, and verification evidence
 **UI hint**: yes
 
 ### Phase 6: Packaging & V0 Acceptance
@@ -111,7 +115,8 @@ Decimal phases appear between their surrounding integers in numeric order.
   1. `vibetime.app` (Electron) packages with `vibetime-hook` (Bun-compiled binary) bundled inside such that the install commands and live hook invocations resolve the correct binary path; `.dmg` installer is produced for macOS arm64
   2. The `.app` is ad-hoc self-signed; `codesign --verify` confirms an ad-hoc signature; README and the installer/DMG document the first-launch self-authorization flow (right-click → Open) for fresh installs
   3. Every PRD §14 acceptance criterion (with the notarization criterion replaced by ad-hoc signing + documented self-auth) passes on a fresh macOS arm64 machine — verified by a checklist run that records evidence for: install idempotency, real-session capture for all three agents, concurrent-write integrity, crash + stale-sweep recovery, all three views rendering, menubar format transitions, Live view ≥30fps, calendar 365-day render, ad-hoc signing + self-auth documented, and close ≠ quit / `Cmd+Q` quits
-**Plans**: TBD
+**Plans**: 1 plan
+- [ ] 06-01-PLAN.md — Restore root CI, add electron-builder mac arm64 packaging, bundle `vibetime-hook`, ad-hoc sign, document first launch, and run V0 acceptance — automated gates pass; manual UAT remains
 
 ## Progress
 
@@ -124,5 +129,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 | 2. Agent Adapters in `core` | 1/1 | Complete | 2026-04-28 |
 | 3. Hook Binary, Store & Install | 4/4 | Complete | 2026-04-29 |
 | 4. Desktop Shell, Today View & CLI | 6/6 | Complete | 2026-04-29 |
-| 5. Live, History, Menubar & Lifecycle | 0/TBD | Not started | - |
-| 6. Packaging & V0 Acceptance | 0/TBD | Not started | - |
+| 5. Live, History, Menubar & Lifecycle | 4/4 | Complete | 2026-05-07 |
+| 6. Packaging & V0 Acceptance | 0/1 | Automated gates pass; manual UAT remains | - |

@@ -63,7 +63,7 @@ created: 2026-05-07
 |----------|-------------|------------|-------------------|
 | Live animation smoothness | LIVE-04 | Requires real renderer/browser timing | Run Electron dev app with one and multiple active turns; inspect visible jank and record FPS/performance evidence where practical. |
 | Native Tray appears and updates | MENU-01..MENU-04 | macOS native shell behavior | Launch Electron app on macOS; verify title states and active pulse behavior. |
-| Tray left/right click behavior | MENU-05, MENU-06 | Native input behavior | Left-click opens compact dropdown; right-click opens Open / Settings / Quit native menu. |
+| Tray left/right click behavior | MENU-05, MENU-06 | Native input behavior | Left-click and right-click open the same native status menu; verify Today, running turns, Top project rows, Open, Settings, and Quit. |
 | Close-to-menubar | LIFE-01, LIFE-02 | Native window lifecycle | Close window; app and Tray remain. Cmd+Q and Tray Quit fully exit. |
 | Auto-launch setting | SET-04 | OS login item state | Toggle Open at login; verify Electron login item state and config persistence. |
 

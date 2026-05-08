@@ -3,7 +3,6 @@
 
 import { describe, expect, it } from 'bun:test'
 import { detectAgent } from './hook.js'
-import type { Agent } from '@vibetime/core'
 
 // ── detectAgent — --source argument ───────────────────────────────────────
 
@@ -36,10 +35,12 @@ describe('detectAgent — --source argument', () => {
 
   it('--source takes priority over event name', () => {
     // Payload has Cursor event name, but --source says claude
-    const result = detectAgent(
-      { hook_event_name: 'beforeSubmitPrompt' },
-      ['node', 'hook', '--source', 'claude'],
-    )
+    const result = detectAgent({ hook_event_name: 'beforeSubmitPrompt' }, [
+      'node',
+      'hook',
+      '--source',
+      'claude',
+    ])
     expect(result).toBe('claude-code')
   })
 })

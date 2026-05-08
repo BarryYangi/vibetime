@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import type { IpcChannel, IpcPushEvent, IpcMethods, IpcResult } from '../../shared/ipc-types'
+import type { IpcChannel, IpcMethods, IpcPushEvent, IpcResult } from '../../shared/ipc-types'
 
 interface VibetimeApi {
   platform: NodeJS.Platform

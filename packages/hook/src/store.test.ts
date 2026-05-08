@@ -6,6 +6,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { NormalizedEvent } from '@vibetime/core'
+import type { PersistableEvent } from './store.js'
 import {
   closeDatabase,
   deleteOpenTurn,
@@ -18,7 +19,13 @@ import {
 let tmpDir: string
 let dbPath: string
 
-function makeEvent(overrides: Partial<NormalizedEvent> = {}): NormalizedEvent {
+type EventOverrides = Omit<Partial<NormalizedEvent>, 'duration_sec' | 'meta' | 'turn_id'> & {
+  duration_sec?: number | null | undefined
+  meta?: Record<string, unknown> | undefined
+  turn_id?: string | undefined
+}
+
+function makeEvent(overrides: EventOverrides = {}): PersistableEvent {
   return {
     agent: 'claude-code',
     event_type: 'turn_start',
@@ -167,12 +174,12 @@ describe('persistEvent — event insertion', () => {
 
       const rows = db.query('SELECT * FROM events').all() as Array<Record<string, unknown>>
       expect(rows).toHaveLength(1)
-      expect(rows[0].agent).toBe('claude-code')
-      expect(rows[0].event_type).toBe('turn_start')
-      expect(rows[0].project).toBe('test-project')
-      expect(rows[0].session_id).toBe('sess-1')
-      expect(rows[0].turn_id).toBe('turn-1')
-      expect(rows[0].schema_version).toBe(1)
+      expect(rows[0]?.agent).toBe('claude-code')
+      expect(rows[0]?.event_type).toBe('turn_start')
+      expect(rows[0]?.project).toBe('test-project')
+      expect(rows[0]?.session_id).toBe('sess-1')
+      expect(rows[0]?.turn_id).toBe('turn-1')
+      expect(rows[0]?.schema_version).toBe(1)
     } finally {
       closeDatabase(db)
     }
@@ -185,7 +192,7 @@ describe('persistEvent — event insertion', () => {
 
       const openTurns = queryOpenTurns(db)
       expect(openTurns).toHaveLength(1)
-      expect(openTurns[0].turn_id).toBe('turn-42')
+      expect(openTurns[0]?.turn_id).toBe('turn-42')
     } finally {
       closeDatabase(db)
     }
@@ -202,7 +209,7 @@ describe('persistEvent — event insertion', () => {
 
       expect(events).toHaveLength(1)
       expect(openTurns).toHaveLength(1)
-      expect(openTurns[0].started_at).toBe(1000)
+      expect(openTurns[0]?.started_at).toBe(1000)
     } finally {
       closeDatabase(db)
     }
@@ -234,7 +241,7 @@ describe('persistEvent — event insertion', () => {
 
       const openTurns = queryOpenTurns(db, 'sess-active')
       expect(openTurns).toHaveLength(1)
-      expect(openTurns[0].turn_id).toBe('new-turn')
+      expect(openTurns[0]?.turn_id).toBe('new-turn')
 
       const oldEnd = db
         .query("SELECT 1 FROM events WHERE turn_id = 'old-turn' AND event_type = 'turn_end'")
@@ -301,7 +308,7 @@ describe('persistEvent — event insertion', () => {
 
       const openTurns = queryOpenTurns(db, 'sess-active')
       expect(openTurns).toHaveLength(1)
-      expect(openTurns[0].turn_id).toBe('new-turn')
+      expect(openTurns[0]?.turn_id).toBe('new-turn')
     } finally {
       closeDatabase(db)
     }
@@ -325,7 +332,7 @@ describe('persistEvent — event insertion', () => {
         .query("SELECT duration_sec FROM events WHERE event_type = 'turn_end'")
         .all() as Array<{ duration_sec: number | null }>
       expect(rows).toHaveLength(1)
-      expect(rows[0].duration_sec).toBe(30)
+      expect(rows[0]?.duration_sec).toBe(30)
     } finally {
       closeDatabase(db)
     }
@@ -351,7 +358,7 @@ describe('persistEvent — event insertion', () => {
         .query("SELECT duration_sec FROM events WHERE event_type = 'turn_end'")
         .all() as Array<{ duration_sec: number | null }>
       expect(rows).toHaveLength(1)
-      expect(rows[0].duration_sec).toBeNull()
+      expect(rows[0]?.duration_sec).toBeNull()
     } finally {
       closeDatabase(db)
     }
@@ -378,7 +385,7 @@ describe('persistEvent — event insertion', () => {
       persistEvent(db, makeEvent({ meta: { key: 'value', nested: { a: 1 } } }))
 
       const rows = db.query('SELECT meta FROM events').all() as Array<{ meta: string | null }>
-      const meta = rows[0].meta
+      const meta = rows[0]?.meta
       expect(meta).not.toBeNull()
       if (!meta) throw new Error('Expected event meta')
       const parsed = JSON.parse(meta)
@@ -432,7 +439,7 @@ describe('queryEvents — event retrieval', () => {
 
       const events = queryEvents(db, { project: 'alpha' })
       expect(events).toHaveLength(1)
-      expect(events[0].project).toBe('alpha')
+      expect(events[0]?.project).toBe('alpha')
     } finally {
       closeDatabase(db)
     }
@@ -447,7 +454,7 @@ describe('queryEvents — event retrieval', () => {
 
       const events = queryEvents(db, { from: 150, to: 250 })
       expect(events).toHaveLength(1)
-      expect(events[0].ts).toBe(200)
+      expect(events[0]?.ts).toBe(200)
     } finally {
       closeDatabase(db)
     }
@@ -461,7 +468,7 @@ describe('queryEvents — event retrieval', () => {
 
       const events = queryEvents(db, { agent: 'codex' })
       expect(events).toHaveLength(1)
-      expect(events[0].agent).toBe('codex')
+      expect(events[0]?.agent).toBe('codex')
     } finally {
       closeDatabase(db)
     }
@@ -494,7 +501,7 @@ describe('open_turns management', () => {
 
       const filtered = queryOpenTurns(db, 's1')
       expect(filtered).toHaveLength(1)
-      expect(filtered[0].session_id).toBe('s1')
+      expect(filtered[0]?.session_id).toBe('s1')
     } finally {
       closeDatabase(db)
     }

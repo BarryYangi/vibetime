@@ -1,7 +1,7 @@
 // Log rotation for ~/.vibetime/hook.log.
 // HOOK-03: rotation at ~10MB. appendLog never throws.
 
-import { statSync, renameSync, appendFileSync } from 'node:fs'
+import { appendFileSync, renameSync, statSync } from 'node:fs'
 import { MAX_LOG_SIZE } from './constants.js'
 import { ensureVibetimeDir } from './fs.js'
 

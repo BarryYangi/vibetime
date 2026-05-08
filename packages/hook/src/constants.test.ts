@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'bun:test'
 import {
-  VERSION,
+  CONFIG_PATH,
   DB_PATH,
   LOG_PATH,
-  CONFIG_PATH,
   MAX_LOG_SIZE,
   STALE_TURN_MAX_AGE,
+  VERSION,
 } from './constants.js'
 
 describe('constants — exports', () => {

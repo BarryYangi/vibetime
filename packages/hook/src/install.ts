@@ -8,17 +8,23 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { appendLog } from './log.js'
 
-function resolveHookBinaryPath(): string {
+export function resolveHookBinaryPath(): string {
   if (process.env.VIBETIME_HOOK_BINARY) return process.env.VIBETIME_HOOK_BINARY
 
+  const binaryName = process.platform === 'win32' ? 'vibetime-hook.exe' : 'vibetime-hook'
+  const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath
+  if (resourcesPath) {
+    const packagedBinaryPath = join(resourcesPath, 'bin', binaryName)
+    if (existsSync(packagedBinaryPath)) return packagedBinaryPath
+  }
+
   const moduleDir = dirname(fileURLToPath(import.meta.url))
-  const localBinaryPath = join(moduleDir, '..', 'vibetime-hook')
+  const localBinaryPath = join(moduleDir, '..', binaryName)
   if (existsSync(localBinaryPath)) return localBinaryPath
 
   return localBinaryPath
 }
 
-const HOOK_BINARY_PATH = resolveHookBinaryPath()
 const CODEX_FEATURE_MARKER = '# vibetime-managed'
 const CODEX_MANAGED_SECTION_MARKER = '# vibetime-managed-section'
 
@@ -32,10 +38,7 @@ function ensureCodexHooksEnabled(configContent: string): string {
   const managedTrueLine = `codex_hooks = true ${CODEX_FEATURE_MARKER}`
   const falseFlagPattern = /^(\s*)codex_hooks\s*=\s*false\b.*$/m
   if (falseFlagPattern.test(configContent)) {
-    return configContent.replace(
-      falseFlagPattern,
-      `$1${managedTrueLine}: previous=false`,
-    )
+    return configContent.replace(falseFlagPattern, `$1${managedTrueLine}: previous=false`)
   }
 
   if (configContent.includes('[features]')) {
@@ -70,6 +73,7 @@ function removeManagedCodexHooksFlag(configContent: string): string {
  */
 export function installClaudeCode(): void {
   const settingsPath = `${process.env.HOME}/.claude/settings.json`
+  const hookBinaryPath = resolveHookBinaryPath()
 
   try {
     // Ensure directory exists
@@ -112,13 +116,13 @@ export function installClaudeCode(): void {
         existing.hooks = existing.hooks ?? []
         existing.hooks.push({
           type: 'command',
-          command: `${HOOK_BINARY_PATH} --source claude-code`,
+          command: `${hookBinaryPath} --source claude-code`,
         })
       } else {
         // Create new matcher group
         arr.push({
           matcher: '*',
-          hooks: [{ type: 'command', command: `${HOOK_BINARY_PATH} --source claude-code` }],
+          hooks: [{ type: 'command', command: `${hookBinaryPath} --source claude-code` }],
         })
       }
 
@@ -141,6 +145,7 @@ export function installClaudeCode(): void {
 export function installCodex(): void {
   const hooksPath = `${process.env.HOME}/.codex/hooks.json`
   const configPath = `${process.env.HOME}/.codex/config.toml`
+  const hookBinaryPath = resolveHookBinaryPath()
 
   try {
     // Ensure directory exists
@@ -191,7 +196,7 @@ export function installCodex(): void {
 
       // Add vibetime hook
       arr.push({
-        hooks: [{ type: 'command', command: `${HOOK_BINARY_PATH} --source codex`, timeout: 10 }],
+        hooks: [{ type: 'command', command: `${hookBinaryPath} --source codex`, timeout: 10 }],
       })
 
       hooks[event] = arr
@@ -212,6 +217,7 @@ export function installCodex(): void {
  */
 export function installCursor(): void {
   const hooksPath = `${process.env.HOME}/.cursor/hooks.json`
+  const hookBinaryPath = resolveHookBinaryPath()
 
   try {
     // Ensure directory exists
@@ -245,7 +251,7 @@ export function installCursor(): void {
       if (hasVibetime) continue
 
       // Add vibetime hook (append to array)
-      arr.push({ command: `${HOOK_BINARY_PATH} --source cursor` })
+      arr.push({ command: `${hookBinaryPath} --source cursor` })
 
       hooks[event] = arr
     }

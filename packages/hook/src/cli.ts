@@ -2,12 +2,36 @@
 // Hand-rolled argv parsing — no CLI library (CONTEXT.md gray area 1).
 // Subcommands: install, uninstall, today, project, export, version, help.
 
+import { allocateDurationByLocalDay, durationWithinWindow } from '@vibetime/core'
 import chalk from 'chalk'
 import { DB_PATH, VERSION } from './constants.js'
 import { installAgent, uninstallAgent } from './install.js'
 import { appendLog } from './log.js'
 import { reconcileCodexCompletedTurns, sweepStale } from './recovery.js'
 import { closeDatabase, openDatabase, queryEvents } from './store.js'
+
+function parseEventMeta(meta: unknown): Record<string, unknown> | null {
+  if (!meta) return null
+  if (typeof meta !== 'string') {
+    return typeof meta === 'object' && !Array.isArray(meta)
+      ? (meta as Record<string, unknown>)
+      : null
+  }
+
+  try {
+    const parsed = JSON.parse(meta)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null
+  } catch {
+    return null
+  }
+}
+
+function isUnknownDurationEnd(ev: { meta?: unknown }): boolean {
+  const meta = parseEventMeta(ev.meta)
+  return meta?.abandoned === true || meta?.reason === 'stale_sweep'
+}
 
 /**
  * Print help message.
@@ -42,8 +66,7 @@ Examples:
  * Run the CLI in CLI mode.
  * Parses subcommands and dispatches to appropriate handlers.
  */
-export async function runCli(): Promise<void> {
-  const args = process.argv.slice(2) // Remove 'node' and script path
+export async function runCli(args = process.argv.slice(2)): Promise<void> {
   const command = args[0]
 
   try {
@@ -90,26 +113,50 @@ export async function runCli(): Promise<void> {
           break
         }
 
-        // Aggregate by project
-        const projectMap = new Map<
-          string,
-          { total: number; agents: Map<string, number>; turns: number }
-        >()
+        const turnStarts = new Map<string, number>()
         for (const ev of events) {
+          if (ev.event_type === 'turn_start' && ev.turn_id) {
+            const existingStart = turnStarts.get(ev.turn_id)
+            if (existingStart === undefined || ev.ts < existingStart) {
+              turnStarts.set(ev.turn_id, ev.ts)
+            }
+          }
+        }
+
+        // Aggregate completed agent time by project.
+        const projectMap = new Map<string, { total: number; agents: Map<string, number> }>()
+        const completedTurns = new Set<string>()
+        for (const ev of events) {
+          if (ev.event_type !== 'turn_end') continue
+          if (isUnknownDurationEnd(ev)) continue
+
+          const duration = durationWithinWindow({
+            endTs: ev.ts,
+            durationSec: ev.duration_sec,
+            startTs: ev.turn_id ? turnStarts.get(ev.turn_id) : undefined,
+            windowStart: from,
+            windowEnd: to,
+          })
+          if (duration === null || duration <= 0) continue
+
           let entry = projectMap.get(ev.project)
           if (!entry) {
-            entry = { total: 0, agents: new Map(), turns: 0 }
+            entry = { total: 0, agents: new Map() }
             projectMap.set(ev.project, entry)
           }
-          if (ev.duration_sec) entry.total += ev.duration_sec
-          if (ev.event_type === 'turn_start') entry.turns++
+          entry.total += duration
+          if (ev.turn_id) completedTurns.add(ev.turn_id)
           const agentTotal = entry.agents.get(ev.agent) ?? 0
-          entry.agents.set(ev.agent, agentTotal + (ev.duration_sec ?? 0))
+          entry.agents.set(ev.agent, agentTotal + duration)
         }
 
         // Sort by total desc
         const sorted = [...projectMap.entries()].sort((a, b) => b[1].total - a[1].total)
         const grandTotal = sorted.reduce((sum, [, v]) => sum + v.total, 0)
+        if (sorted.length === 0 || grandTotal <= 0) {
+          console.log(chalk.dim('No activity today.'))
+          break
+        }
 
         // Format helpers
         function fmtDuration(sec: number): string {
@@ -153,7 +200,7 @@ export async function runCli(): Promise<void> {
         }
 
         // Print footer
-        const turnCount = events.filter((e) => e.event_type === 'turn_start').length
+        const turnCount = completedTurns.size
         const activeProjects = projectMap.size
         console.log()
         console.log(
@@ -174,7 +221,7 @@ export async function runCli(): Promise<void> {
         }
 
         const daysArg = args.find((a) => a.startsWith('--days='))
-        const days = daysArg ? parseInt(daysArg.split('=')[1], 10) : 7
+        const days = daysArg ? parseInt(daysArg.slice('--days='.length), 10) : 7
 
         const db = openDatabase()
         reconcileCodexCompletedTurns(db)
@@ -193,22 +240,52 @@ export async function runCli(): Promise<void> {
           break
         }
 
-        // Aggregate by day
+        const turnStarts = new Map<string, number>()
+        for (const ev of events) {
+          if (ev.event_type === 'turn_start' && ev.turn_id) {
+            const existingStart = turnStarts.get(ev.turn_id)
+            if (existingStart === undefined || ev.ts < existingStart) {
+              turnStarts.set(ev.turn_id, ev.ts)
+            }
+          }
+        }
+
+        // Aggregate completed agent time by local day.
         const dayMap = new Map<string, { total: number; agents: Map<string, number> }>()
         for (const ev of events) {
-          const dayKey = new Date(ev.ts * 1000).toLocaleDateString('en-CA') // YYYY-MM-DD
-          let entry = dayMap.get(dayKey)
-          if (!entry) {
-            entry = { total: 0, agents: new Map() }
-            dayMap.set(dayKey, entry)
+          if (ev.event_type !== 'turn_end') continue
+          if (isUnknownDurationEnd(ev)) continue
+
+          const allocations = allocateDurationByLocalDay({
+            endTs: ev.ts,
+            durationSec: ev.duration_sec,
+            startTs: ev.turn_id ? turnStarts.get(ev.turn_id) : undefined,
+            rangeStart: from,
+            rangeEnd: to,
+          })
+
+          for (const allocation of allocations) {
+            if (allocation.duration <= 0) continue
+
+            let entry = dayMap.get(allocation.day)
+            if (!entry) {
+              entry = { total: 0, agents: new Map() }
+              dayMap.set(allocation.day, entry)
+            }
+            entry.total += allocation.duration
+            const agentTotal = entry.agents.get(ev.agent) ?? 0
+            entry.agents.set(ev.agent, agentTotal + allocation.duration)
           }
-          if (ev.duration_sec) entry.total += ev.duration_sec
-          const agentTotal = entry.agents.get(ev.agent) ?? 0
-          entry.agents.set(ev.agent, agentTotal + (ev.duration_sec ?? 0))
         }
 
         const sorted = [...dayMap.entries()].sort((a, b) => b[0].localeCompare(a[0]))
         const totalAll = sorted.reduce((sum, [, v]) => sum + v.total, 0)
+        if (sorted.length === 0 || totalAll <= 0) {
+          console.log(
+            chalk.dim(`No activity for project "${projectName}" in the last ${days} days.`),
+          )
+          break
+        }
 
         function fmtDuration(sec: number): string {
           if (sec < 60) return `${Math.round(sec)}s`
@@ -224,7 +301,7 @@ export async function runCli(): Promise<void> {
         console.log()
 
         for (const [day, data] of sorted) {
-          console.log(chalk.bold(`  ${day}`) + `  ${chalk.cyan(fmtDuration(data.total))}`)
+          console.log(`${chalk.bold(`  ${day}`)}  ${chalk.cyan(fmtDuration(data.total))}`)
           for (const [agent, agentTotal] of data.agents) {
             if (agentTotal > 0) {
               console.log(`    ${chalk.dim(agent)}: ${chalk.dim(fmtDuration(agentTotal))}`)
@@ -250,10 +327,10 @@ export async function runCli(): Promise<void> {
 
         const options: { from?: number; to?: number } = {}
         if (fromArg) {
-          options.from = Math.floor(new Date(fromArg.split('=')[1]).getTime() / 1000)
+          options.from = Math.floor(new Date(fromArg.slice('--from='.length)).getTime() / 1000)
         }
         if (toArg) {
-          options.to = Math.floor(new Date(toArg.split('=')[1]).getTime() / 1000)
+          options.to = Math.floor(new Date(toArg.slice('--to='.length)).getTime() / 1000)
         }
 
         const events = queryEvents(db, options)

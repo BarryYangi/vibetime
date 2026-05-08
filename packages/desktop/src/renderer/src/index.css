@@ -102,6 +102,19 @@ body {
   line-height: 1.45;
 }
 
+button,
+a,
+summary,
+[role="button"],
+[role="switch"],
+[role="checkbox"],
+[role="menuitem"],
+[role="tab"],
+.cursor-pointer {
+  /* biome-ignore lint/complexity/noImportantStyles: Product decision - controls keep the default macOS arrow cursor, even when utilities set pointer. */
+  cursor: default !important;
+}
+
 ::selection {
   background: color-mix(in srgb, var(--color-primary) 16%, transparent);
 }

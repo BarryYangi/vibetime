@@ -9,8 +9,10 @@ import {
   queryTodayLiveState,
   writeAndNotify,
 } from './db.js'
+import { normalizeAppRoute } from './window-security.js'
 
 const VALID_AGENTS = new Set(['claude-code', 'codex', 'cursor'])
+const VALID_HISTORY_PERIODS = new Set([7, 30, 90, 365])
 
 function assertValidAgent(agent: unknown): asserts agent is string {
   if (typeof agent !== 'string' || !VALID_AGENTS.has(agent)) {
@@ -34,7 +36,16 @@ function appPreferencesFromConfig(config: VibetimeConfig): AppPreferences {
   }
 }
 
-export function registerIpcHandlers(actions: { showMainWindow?: (route?: string) => void } = {}): void {
+function assertValidHistoryArgs(args: unknown): asserts args is { periodDays: 7 | 30 | 90 | 365 } {
+  const periodDays = (args as { periodDays?: unknown } | undefined)?.periodDays
+  if (!VALID_HISTORY_PERIODS.has(periodDays as 7 | 30 | 90 | 365)) {
+    throw new Error('Invalid history period')
+  }
+}
+
+export function registerIpcHandlers(
+  actions: { showMainWindow?: (route?: string) => void } = {},
+): void {
   ipcMain.handle(
     'getTodayLiveState',
     async (): Promise<IpcResult<ReturnType<typeof queryTodayLiveState>>> => {
@@ -46,21 +57,28 @@ export function registerIpcHandlers(actions: { showMainWindow?: (route?: string)
     },
   )
 
-  ipcMain.handle('getHistorySummary', async (_event, args): Promise<IpcResult<ReturnType<typeof queryHistorySummary>>> => {
-    try {
-      return { ok: true, data: queryHistorySummary(args) }
-    } catch (err) {
-      return { ok: false, error: String(err) }
-    }
-  })
+  ipcMain.handle(
+    'getHistorySummary',
+    async (_event, args): Promise<IpcResult<ReturnType<typeof queryHistorySummary>>> => {
+      try {
+        assertValidHistoryArgs(args)
+        return { ok: true, data: queryHistorySummary(args) }
+      } catch (err) {
+        return { ok: false, error: String(err) }
+      }
+    },
+  )
 
-  ipcMain.handle('getMenubarState', async (): Promise<IpcResult<ReturnType<typeof queryMenubarState>>> => {
-    try {
-      return { ok: true, data: queryMenubarState() }
-    } catch (err) {
-      return { ok: false, error: String(err) }
-    }
-  })
+  ipcMain.handle(
+    'getMenubarState',
+    async (): Promise<IpcResult<ReturnType<typeof queryMenubarState>>> => {
+      try {
+        return { ok: true, data: queryMenubarState() }
+      } catch (err) {
+        return { ok: false, error: String(err) }
+      }
+    },
+  )
 
   ipcMain.handle(
     'getAgentStatus',
@@ -118,7 +136,10 @@ export function registerIpcHandlers(actions: { showMainWindow?: (route?: string)
             open_at_login: openAtLogin,
             auto_launch_prompted:
               preferences.autoLaunchPrompted ?? current.app.auto_launch_prompted,
-            last_view: preferences.lastView ?? current.app.last_view,
+            last_view:
+              preferences.lastView === undefined
+                ? current.app.last_view
+                : normalizeAppRoute(preferences.lastView),
           },
         })
         writeConfig(next)
@@ -131,7 +152,9 @@ export function registerIpcHandlers(actions: { showMainWindow?: (route?: string)
 
   ipcMain.handle('showMainWindow', async (_event, args): Promise<IpcResult<void>> => {
     try {
-      actions.showMainWindow?.(args?.route)
+      actions.showMainWindow?.(
+        args?.route === undefined ? undefined : normalizeAppRoute(args.route),
+      )
       return { ok: true, data: undefined }
     } catch (err) {
       return { ok: false, error: String(err) }
