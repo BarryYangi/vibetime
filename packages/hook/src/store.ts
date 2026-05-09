@@ -26,6 +26,19 @@ export type PersistableEvent = Omit<NormalizedEvent, 'duration_sec' | 'meta' | '
   turn_id?: string | undefined
 }
 
+function mergeMetaJson(existing: string | null, patch: Record<string, unknown>): string {
+  if (!existing) return JSON.stringify(patch)
+  try {
+    const parsed = JSON.parse(existing)
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return JSON.stringify({ ...parsed, ...patch })
+    }
+  } catch {
+    // Fall through to replacing malformed meta with the new trusted patch.
+  }
+  return JSON.stringify(patch)
+}
+
 /**
  * Open (or create) the SQLite database with required PRAGMAs and tables.
  * Idempotent — safe to call on every hook invocation.
@@ -69,8 +82,71 @@ export function closeDatabase(db: Database): void {
 export function persistEvent(db: Database, event: PersistableEvent): void {
   try {
     db.transaction(() => {
+      const inferredEndTurn =
+        event.event_type === 'turn_end' && !event.turn_id
+          ? (db
+              .query(`
+                SELECT turn_id, started_at
+                FROM open_turns
+                WHERE agent = $agent
+                  AND session_id = $session_id
+                ORDER BY started_at DESC
+                LIMIT 1
+              `)
+              .get({
+                $agent: event.agent,
+                $session_id: event.session_id,
+              }) as { turn_id: string; started_at: number } | undefined)
+          : undefined
+      const effectiveTurnId = event.turn_id ?? inferredEndTurn?.turn_id
+
+      if (
+        event.event_type === 'turn_start' &&
+        !effectiveTurnId &&
+        event.meta &&
+        Object.keys(event.meta).length > 0
+      ) {
+        const openTurn = db
+          .query(`
+            SELECT turn_id, meta
+            FROM open_turns
+            WHERE agent = $agent
+              AND session_id = $session_id
+            ORDER BY started_at DESC
+            LIMIT 1
+          `)
+          .get({
+            $agent: event.agent,
+            $session_id: event.session_id,
+          }) as { turn_id: string; meta: string | null } | undefined
+
+        if (!openTurn) return
+
+        const meta = mergeMetaJson(openTurn.meta, event.meta)
+        db.query('UPDATE open_turns SET meta = $meta WHERE turn_id = $turn_id').run({
+          $meta: meta,
+          $turn_id: openTurn.turn_id,
+        })
+        db.query(`
+          UPDATE events
+          SET meta = $meta
+          WHERE id = (
+            SELECT id
+            FROM events
+            WHERE turn_id = $turn_id
+              AND event_type = 'turn_start'
+            ORDER BY ts DESC
+            LIMIT 1
+          )
+        `).run({
+          $meta: meta,
+          $turn_id: openTurn.turn_id,
+        })
+        return
+      }
+
       const hasNewerOpenTurn =
-        event.event_type === 'turn_start' && event.turn_id
+        event.event_type === 'turn_start' && effectiveTurnId
           ? Boolean(
               db
                 .query(`
@@ -89,7 +165,7 @@ export function persistEvent(db: Database, event: PersistableEvent): void {
             )
           : false
 
-      if (event.event_type === 'turn_start' && event.turn_id) {
+      if (event.event_type === 'turn_start' && effectiveTurnId) {
         db.query(`
           DELETE FROM open_turns
           WHERE agent = $agent
@@ -99,25 +175,26 @@ export function persistEvent(db: Database, event: PersistableEvent): void {
         `).run({
           $agent: event.agent,
           $session_id: event.session_id,
-          $turn_id: event.turn_id,
+          $turn_id: effectiveTurnId,
           $ts: event.ts,
         })
 
         const existingOpenTurn = db
           .query('SELECT 1 FROM open_turns WHERE turn_id = ? LIMIT 1')
-          .get(event.turn_id)
+          .get(effectiveTurnId)
         if (existingOpenTurn) {
-          appendLog(`Skipped duplicate turn_start for ${event.agent}:${event.turn_id}`)
+          appendLog(`Skipped duplicate turn_start for ${event.agent}:${effectiveTurnId}`)
           return
         }
       }
 
       const explicitDuration = event.duration_sec
       const open =
-        event.event_type === 'turn_end' && event.turn_id
-          ? (db.query('SELECT started_at FROM open_turns WHERE turn_id = ?').get(event.turn_id) as
+        event.event_type === 'turn_end' && effectiveTurnId
+          ? (inferredEndTurn ??
+            (db.query('SELECT started_at FROM open_turns WHERE turn_id = ?').get(effectiveTurnId) as
               | { started_at: number }
-              | undefined)
+              | undefined))
           : undefined
       const durationSec =
         open && explicitDuration === undefined
@@ -133,19 +210,19 @@ export function persistEvent(db: Database, event: PersistableEvent): void {
         $event_type: event.event_type,
         $project: event.project,
         $session_id: event.session_id,
-        $turn_id: event.turn_id ?? null,
+        $turn_id: effectiveTurnId ?? null,
         $ts: event.ts,
         $timezone: event.timezone,
         $duration_sec: durationSec,
         $meta: meta,
       })
 
-      if (event.event_type === 'turn_start' && event.turn_id && !hasNewerOpenTurn) {
+      if (event.event_type === 'turn_start' && effectiveTurnId && !hasNewerOpenTurn) {
         db.query(`
           INSERT OR REPLACE INTO open_turns (turn_id, agent, project, session_id, started_at, timezone, meta)
           VALUES ($turn_id, $agent, $project, $session_id, $ts, $timezone, $meta)
         `).run({
-          $turn_id: event.turn_id,
+          $turn_id: effectiveTurnId,
           $agent: event.agent,
           $project: event.project,
           $session_id: event.session_id,
@@ -153,8 +230,8 @@ export function persistEvent(db: Database, event: PersistableEvent): void {
           $timezone: event.timezone,
           $meta: meta,
         })
-      } else if (event.event_type === 'turn_end' && event.turn_id) {
-        db.query('DELETE FROM open_turns WHERE turn_id = ?').run(event.turn_id)
+      } else if (event.event_type === 'turn_end' && effectiveTurnId) {
+        db.query('DELETE FROM open_turns WHERE turn_id = ?').run(effectiveTurnId)
       }
     })()
   } catch (err) {

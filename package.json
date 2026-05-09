@@ -2,7 +2,7 @@
   "name": "vibetime",
   "version": "2026.5.8",
   "private": true,
-  "description": "Local-first macOS time tracker for AI coding agents (Claude Code / Codex / Cursor).",
+  "description": "Local-first macOS time tracker for AI coding agents (Claude Code / Codex / Cursor / Gemini CLI).",
   "license": "MIT",
   "author": "Barry <barry@yct.ee>",
   "packageManager": "pnpm@10.33.2",

@@ -19,12 +19,12 @@ import {
 } from './db.js'
 import { normalizeAppRoute } from './window-security.js'
 
-const VALID_AGENTS = new Set(['claude-code', 'codex', 'cursor'])
+const VALID_AGENTS = new Set(['claude-code', 'codex', 'cursor', 'gemini-cli'])
 const VALID_HISTORY_PERIODS = new Set([7, 30, 90, 365])
 
 function assertValidAgent(agent: unknown): asserts agent is string {
   if (typeof agent !== 'string' || !VALID_AGENTS.has(agent)) {
-    throw new Error('Invalid agent. Supported: claude-code, codex, cursor')
+    throw new Error('Invalid agent. Supported: claude-code, codex, cursor, gemini-cli')
   }
 }
 

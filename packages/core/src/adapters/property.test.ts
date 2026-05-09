@@ -1,4 +1,4 @@
-// ADPT-04 — seeded property test for the three adapters.
+// ADPT-04 — seeded property test for the adapters.
 // RESEARCH §F (Validation Architecture) + Open Question 3 (mulberry32 seed).
 //
 // Asserts: any of (UserPromptSubmit / Stop / SessionStart / SessionEnd / '' /
@@ -10,6 +10,7 @@ import type { NormalizedEvent } from '../events.js'
 import { adaptClaudeCode } from './claude-code.js'
 import { adaptCodex } from './codex.js'
 import { adaptCursor } from './cursor.js'
+import { adaptGeminiCli } from './gemini-cli.js'
 
 // Tiny seeded PRNG (mulberry32) — reproducible mutation across runs.
 // Reference: https://stackoverflow.com/a/47593316 (public domain).
@@ -54,7 +55,10 @@ function isValidEvent(v: unknown): v is NormalizedEvent {
   if (v === null || typeof v !== 'object') return false
   const e = v as Record<string, unknown>
   return (
-    (e.agent === 'claude-code' || e.agent === 'codex' || e.agent === 'cursor') &&
+    (e.agent === 'claude-code' ||
+      e.agent === 'codex' ||
+      e.agent === 'cursor' ||
+      e.agent === 'gemini-cli') &&
     typeof e.event_type === 'string' &&
     typeof e.project === 'string' &&
     typeof e.session_id === 'string' &&
@@ -85,6 +89,12 @@ const HAPPY_CURSOR = {
   hook_event_name: 'beforeSubmitPrompt',
   workspace_roots: ['/x'],
 }
+const HAPPY_GEMINI = {
+  session_id: 'abc-123',
+  cwd: '/x',
+  hook_event_name: 'BeforeAgent',
+  timestamp: '2026-05-09T12:34:56.789Z',
+}
 
 const EVENT_NAMES_CLAUDE = [
   'UserPromptSubmit',
@@ -108,6 +118,14 @@ const EVENT_NAMES_CURSOR = [
   'sessionStart',
   'sessionEnd',
   '',
+  'UnknownEvent',
+]
+const EVENT_NAMES_GEMINI = [
+  'BeforeAgent',
+  'BeforeModel',
+  'AfterAgent',
+  'SessionStart',
+  'SessionEnd',
   'UnknownEvent',
 ]
 
@@ -148,6 +166,20 @@ describe('adapter property tests (mulberry32 seed=42; ADPT-04)', () => {
         let result: NormalizedEvent | null = null
         expect(() => {
           result = adaptCursor(payload, name)
+        }).not.toThrow()
+        expect(result === null || isValidEvent(result)).toBe(true)
+      }
+    }
+  })
+
+  it('adaptGeminiCli never throws across 200 mutations × 6 event names', () => {
+    const rng = mulberry32(42)
+    for (let i = 0; i < 200; i++) {
+      for (const name of EVENT_NAMES_GEMINI) {
+        const payload = mutate(rng, HAPPY_GEMINI)
+        let result: NormalizedEvent | null = null
+        expect(() => {
+          result = adaptGeminiCli(payload, name)
         }).not.toThrow()
         expect(result === null || isValidEvent(result)).toBe(true)
       }

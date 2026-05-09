@@ -2,7 +2,6 @@ import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { type EChartsCoreOption, echarts } from '@/charts/echarts'
 import { PageShell } from '@/components/PageShell'
-import { Spinner } from '@/components/ui/spinner'
 import {
   Table,
   TableBody,
@@ -532,7 +531,9 @@ function AgentContributionBars({ summary }: { summary: HistorySummary }) {
               }}
             />
             <span className="text-muted-foreground">{agent}</span>
-            <span className="font-heading tracking-tight tabular-nums">{formatDuration(total)}</span>
+            <span className="font-heading tracking-tight tabular-nums">
+              {formatDuration(total)}
+            </span>
           </div>
         ))}
       </div>
@@ -564,7 +565,9 @@ function TopProjectSignals({ summary }: { summary: HistorySummary }) {
           key={row.project}
         >
           <p className="truncate text-[13px] font-medium">{row.project}</p>
-          <p className="font-heading tracking-tight text-[12px] tabular-nums">{formatDuration(row.total)}</p>
+          <p className="font-heading tracking-tight text-[12px] tabular-nums">
+            {formatDuration(row.total)}
+          </p>
           <p className="font-heading tracking-tight text-[12px] text-muted-foreground tabular-nums">
             {row.focusTurns} focus
           </p>
@@ -583,31 +586,21 @@ function SortIcon({ active, asc }: { active: boolean; asc: boolean }) {
   return <Icon aria-hidden className="ml-1 inline size-3" />
 }
 
-function StatTile({
-  label,
-  value,
-  detail,
-}: {
-  label: string
-  value: string
-  detail: string
-}) {
+function StatTile({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
     <div className="flex flex-col justify-between rounded-[18px] border border-border/40 bg-card/40 p-5 shadow-sm shadow-black/[0.01]">
       <div className="space-y-1">
         <p className="text-[13px] font-medium text-muted-foreground">{label}</p>
-        <p className="font-heading text-[26px] font-semibold tracking-tight text-foreground">{value}</p>
+        <p className="font-heading text-[26px] font-semibold tracking-tight text-foreground">
+          {value}
+        </p>
       </div>
       <p className="mt-4 truncate text-[12px] text-muted-foreground">{detail}</p>
     </div>
   )
 }
 
-function InsightBar({
-  items,
-}: {
-  items: Array<{ label: string; value: string }>
-}) {
+function InsightBar({ items }: { items: Array<{ label: string; value: string }> }) {
   return (
     <div className="mb-6 flex flex-wrap items-center gap-x-8 gap-y-4 px-1">
       {items.map((item) => (
@@ -770,7 +763,10 @@ export default function History() {
           <p className="text-[13px] text-muted-foreground">Retrospective analytics</p>
           <h1 className="font-heading text-2xl font-semibold">History</h1>
         </div>
-        <Tabs value={periodDays.toString()} onValueChange={(v) => setPeriodDays(Number(v) as typeof PERIODS[number])}>
+        <Tabs
+          value={periodDays.toString()}
+          onValueChange={(v) => setPeriodDays(Number(v) as (typeof PERIODS)[number])}
+        >
           <TabsList>
             {PERIODS.map((period) => (
               <TabsTab
@@ -810,181 +806,189 @@ export default function History() {
         </section>
       )}
 
-      <DashboardPanel title="Contribution heatmap" description="Last 365 days, GitHub-style intensity">
-          {insights && (
-            <InsightBar
-              items={[
-                { label: 'Active days', value: `${insights.activeCalendarDays} / 365` },
-                {
-                  label: 'Current streak',
-                  value: `${insights.currentStreak} days`,
-                },
-                {
-                  label: 'Best day',
-                  value: `${insights.bestCalendarDay.date.slice(5)} · ${formatDuration(insights.bestCalendarDay.total)}`,
-                },
-              ]}
-            />
-          )}
-          <CalendarHeatmap summary={summary} />
-        </DashboardPanel>
+      <DashboardPanel
+        title="Contribution heatmap"
+        description="Last 365 days, GitHub-style intensity"
+      >
+        {insights && (
+          <InsightBar
+            items={[
+              { label: 'Active days', value: `${insights.activeCalendarDays} / 365` },
+              {
+                label: 'Current streak',
+                value: `${insights.currentStreak} days`,
+              },
+              {
+                label: 'Best day',
+                value: `${insights.bestCalendarDay.date.slice(5)} · ${formatDuration(insights.bestCalendarDay.total)}`,
+              },
+            ]}
+          />
+        )}
+        <CalendarHeatmap summary={summary} />
+      </DashboardPanel>
 
       <DashboardPanel title="Project trends" description="Daily stacked duration by project">
+        {stats && (
+          <InsightBar
+            items={[
+              {
+                label: 'Change',
+                value: formatDelta(summary.periodCompare.deltaRatio),
+              },
+              {
+                label: 'Active days',
+                value: `${stats.activeDays} / ${summary.periodDays}`,
+              },
+              {
+                label: 'Best day',
+                value: `${stats.bestDay.date.slice(5)} · ${formatDuration(stats.bestDay.total)}`,
+              },
+            ]}
+          />
+        )}
+        <TrendChart summary={summary} />
+      </DashboardPanel>
+
+      <section className="grid gap-5 xl:grid-cols-2">
+        <DashboardPanel title="Project share" description="Where time went in the selected period">
           {stats && (
             <InsightBar
               items={[
                 {
-                  label: 'Change',
-                  value: formatDelta(summary.periodCompare.deltaRatio),
+                  label: 'Top project',
+                  value: `${stats.topProject?.project ?? 'No project'} · ${formatPercent(stats.topProjectShare)}`,
                 },
                 {
-                  label: 'Active days',
-                  value: `${stats.activeDays} / ${summary.periodDays}`,
+                  label: 'Avg active day',
+                  value: formatDuration(stats.averageActiveDay),
                 },
                 {
-                  label: 'Best day',
-                  value: `${stats.bestDay.date.slice(5)} · ${formatDuration(stats.bestDay.total)}`,
+                  label: 'Turns',
+                  value: `${stats.turnCount}`,
                 },
               ]}
             />
           )}
-          <TrendChart summary={summary} />
+          <ProjectShareChart summary={summary} />
         </DashboardPanel>
 
-      <section className="grid gap-5 xl:grid-cols-2">
-        <DashboardPanel title="Project share" description="Where time went in the selected period">
-            {stats && (
-              <InsightBar
-                items={[
-                  {
-                    label: 'Top project',
-                    value: `${stats.topProject?.project ?? 'No project'} · ${formatPercent(stats.topProjectShare)}`,
-                  },
-                  {
-                    label: 'Avg active day',
-                    value: formatDuration(stats.averageActiveDay),
-                  },
-                  {
-                    label: 'Turns',
-                    value: `${stats.turnCount}`,
-                  },
-                ]}
-              />
-            )}
-            <ProjectShareChart summary={summary} />
-          </DashboardPanel>
-
         <DashboardPanel title="Hourly rhythm" description="Weekday x hour intensity">
-            {stats && (
-              <InsightBar
-                items={[
-                  {
-                    label: 'Peak window',
-                    value: formatHourWindow(stats.peakHour.weekday, stats.peakHour.hour),
-                  },
-                  {
-                    label: 'Peak total',
-                    value: formatDuration(stats.peakHour.total),
-                  },
-                  {
-                    label: 'Best day',
-                    value: stats.bestDay.date.slice(5) || '-',
-                  },
-                ]}
-              />
-            )}
-            <HourlyActivityHeatmap summary={summary} />
-          </DashboardPanel>
+          {stats && (
+            <InsightBar
+              items={[
+                {
+                  label: 'Peak window',
+                  value: formatHourWindow(stats.peakHour.weekday, stats.peakHour.hour),
+                },
+                {
+                  label: 'Peak total',
+                  value: formatDuration(stats.peakHour.total),
+                },
+                {
+                  label: 'Best day',
+                  value: stats.bestDay.date.slice(5) || '-',
+                },
+              ]}
+            />
+          )}
+          <HourlyActivityHeatmap summary={summary} />
+        </DashboardPanel>
       </section>
 
       <section className="grid gap-5 xl:grid-cols-2">
         <DashboardPanel title="Turn length buckets" description="Fragmented turns vs focus blocks">
-            {stats && insights && (
-              <InsightBar
-                items={[
-                  {
-                    label: 'Focus share',
-                    value: formatPercent(insights.focusShare),
-                  },
-                  {
-                    label: 'Fragmented',
-                    value: formatPercent(stats.shortTurnRate),
-                  },
-                  {
-                    label: 'Median',
-                    value: formatDuration(stats.medianTurn),
-                  },
-                ]}
-              />
-            )}
-            <TurnLengthBuckets summary={summary} />
-          </DashboardPanel>
+          {stats && insights && (
+            <InsightBar
+              items={[
+                {
+                  label: 'Focus share',
+                  value: formatPercent(insights.focusShare),
+                },
+                {
+                  label: 'Fragmented',
+                  value: formatPercent(stats.shortTurnRate),
+                },
+                {
+                  label: 'Median',
+                  value: formatDuration(stats.medianTurn),
+                },
+              ]}
+            />
+          )}
+          <TurnLengthBuckets summary={summary} />
+        </DashboardPanel>
 
         <DashboardPanel title="Agent contribution" description="Agent split inside top projects">
-            {insights && (
-              <InsightBar
-                items={[
-                  {
-                    label: 'Top agent',
-                    value: insights.topAgentName,
-                  },
-                  {
-                    label: 'Share',
-                    value: formatPercent(insights.topAgentShare),
-                  },
-                  {
-                    label: 'Total',
-                    value: formatDuration(insights.topAgentTotal),
-                  },
-                ]}
-              />
-            )}
-            <AgentContributionBars summary={summary} />
-          </DashboardPanel>
+          {insights && (
+            <InsightBar
+              items={[
+                {
+                  label: 'Top agent',
+                  value: insights.topAgentName,
+                },
+                {
+                  label: 'Share',
+                  value: formatPercent(insights.topAgentShare),
+                },
+                {
+                  label: 'Total',
+                  value: formatDuration(insights.topAgentTotal),
+                },
+              ]}
+            />
+          )}
+          <AgentContributionBars summary={summary} />
+        </DashboardPanel>
       </section>
 
-      <DashboardPanel title="Project signals" description="Total time, focus blocks, and median turn length">
-          <TopProjectSignals summary={summary} />
-        </DashboardPanel>
+      <DashboardPanel
+        title="Project signals"
+        description="Total time, focus blocks, and median turn length"
+      >
+        <TopProjectSignals summary={summary} />
+      </DashboardPanel>
 
       <DashboardPanel title="Top projects">
-          <Table className="text-[13px]">
-            <TableHeader className="[&_tr]:border-border/35">
-              <TableRow className="border-border/35">
-                {(['project', 'total', 'turns', 'lastActive'] as const).map((key) => (
-                  <TableHead className="h-8 px-3 text-[11px]" key={key}>
-                    <button
-                      className="inline-flex items-center"
-                      onClick={() => changeSort(key)}
-                      type="button"
-                    >
-                      {key === 'project'
-                        ? 'Project'
-                        : key === 'lastActive'
-                          ? 'Last Active'
-                          : key === 'total'
-                            ? 'Total'
-                            : 'Turns'}
-                      <SortIcon active={sortKey === key} asc={sortAsc} />
-                    </button>
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sortedRows.map((row: TopProjectRow) => (
-                <TableRow className="border-border/25" key={row.project}>
-                  <TableCell className="px-3 py-3">{row.project}</TableCell>
-                  <TableCell className="px-3 py-3 font-heading tracking-tight tabular-nums">
-                    {formatDuration(row.total)}
-                  </TableCell>
-                  <TableCell className="px-3 py-3 font-heading tracking-tight tabular-nums">{row.turns}</TableCell>
-                  <TableCell className="px-3 py-3">{formatLastActive(row.lastActive)}</TableCell>
-                </TableRow>
+        <Table className="text-[13px]">
+          <TableHeader className="[&_tr]:border-border/35">
+            <TableRow className="border-border/35">
+              {(['project', 'total', 'turns', 'lastActive'] as const).map((key) => (
+                <TableHead className="h-8 px-3 text-[11px]" key={key}>
+                  <button
+                    className="inline-flex items-center"
+                    onClick={() => changeSort(key)}
+                    type="button"
+                  >
+                    {key === 'project'
+                      ? 'Project'
+                      : key === 'lastActive'
+                        ? 'Last Active'
+                        : key === 'total'
+                          ? 'Total'
+                          : 'Turns'}
+                    <SortIcon active={sortKey === key} asc={sortAsc} />
+                  </button>
+                </TableHead>
               ))}
-            </TableBody>
-          </Table>
-        </DashboardPanel>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {sortedRows.map((row: TopProjectRow) => (
+              <TableRow className="border-border/25" key={row.project}>
+                <TableCell className="px-3 py-3">{row.project}</TableCell>
+                <TableCell className="px-3 py-3 font-heading tracking-tight tabular-nums">
+                  {formatDuration(row.total)}
+                </TableCell>
+                <TableCell className="px-3 py-3 font-heading tracking-tight tabular-nums">
+                  {row.turns}
+                </TableCell>
+                <TableCell className="px-3 py-3">{formatLastActive(row.lastActive)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </DashboardPanel>
     </PageShell>
   )
 }

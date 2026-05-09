@@ -43,8 +43,8 @@ Usage:
   vibetime <command> [options]
 
 Commands:
-  install <agent>   Configure hooks for an agent (claude-code | codex | cursor)
-  uninstall <agent> Remove vibetime hooks for an agent (claude-code | codex | cursor)
+  install <agent>   Configure hooks for an agent (claude-code | codex | cursor | gemini-cli)
+  uninstall <agent> Remove vibetime hooks for an agent (claude-code | codex | cursor | gemini-cli)
   today             Show today's agent time breakdown
   project <name>    Show project details (default: --days=7)
   export            Export events as JSON or CSV (--format=csv, --out=path)
@@ -56,6 +56,7 @@ Examples:
   vibetime uninstall claude-code
   vibetime install codex
   vibetime install cursor
+  vibetime install gemini-cli
   vibetime today
   vibetime project my-project --days=30
   vibetime export --format=json --out=events.json
@@ -75,7 +76,7 @@ export async function runCli(args = process.argv.slice(2)): Promise<void> {
         const agent = args[1]
         if (!agent) {
           console.error('Error: Agent name required. Usage: vibetime install <agent>')
-          console.error('Supported agents: claude-code, codex, cursor')
+          console.error('Supported agents: claude-code, codex, cursor, gemini-cli')
           process.exit(1)
         }
         installAgent(agent)
@@ -87,7 +88,7 @@ export async function runCli(args = process.argv.slice(2)): Promise<void> {
         const agent = args[1]
         if (!agent) {
           console.error('Error: Agent name required. Usage: vibetime uninstall <agent>')
-          console.error('Supported agents: claude-code, codex, cursor')
+          console.error('Supported agents: claude-code, codex, cursor, gemini-cli')
           process.exit(1)
         }
         uninstallAgent(agent)

@@ -1,13 +1,19 @@
 // Hook mode main logic — stdin → adapter → SQLite.
 // HOOK-01: <50ms cold start (Bun binary).
 // HOOK-02: always exit 0, no stdout/stderr.
-// HOOK-04: uses core adapters (adaptClaudeCode, adaptCodex, adaptCursor).
+// HOOK-04: uses core adapters.
 // REC-01: calls recoverOrphans on session_start.
 // Agent detection: --source arg first, then event name matching.
 
 import { basename, isAbsolute, resolve as resolvePath } from 'node:path'
 import type { Agent, NormalizedEvent } from '@vibetime/core'
-import { adaptClaudeCode, adaptCodex, adaptCursor, resolveProject } from '@vibetime/core'
+import {
+  adaptClaudeCode,
+  adaptCodex,
+  adaptCursor,
+  adaptGeminiCli,
+  resolveProject,
+} from '@vibetime/core'
 import { readConfig } from './config.js'
 import { appendLog } from './log.js'
 import { notifyDesktop } from './notify.js'
@@ -29,6 +35,9 @@ export function detectAgent(payload: Record<string, unknown>, argv: string[]): A
     if (source === 'claude' || source === 'claude-code') return 'claude-code'
     if (source === 'codex') return 'codex'
     if (source === 'cursor') return 'cursor'
+    if (source === 'gemini' || source === 'gemini-cli' || source === 'geminicli') {
+      return 'gemini-cli'
+    }
   }
 
   // Event name matching
@@ -47,6 +56,13 @@ export function detectAgent(payload: Record<string, unknown>, argv: string[]): A
   // Cursor events (camelCase)
   if (['beforeSubmitPrompt', 'stop', 'sessionStart', 'sessionEnd'].includes(eventName)) {
     return 'cursor'
+  }
+
+  // Gemini CLI events (PascalCase, with Gemini-specific turn boundaries)
+  if (
+    ['BeforeAgent', 'BeforeModel', 'AfterAgent', 'SessionStart', 'SessionEnd'].includes(eventName)
+  ) {
+    return 'gemini-cli'
   }
 
   return null
@@ -111,6 +127,7 @@ const adapters: Record<
   'claude-code': adaptClaudeCode,
   codex: adaptCodex,
   cursor: adaptCursor,
+  'gemini-cli': adaptGeminiCli,
 }
 
 /**

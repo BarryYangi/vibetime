@@ -8,11 +8,13 @@ import {
   installClaudeCode,
   installCodex,
   installCursor,
+  installGeminiCli,
   resolveHookBinaryPath,
   uninstallAgent,
   uninstallClaudeCode,
   uninstallCodex,
   uninstallCursor,
+  uninstallGeminiCli,
 } from './install.js'
 
 let testHome: string
@@ -345,6 +347,96 @@ describe('installCursor — happy paths', () => {
   })
 })
 
+describe('installGeminiCli — happy paths', () => {
+  it('creates settings.json with hooks for 5 events', () => {
+    installGeminiCli()
+
+    const settingsPath = `${testHome}/.gemini/settings.json`
+    expect(existsSync(settingsPath)).toBe(true)
+
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'))
+    expect(settings.hooks).toBeDefined()
+
+    const events = ['BeforeAgent', 'BeforeModel', 'AfterAgent', 'SessionStart', 'SessionEnd']
+    for (const event of events) {
+      expect(settings.hooks[event]).toBeDefined()
+      expect(Array.isArray(settings.hooks[event])).toBe(true)
+      const group = settings.hooks[event].find((g: { matcher?: string }) => g.matcher === '*')
+      expect(group).toBeDefined()
+      expect(group.hooks.some((h: { command: string }) => isVibetimeHookCommand(h.command))).toBe(
+        true,
+      )
+      const vibetimeHook = group.hooks.find((h: { command: string }) =>
+        isVibetimeHookCommand(h.command),
+      )
+      expect(vibetimeHook.timeout).toBe(10000)
+    }
+  })
+
+  it('is idempotent — second run does not duplicate hooks', () => {
+    installGeminiCli()
+    installGeminiCli()
+
+    const settingsPath = `${testHome}/.gemini/settings.json`
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'))
+
+    for (const event of [
+      'BeforeAgent',
+      'BeforeModel',
+      'AfterAgent',
+      'SessionStart',
+      'SessionEnd',
+    ]) {
+      const group = settings.hooks[event].find((g: { matcher?: string }) => g.matcher === '*')
+      const vibetimeHooks = group.hooks.filter((h: { command: string }) =>
+        isVibetimeHookCommand(h.command),
+      )
+      expect(vibetimeHooks.length).toBe(1)
+    }
+  })
+
+  it('preserves existing hooks', () => {
+    const settingsPath = `${testHome}/.gemini/settings.json`
+    mkdirSync(`${testHome}/.gemini`, { recursive: true })
+    writeFileSync(
+      settingsPath,
+      JSON.stringify({
+        hooks: {
+          BeforeAgent: [
+            {
+              matcher: '*',
+              hooks: [{ name: 'existing', type: 'command', command: 'existing-hook' }],
+            },
+          ],
+        },
+        otherSetting: 'preserved',
+      }),
+    )
+
+    installGeminiCli()
+
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'))
+    expect(settings.otherSetting).toBe('preserved')
+    const group = settings.hooks.BeforeAgent.find((g: { matcher?: string }) => g.matcher === '*')
+    expect(group.hooks.some((h: { command: string }) => h.command === 'existing-hook')).toBe(true)
+    expect(group.hooks.some((h: { command: string }) => isVibetimeHookCommand(h.command))).toBe(
+      true,
+    )
+  })
+
+  it('creates backup before modification', () => {
+    const settingsPath = `${testHome}/.gemini/settings.json`
+    mkdirSync(`${testHome}/.gemini`, { recursive: true })
+    writeFileSync(settingsPath, JSON.stringify({ original: true }))
+
+    installGeminiCli()
+
+    expect(existsSync(`${settingsPath}.backup`)).toBe(true)
+    const backup = JSON.parse(readFileSync(`${settingsPath}.backup`, 'utf-8'))
+    expect(backup.original).toBe(true)
+  })
+})
+
 describe('installAgent — dispatch', () => {
   it('dispatches claude-code correctly', () => {
     installAgent('claude-code')
@@ -364,6 +456,11 @@ describe('installAgent — dispatch', () => {
     expect(existsSync(`${testHome}/.cursor/hooks.json`)).toBe(true)
   })
 
+  it('dispatches gemini-cli correctly', () => {
+    installAgent('gemini-cli')
+    expect(existsSync(`${testHome}/.gemini/settings.json`)).toBe(true)
+  })
+
   it('throws on unknown agent', () => {
     expect(() => installAgent('unknown')).toThrow('Unknown agent')
   })
@@ -377,9 +474,11 @@ describe('installAgent — dispatch', () => {
     installAgent('claude-code')
     installAgent('codex')
     installAgent('cursor')
+    installAgent('gemini-cli')
 
     const claudeSettings = JSON.parse(readFileSync(`${testHome}/.claude/settings.json`, 'utf-8'))
     const cursorHooks = JSON.parse(readFileSync(`${testHome}/.cursor/hooks.json`, 'utf-8'))
+    const geminiSettings = JSON.parse(readFileSync(`${testHome}/.gemini/settings.json`, 'utf-8'))
     const codexConfig = readFileSync(`${testHome}/.codex/config.toml`, 'utf-8')
     const codexCommand = codexConfig.match(/command = "([^"]+ --source codex)"/)?.[1]
 
@@ -387,6 +486,7 @@ describe('installAgent — dispatch', () => {
       claudeSettings.hooks.UserPromptSubmit[0].hooks[0].command,
       codexCommand,
       cursorHooks.hooks.beforeSubmitPrompt[0].command,
+      geminiSettings.hooks.BeforeAgent[0].hooks[0].command,
     ]
 
     for (const command of commands) {
@@ -477,6 +577,37 @@ describe('uninstall — removes only vibetime hooks', () => {
       ),
     ).toBe(false)
     expect(existsSync(`${hooksPath}.backup`)).toBe(true)
+  })
+
+  it('removes Gemini CLI vibetime hooks and preserves unrelated hooks', () => {
+    const settingsPath = `${testHome}/.gemini/settings.json`
+    mkdirSync(`${testHome}/.gemini`, { recursive: true })
+    writeFileSync(
+      settingsPath,
+      JSON.stringify({
+        hooks: {
+          BeforeAgent: [
+            {
+              matcher: '*',
+              hooks: [
+                { type: 'command', command: 'existing-hook' },
+                { type: 'command', command: 'vibetime --source gemini-cli' },
+              ],
+            },
+          ],
+        },
+      }),
+    )
+
+    uninstallGeminiCli()
+
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf-8'))
+    const group = settings.hooks.BeforeAgent.find((g: { matcher?: string }) => g.matcher === '*')
+    expect(group.hooks.some((h: { command: string }) => h.command === 'existing-hook')).toBe(true)
+    expect(group.hooks.some((h: { command: string }) => isVibetimeHookCommand(h.command))).toBe(
+      false,
+    )
+    expect(existsSync(`${settingsPath}.backup`)).toBe(true)
   })
 
   it('dispatches uninstallAgent by agent id', () => {

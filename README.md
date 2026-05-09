@@ -7,15 +7,15 @@
 </p>
 
 VibeTime runs quietly in the menu bar and records coding sessions from Claude Code,
-Codex, and Cursor. It is built for answering a simple question well: where did my
-agent-assisted work time go today?
+Codex, Cursor, and Gemini CLI. It is built for answering a simple question well:
+where did my agent-assisted work time go today?
 
 ## What It Does
 
 - Tracks agent sessions and turns locally with SQLite.
 - Shows today's live activity, completed work, and active turns.
 - Provides history views with contribution-style heatmaps and useful project breakdowns.
-- Installs and removes hooks for Claude Code, Codex, and Cursor from the app settings.
+- Installs and removes hooks for Claude Code, Codex, Cursor, and Gemini CLI from the app settings.
 - Keeps data on your machine. No account, cloud sync, or hosted backend is required.
 - Ships a small CLI through `~/.vibetime/bin/vibetime` for local checks and exports.
 
@@ -63,10 +63,10 @@ hooks. This is Codex's safety boundary; VibeTime does not bypass it.
 VibeTime uses Codex's current inline `config.toml` hook format and removes its
 older entries from `~/.codex/hooks.json` to avoid mixed-source warnings.
 
-### Claude Code and Cursor
+### Claude Code, Cursor, and Gemini CLI
 
-Claude Code and Cursor hooks can be installed or removed from VibeTime Settings.
-VibeTime preserves unrelated user hooks.
+Claude Code, Cursor, and Gemini CLI hooks can be installed or removed from VibeTime
+Settings. VibeTime preserves unrelated user hooks.
 
 ## Local Data
 

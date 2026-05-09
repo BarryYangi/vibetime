@@ -675,7 +675,7 @@ export function queryTodayLiveState(): TodayLiveState {
 }
 
 export function queryAgentStatus(): AgentStatus[] {
-  const agents = ['claude-code', 'codex', 'cursor'] as const
+  const agents = ['claude-code', 'codex', 'cursor', 'gemini-cli'] as const
   const managedCliPath = getManagedCliPath()
   const homeDir = homedir()
   const hasVibetimeCommand = (command: unknown): command is string => {
@@ -721,6 +721,18 @@ export function queryAgentStatus(): AgentStatus[] {
           const data = JSON.parse(readFileSync(path, 'utf-8'))
           return Object.values((data.hooks ?? {}) as Record<string, unknown[]>).some((hooks) =>
             hooks.some((hook) => hasVibetimeCommand((hook as { command?: unknown }).command)),
+          )
+        }
+        case 'gemini-cli': {
+          const path = join(homeDir, '.gemini', 'settings.json')
+          if (!existsSync(path)) return false
+          const data = JSON.parse(readFileSync(path, 'utf-8'))
+          return Object.values((data.hooks ?? {}) as Record<string, unknown[]>).some((groups) =>
+            groups.some((group) =>
+              ((group as { hooks?: Array<{ command?: unknown }> }).hooks ?? []).some((hook) =>
+                hasVibetimeCommand(hook.command),
+              ),
+            ),
           )
         }
         default:

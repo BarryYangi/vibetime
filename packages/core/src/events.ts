@@ -3,7 +3,7 @@
 // Adapters in `packages/core` consume vendor hook payloads and return a
 // NormalizedEvent or null. Adapters MUST be pure and MUST NOT throw.
 
-export type Agent = 'claude-code' | 'codex' | 'cursor'
+export type Agent = 'claude-code' | 'codex' | 'cursor' | 'gemini-cli'
 
 export type EventType = 'turn_start' | 'turn_end' | 'session_start' | 'session_end'
 

@@ -4,8 +4,8 @@ import { PageShell } from '@/components/PageShell'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
-import type { AppPreferences } from '../../../shared/ipc-types'
 import { cn } from '@/lib/utils'
+import type { AppPreferences } from '../../../shared/ipc-types'
 import {
   agentStatusAtom,
   appPreferencesAtom,
@@ -20,6 +20,7 @@ const AGENTS = [
   { id: 'claude-code', name: 'Claude Code', description: 'Anthropic Claude Code CLI' },
   { id: 'codex', name: 'Codex', description: 'OpenAI Codex CLI' },
   { id: 'cursor', name: 'Cursor', description: 'Cursor IDE' },
+  { id: 'gemini-cli', name: 'Gemini CLI', description: 'Google Gemini CLI' },
 ] as const
 
 function SettingsSection({
@@ -40,16 +41,16 @@ function SettingsSection({
         )}
       </div>
       <div className="overflow-hidden rounded-xl border border-border/55 bg-card shadow-sm shadow-black/[0.02]">
-        <div className="flex flex-col divide-y divide-border/40">
-          {children}
-        </div>
+        <div className="flex flex-col divide-y divide-border/40">{children}</div>
       </div>
     </section>
   )
 }
 
 function SettingsRow({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn('flex items-center justify-between gap-4 p-4', className)}>{children}</div>
+  return (
+    <div className={cn('flex items-center justify-between gap-4 p-4', className)}>{children}</div>
+  )
 }
 
 function ConnectAgents() {
@@ -385,10 +386,10 @@ function About() {
         <dl className="grid grid-cols-[8rem_1fr] gap-y-3 text-[13px]">
           <dt className="text-muted-foreground">Version</dt>
           <dd className="font-mono text-foreground font-medium">{version}</dd>
-          
+
           <dt className="text-muted-foreground">Database</dt>
           <dd className="break-all font-mono text-muted-foreground">{dbPath}</dd>
-          
+
           <dt className="text-muted-foreground">License</dt>
           <dd className="text-foreground">MIT</dd>
         </dl>
@@ -412,9 +413,7 @@ export default function Settings() {
   return (
     <PageShell prose className="space-y-10 pb-12">
       <header className="px-1">
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-          Settings
-        </h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Settings</h1>
         <p className="mt-1.5 text-[13px] text-muted-foreground leading-snug">
           Manage your app preferences, CLI tools, and agent hooks.
         </p>
@@ -429,4 +428,3 @@ export default function Settings() {
     </PageShell>
   )
 }
-

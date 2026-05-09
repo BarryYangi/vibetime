@@ -1,4 +1,4 @@
-// Install hooks for AI coding agents (Claude Code, Codex, Cursor).
+// Install hooks for AI coding agents (Claude Code, Codex, Cursor, Gemini CLI).
 // CLI-01: idempotent — skips if vibetime hook already exists.
 // CLI-02: Codex requires [features] hooks = true and inline hooks in config.toml.
 // All operations backed up before modification; existing hooks preserved.
@@ -58,6 +58,13 @@ const CODEX_HOOKS_BLOCK_START = '# vibetime-managed-codex-hooks:start'
 const CODEX_HOOKS_BLOCK_END = '# vibetime-managed-codex-hooks:end'
 const CODEX_FEATURE_KEY = 'hooks'
 const CODEX_HOOK_EVENTS = ['SessionStart', 'UserPromptSubmit', 'Stop'] as const
+const GEMINI_HOOK_EVENTS = [
+  'BeforeAgent',
+  'BeforeModel',
+  'AfterAgent',
+  'SessionStart',
+  'SessionEnd',
+] as const
 
 function isVibetimeCommand(command: unknown): command is string {
   if (typeof command !== 'string') return false
@@ -355,6 +362,85 @@ export function installCursor(): void {
 }
 
 /**
+ * Install hooks for Gemini CLI.
+ * Configures ~/.gemini/settings.json.
+ * Idempotent — skips if vibetime hook already exists.
+ */
+export function installGeminiCli(): void {
+  const settingsPath = homePath('.gemini', 'settings.json')
+  const hookBinaryPath = resolveHookCommandPath()
+
+  try {
+    mkdirSync(dirname(settingsPath), { recursive: true })
+
+    let settings: Record<string, unknown> = {}
+    if (existsSync(settingsPath)) {
+      try {
+        settings = JSON.parse(readFileSync(settingsPath, 'utf-8'))
+      } catch {
+        copyFileSync(settingsPath, `${settingsPath}.backup`)
+      }
+    }
+
+    if (existsSync(settingsPath)) {
+      copyFileSync(settingsPath, `${settingsPath}.backup`)
+    }
+
+    const hooks = (settings.hooks ?? {}) as Record<string, unknown[]>
+    const command = `${hookBinaryPath} --source gemini-cli`
+
+    for (const event of GEMINI_HOOK_EVENTS) {
+      const arr = (hooks[event] ?? []) as Array<{
+        matcher?: string
+        sequential?: boolean
+        hooks?: Array<{ name?: string; type: string; command: string; timeout?: number }>
+      }>
+
+      const existing = arr.find((g) => g.matcher === '*')
+      if (existing) {
+        existing.hooks = existing.hooks ?? []
+        const hasVibetime = existing.hooks.some((h) => isVibetimeCommand(h.command))
+        if (hasVibetime) {
+          existing.hooks = existing.hooks.map((hook) =>
+            isVibetimeCommand(hook.command)
+              ? { ...hook, name: 'vibetime', command, timeout: 10000 }
+              : hook,
+          )
+          continue
+        }
+
+        existing.hooks.push({
+          name: 'vibetime',
+          type: 'command',
+          command,
+          timeout: 10000,
+        })
+      } else {
+        arr.push({
+          matcher: '*',
+          hooks: [
+            {
+              name: 'vibetime',
+              type: 'command',
+              command,
+              timeout: 10000,
+            },
+          ],
+        })
+      }
+
+      hooks[event] = arr
+    }
+
+    settings.hooks = hooks
+    writeFileSync(settingsPath, JSON.stringify(settings, null, 2))
+  } catch (err) {
+    appendLog(`Error installing Gemini CLI hooks: ${err}`)
+    throw err
+  }
+}
+
+/**
  * Install hooks for the specified agent.
  * Dispatches to the appropriate install function.
  */
@@ -369,8 +455,11 @@ export function installAgent(agent: string): void {
     case 'cursor':
       installCursor()
       break
+    case 'gemini-cli':
+      installGeminiCli()
+      break
     default:
-      throw new Error(`Unknown agent: ${agent}. Supported: claude-code, codex, cursor`)
+      throw new Error(`Unknown agent: ${agent}. Supported: claude-code, codex, cursor, gemini-cli`)
   }
 }
 
@@ -486,6 +575,54 @@ export function uninstallCursor(): void {
 }
 
 /**
+ * Uninstall vibetime hooks for Gemini CLI.
+ * Preserves unrelated Gemini CLI hooks.
+ */
+export function uninstallGeminiCli(): void {
+  const settingsPath = homePath('.gemini', 'settings.json')
+
+  try {
+    if (!existsSync(settingsPath)) return
+
+    copyFileSync(settingsPath, `${settingsPath}.backup`)
+
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>
+    const hooks = (settings.hooks ?? {}) as Record<string, unknown[]>
+
+    for (const event of Object.keys(hooks)) {
+      const arr = (hooks[event] ?? []) as Array<{
+        matcher?: string
+        hooks?: Array<{ command: string }>
+      }>
+
+      const next = arr
+        .map((group) => ({
+          ...group,
+          hooks: group.hooks?.filter((hook) => !isVibetimeCommand(hook.command)),
+        }))
+        .filter((group) => (group.hooks?.length ?? 0) > 0)
+
+      if (next.length > 0) {
+        hooks[event] = next
+      } else {
+        delete hooks[event]
+      }
+    }
+
+    if (Object.keys(hooks).length > 0) {
+      settings.hooks = hooks
+    } else {
+      delete settings.hooks
+    }
+
+    writeFileSync(settingsPath, JSON.stringify(settings, null, 2))
+  } catch (err) {
+    appendLog(`Error uninstalling Gemini CLI hooks: ${err}`)
+    throw err
+  }
+}
+
+/**
  * Uninstall vibetime hooks for the specified agent.
  */
 export function uninstallAgent(agent: string): void {
@@ -499,7 +636,10 @@ export function uninstallAgent(agent: string): void {
     case 'cursor':
       uninstallCursor()
       break
+    case 'gemini-cli':
+      uninstallGeminiCli()
+      break
     default:
-      throw new Error(`Unknown agent: ${agent}. Supported: claude-code, codex, cursor`)
+      throw new Error(`Unknown agent: ${agent}. Supported: claude-code, codex, cursor, gemini-cli`)
   }
 }

@@ -158,13 +158,19 @@ summary,
 
 /* Custom OverlayScrollbars overrides to avoid clipping with container border-radius */
 .scrollbar-shell > .os-scrollbar-vertical {
+  /* biome-ignore lint/complexity/noImportantStyles: OverlayScrollbars writes inline positioning; this scoped override prevents handles clipping inside rounded shells. */
   padding-top: 16px !important;
+  /* biome-ignore lint/complexity/noImportantStyles: OverlayScrollbars writes inline positioning; this scoped override prevents handles clipping inside rounded shells. */
   padding-bottom: 16px !important;
+  /* biome-ignore lint/complexity/noImportantStyles: OverlayScrollbars writes inline positioning; this scoped override prevents handles clipping inside rounded shells. */
   right: 4px !important;
 }
 .scrollbar-shell > .os-scrollbar-horizontal {
+  /* biome-ignore lint/complexity/noImportantStyles: OverlayScrollbars writes inline positioning; this scoped override prevents handles clipping inside rounded shells. */
   padding-left: 16px !important;
+  /* biome-ignore lint/complexity/noImportantStyles: OverlayScrollbars writes inline positioning; this scoped override prevents handles clipping inside rounded shells. */
   padding-right: 16px !important;
+  /* biome-ignore lint/complexity/noImportantStyles: OverlayScrollbars writes inline positioning; this scoped override prevents handles clipping inside rounded shells. */
   bottom: 4px !important;
 }
 

@@ -78,9 +78,9 @@ describe('NormalizedEvent + AdapterFn type contracts', () => {
     const noopAdapter: AdapterFn = (_payload, _event) => null
     expect(noopAdapter({}, 'irrelevant')).toBeNull()
 
-    const agents: Agent[] = ['claude-code', 'codex', 'cursor']
+    const agents: Agent[] = ['claude-code', 'codex', 'cursor', 'gemini-cli']
     const events: EventType[] = ['turn_start', 'turn_end', 'session_start', 'session_end']
-    expect(agents).toHaveLength(3)
+    expect(agents).toHaveLength(4)
     expect(events).toHaveLength(4)
   })
 })

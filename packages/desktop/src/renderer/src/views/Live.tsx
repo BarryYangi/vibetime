@@ -36,6 +36,16 @@ function formatClock(ts: number): string {
   })
 }
 
+function formatStableId(id: string): string {
+  const uuid = id.match(/^([0-9a-f]{8})-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-([0-9a-f]{12})$/i)
+  if (uuid?.[1] && uuid[2]) {
+    return `${uuid[1]}...${uuid[2].slice(-4)}`
+  }
+
+  if (id.length <= 16) return id
+  return `${id.slice(0, 8)}...${id.slice(-4)}`
+}
+
 function activeSeconds(turn: ActiveTurn, state: TodayLiveState, now: number): number {
   return Math.max(0, now - Math.max(turn.started_at, state.dayStart))
 }
@@ -91,7 +101,9 @@ function Metric({
       </div>
       <div className="min-w-0">
         <p className="text-[12px] font-medium text-muted-foreground leading-none">{label}</p>
-        <p className="mt-1 truncate font-heading tracking-tight text-[14px] font-medium leading-none tabular-nums text-foreground">{value}</p>
+        <p className="mt-1 truncate font-heading tracking-tight text-[14px] font-medium leading-none tabular-nums text-foreground">
+          {value}
+        </p>
       </div>
     </div>
   )
@@ -148,7 +160,7 @@ function TurnStage({
           <div className="grid gap-2 md:grid-cols-3">
             <Metric icon={ClockIcon} label="Started" value={formatClock(turn.started_at)} />
             <Metric icon={TimerIcon} label="Project today" value={formatCompactDuration(total)} />
-            <Metric icon={FolderIcon} label="Session" value={turn.session_id.slice(0, 12)} />
+            <Metric icon={FolderIcon} label="Session" value={formatStableId(turn.session_id)} />
           </div>
         </div>
       </div>

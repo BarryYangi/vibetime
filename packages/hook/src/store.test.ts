@@ -338,6 +338,90 @@ describe('persistEvent — event insertion', () => {
     }
   })
 
+  it('pairs turn_end without turn_id to the latest open turn in the same agent session', () => {
+    const db = openDatabase(dbPath)
+    try {
+      persistEvent(
+        db,
+        makeEvent({
+          agent: 'gemini-cli',
+          event_type: 'turn_start',
+          session_id: 'gemini-session',
+          turn_id: 'gemini-turn-1',
+          ts: 1000,
+        }),
+      )
+
+      persistEvent(
+        db,
+        makeEvent({
+          agent: 'gemini-cli',
+          event_type: 'turn_end',
+          session_id: 'gemini-session',
+          turn_id: undefined,
+          ts: 1045,
+        }),
+      )
+
+      expect(queryOpenTurns(db, 'gemini-session')).toHaveLength(0)
+      const rows = db
+        .query("SELECT turn_id, duration_sec FROM events WHERE event_type = 'turn_end'")
+        .all() as Array<{ turn_id: string | null; duration_sec: number | null }>
+      expect(rows).toHaveLength(1)
+      expect(rows[0]?.turn_id).toBe('gemini-turn-1')
+      expect(rows[0]?.duration_sec).toBe(45)
+    } finally {
+      closeDatabase(db)
+    }
+  })
+
+  it('merges turn_start metadata without turn_id into the latest open turn', () => {
+    const db = openDatabase(dbPath)
+    try {
+      persistEvent(
+        db,
+        makeEvent({
+          agent: 'gemini-cli',
+          event_type: 'turn_start',
+          session_id: 'gemini-session',
+          turn_id: 'gemini-turn-1',
+          ts: 1000,
+          meta: { source: 'BeforeAgent' },
+        }),
+      )
+
+      persistEvent(
+        db,
+        makeEvent({
+          agent: 'gemini-cli',
+          event_type: 'turn_start',
+          session_id: 'gemini-session',
+          turn_id: undefined,
+          ts: 1001,
+          meta: { model: 'gemini-3-pro' },
+        }),
+      )
+
+      const openTurns = queryOpenTurns(db, 'gemini-session')
+      expect(openTurns).toHaveLength(1)
+      expect(JSON.parse(openTurns[0]?.meta ?? '{}')).toEqual({
+        source: 'BeforeAgent',
+        model: 'gemini-3-pro',
+      })
+
+      const rows = db
+        .query("SELECT meta FROM events WHERE event_type = 'turn_start'")
+        .all() as Array<{ meta: string | null }>
+      expect(rows).toHaveLength(1)
+      expect(JSON.parse(rows[0]?.meta ?? '{}')).toEqual({
+        source: 'BeforeAgent',
+        model: 'gemini-3-pro',
+      })
+    } finally {
+      closeDatabase(db)
+    }
+  })
+
   it('preserves explicit null duration on synthetic turn_end', () => {
     const db = openDatabase(dbPath)
     try {

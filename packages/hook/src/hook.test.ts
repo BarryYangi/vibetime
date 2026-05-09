@@ -27,10 +27,16 @@ describe('detectAgent — --source argument', () => {
     expect(result).toBe('cursor')
   })
 
+  it('returns gemini-cli for --source gemini-cli', () => {
+    const result = detectAgent({}, ['node', 'hook', '--source', 'gemini-cli'])
+    expect(result).toBe('gemini-cli')
+  })
+
   it('is case-insensitive for --source', () => {
     expect(detectAgent({}, ['node', 'hook', '--source', 'CLAUDE'])).toBe('claude-code')
     expect(detectAgent({}, ['node', 'hook', '--source', 'CODEX'])).toBe('codex')
     expect(detectAgent({}, ['node', 'hook', '--source', 'CURSOR'])).toBe('cursor')
+    expect(detectAgent({}, ['node', 'hook', '--source', 'GEMINI'])).toBe('gemini-cli')
   })
 
   it('--source takes priority over event name', () => {
@@ -86,6 +92,18 @@ describe('detectAgent — event name matching', () => {
     expect(detectAgent({ hook_event_name: 'sessionEnd' }, [])).toBe('cursor')
   })
 
+  it('detects gemini-cli from BeforeAgent', () => {
+    expect(detectAgent({ hook_event_name: 'BeforeAgent' }, [])).toBe('gemini-cli')
+  })
+
+  it('detects gemini-cli from BeforeModel', () => {
+    expect(detectAgent({ hook_event_name: 'BeforeModel' }, [])).toBe('gemini-cli')
+  })
+
+  it('detects gemini-cli from AfterAgent', () => {
+    expect(detectAgent({ hook_event_name: 'AfterAgent' }, [])).toBe('gemini-cli')
+  })
+
   it('checks event field as fallback for hook_event_name', () => {
     expect(detectAgent({ event: 'beforeSubmitPrompt' }, [])).toBe('cursor')
     expect(detectAgent({ event: 'UserPromptSubmit' }, [])).toBe('claude-code')
@@ -138,7 +156,9 @@ describe('detectAgent — property: never throws', () => {
       expect(() => detectAgent(payload, argv)).not.toThrow()
       const result = detectAgent(payload, argv)
       // Result is either Agent or null
-      expect(result === null || ['claude-code', 'codex', 'cursor'].includes(result)).toBe(true)
+      expect(
+        result === null || ['claude-code', 'codex', 'cursor', 'gemini-cli'].includes(result),
+      ).toBe(true)
     })
   }
 })

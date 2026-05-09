@@ -60,8 +60,6 @@ function activeSeconds(turn: ActiveTurn, now: number, dayStart: number): number 
   return Math.max(0, now - Math.max(turn.started_at, dayStart))
 }
 
-
-
 function ProjectBar({
   name,
   completed,
@@ -104,18 +102,14 @@ function ProjectBar({
   )
 }
 
-function StatTile({
-  label,
-  value,
-}: {
-  label: string
-  value: React.ReactNode
-}) {
+function StatTile({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex flex-col justify-between rounded-[18px] border border-border/40 bg-card/40 p-5 shadow-sm shadow-black/[0.01]">
       <div className="space-y-1">
         <p className="text-[13px] font-medium text-muted-foreground">{label}</p>
-        <div className="font-heading text-[26px] font-semibold tracking-tight text-foreground">{value}</div>
+        <div className="font-heading text-[26px] font-semibold tracking-tight text-foreground">
+          {value}
+        </div>
       </div>
     </div>
   )
@@ -272,13 +266,16 @@ export default function Today() {
       </header>
 
       <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile
-          label="Total agent time"
-          value={<TotalDurationFlow seconds={liveTotal} />}
-        />
+        <StatTile label="Total agent time" value={<TotalDurationFlow seconds={liveTotal} />} />
         <StatTile label="Turns" value={<NumberFlow locales="en-US" value={turnCount} />} />
-        <StatTile label="Projects" value={<NumberFlow locales="en-US" value={activeProjectCount} />} />
-        <StatTile label="Running" value={<NumberFlow locales="en-US" value={activeTurns.length} />} />
+        <StatTile
+          label="Projects"
+          value={<NumberFlow locales="en-US" value={activeProjectCount} />}
+        />
+        <StatTile
+          label="Running"
+          value={<NumberFlow locales="en-US" value={activeTurns.length} />}
+        />
       </section>
 
       <section className="min-w-0 mt-2">

@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect } from 'react'
 import { OverlayScrollbarsComponent } from 'overlayscrollbars-react'
+import { lazy, Suspense, useEffect } from 'react'
 import { HashRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import Sidebar from './components/Sidebar'
