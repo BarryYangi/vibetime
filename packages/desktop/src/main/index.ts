@@ -129,14 +129,16 @@ function createMainWindow(route = lastViewRoute()): BrowserWindow {
     height: 800,
     minWidth: MIN_WINDOW_WIDTH,
     minHeight: MIN_WINDOW_HEIGHT,
-    ...(process.platform === 'darwin' && {
-      backgroundColor: '#00000000',
-      titleBarStyle: 'hiddenInset' as const,
-      trafficLightPosition: { x: 14, y: 12 },
-      transparent: true,
-      vibrancy: 'under-window' as const,
-      visualEffectState: 'active' as const,
-    }),
+    ...(process.platform === 'darwin'
+      ? {
+          backgroundColor: '#00000000',
+          titleBarStyle: 'hiddenInset' as const,
+          trafficLightPosition: { x: 14, y: 12 },
+          transparent: true,
+          vibrancy: 'under-window' as const,
+          visualEffectState: 'active' as const,
+        }
+      : { autoHideMenuBar: true }),
     webPreferences: {
       preload: join(__dirname, '../preload/index.mjs'),
       contextIsolation: true,
