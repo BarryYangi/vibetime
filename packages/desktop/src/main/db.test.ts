@@ -117,3 +117,19 @@ describe('formatMenubarTitle', () => {
     ).toBe('● 5h')
   })
 })
+
+describe('formatMenubarTooltip', () => {
+  it('formats tray tooltip text for platforms without menubar titles', async () => {
+    const { formatMenubarTooltip } = await loadDbModule()
+
+    expect(
+      formatMenubarTooltip({ todayTotal: 0, active: false, projects: [], activeTurns: [] }),
+    ).toBe('VibeTime: 0m today - idle')
+    expect(
+      formatMenubarTooltip({ todayTotal: 42, active: true, projects: [], activeTurns: [] }),
+    ).toBe('VibeTime: <1m today - running')
+    expect(
+      formatMenubarTooltip({ todayTotal: 5 * 3600, active: false, projects: [], activeTurns: [] }),
+    ).toBe('VibeTime: 5h today - idle')
+  })
+})

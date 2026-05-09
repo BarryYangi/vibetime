@@ -39,7 +39,6 @@ function mergeConfig(current: VibetimeConfig, patch: Partial<VibetimeConfig>): V
 function appPreferencesFromConfig(config: VibetimeConfig): AppPreferences {
   return {
     openAtLogin: app.getLoginItemSettings().openAtLogin,
-    autoLaunchPrompted: config.app.auto_launch_prompted,
     lastView: config.app.last_view,
   }
 }
@@ -142,8 +141,6 @@ export function registerIpcHandlers(
         const next = mergeConfig(current, {
           app: {
             open_at_login: openAtLogin,
-            auto_launch_prompted:
-              preferences.autoLaunchPrompted ?? current.app.auto_launch_prompted,
             last_view:
               preferences.lastView === undefined
                 ? current.app.last_view

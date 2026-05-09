@@ -4,10 +4,11 @@
 import { appendFileSync, renameSync, statSync } from 'node:fs'
 import { MAX_LOG_SIZE } from './constants.js'
 import { ensureVibetimeDir } from './fs.js'
+import { homePath } from './paths.js'
 
 // Compute at call time so tests can override process.env.HOME
 function getLogPath(): string {
-  return `${process.env.HOME}/.vibetime/hook.log`
+  return homePath('.vibetime', 'hook.log')
 }
 
 /**

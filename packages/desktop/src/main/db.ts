@@ -590,6 +590,11 @@ export function formatMenubarTitle(state: MenubarState): string {
   return `● ${hours}h ${remainingMinutes}m`
 }
 
+export function formatMenubarTooltip(state: MenubarState): string {
+  const visibleDuration = formatMenubarTitle(state).replace(/^●\s*/, '') || '0m'
+  return `VibeTime: ${visibleDuration} today - ${state.active ? 'running' : 'idle'}`
+}
+
 function queryRevision(db: Database.Database): number {
   const row = db.prepare('SELECT COALESCE(MAX(id), 0) AS revision FROM events').get() as {
     revision: number
@@ -672,19 +677,20 @@ export function queryTodayLiveState(): TodayLiveState {
 export function queryAgentStatus(): AgentStatus[] {
   const agents = ['claude-code', 'codex', 'cursor'] as const
   const managedCliPath = getManagedCliPath()
+  const homeDir = homedir()
   const hasVibetimeCommand = (command: unknown): command is string => {
     if (typeof command !== 'string') return false
     if (!existsSync(managedCliPath)) return false
     return command.includes(managedCliPath) && command.includes('--source')
   }
   const hasCodexHooksFeature = (): boolean => {
-    const path = `${process.env.HOME}/.codex/config.toml`
+    const path = join(homeDir, '.codex', 'config.toml')
     if (!existsSync(path)) return false
     const content = readFileSync(path, 'utf-8')
     return /^\s*hooks\s*=\s*true\b/m.test(content)
   }
   const hasCodexInlineHook = (): boolean => {
-    const path = `${process.env.HOME}/.codex/config.toml`
+    const path = join(homeDir, '.codex', 'config.toml')
     if (!existsSync(path)) return false
     const content = readFileSync(path, 'utf-8')
     return content.includes('[[hooks.UserPromptSubmit.hooks]]') && hasVibetimeCommand(content)
@@ -694,7 +700,7 @@ export function queryAgentStatus(): AgentStatus[] {
     try {
       switch (agent) {
         case 'claude-code': {
-          const path = `${process.env.HOME}/.claude/settings.json`
+          const path = join(homeDir, '.claude', 'settings.json')
           if (!existsSync(path)) return false
           const data = JSON.parse(readFileSync(path, 'utf-8'))
           return Object.values((data.hooks ?? {}) as Record<string, unknown[]>).some((groups) =>
@@ -710,7 +716,7 @@ export function queryAgentStatus(): AgentStatus[] {
           return hasCodexInlineHook()
         }
         case 'cursor': {
-          const path = `${process.env.HOME}/.cursor/hooks.json`
+          const path = join(homeDir, '.cursor', 'hooks.json')
           if (!existsSync(path)) return false
           const data = JSON.parse(readFileSync(path, 'utf-8'))
           return Object.values((data.hooks ?? {}) as Record<string, unknown[]>).some((hooks) =>

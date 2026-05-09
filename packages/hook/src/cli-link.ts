@@ -10,15 +10,10 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { dirname, join, normalize } from 'node:path'
+import { homeDir } from './paths.js'
 
 const MANAGED_SHIM_MARKER = 'vibetime-managed-shim'
 const MANAGED_LINK_MARKER = 'vibetime-managed-cli-link'
-
-function homeDir(): string {
-  const home = process.env.HOME || process.env.USERPROFILE
-  if (!home) throw new Error('Cannot resolve home directory')
-  return home
-}
 
 function pathEnv(): string {
   return process.env.PATH ?? ''

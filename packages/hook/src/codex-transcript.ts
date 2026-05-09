@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { CodexTurnCompletion } from '@vibetime/core'
 import { findCodexTurnCompletionInTranscripts } from '@vibetime/core'
+import { homeDir as defaultHomeDir } from './paths.js'
 
 export interface FindCodexTurnCompletionInput {
   sessionId: string
@@ -49,7 +50,7 @@ function candidateTranscriptPaths(homeDir: string, sessionId: string, startedAt:
 export function findCodexTurnCompletion(
   input: FindCodexTurnCompletionInput,
 ): CodexTurnCompletion | null {
-  const homeDir = input.homeDir ?? process.env.HOME
+  const homeDir = input.homeDir ?? defaultHomeDir()
   if (!homeDir) return null
 
   const transcripts = candidateTranscriptPaths(homeDir, input.sessionId, input.startedAt).map(

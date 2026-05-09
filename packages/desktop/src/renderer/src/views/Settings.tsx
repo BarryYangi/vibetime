@@ -14,7 +14,7 @@ const AGENTS = [
   { id: 'cursor', name: 'Cursor', description: 'Cursor IDE' },
 ] as const
 
-function ConnectAgents({ onSuccessfulConnection }: { onSuccessfulConnection: () => void }) {
+function ConnectAgents() {
   const [statuses, setStatuses] = useState<Array<{ agent: string; installed: boolean }>>([])
   const [activeAction, setActiveAction] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -34,7 +34,6 @@ function ConnectAgents({ onSuccessfulConnection }: { onSuccessfulConnection: () 
     const result = await window.api.invoke('installAgent', { agent })
     if (result.ok) {
       await refreshStatuses()
-      onSuccessfulConnection()
     } else {
       setError(result.error)
     }
@@ -127,14 +126,9 @@ function ConnectAgents({ onSuccessfulConnection }: { onSuccessfulConnection: () 
   )
 }
 
-function AppPreferencesSection({
-  onReadyToPrompt,
-}: {
-  onReadyToPrompt: (preferences: AppPreferences) => void
-}) {
+function AppPreferencesSection() {
   const openAtLoginLabelId = useId()
   const [preferences, setPreferences] = useState<AppPreferences | null>(null)
-  const [showPrompt, setShowPrompt] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -142,12 +136,10 @@ function AppPreferencesSection({
     const result = await window.api.invoke('getAppPreferences')
     if (result.ok) {
       setPreferences(result.data)
-      onReadyToPrompt(result.data)
-      if (!result.data.autoLaunchPrompted) setShowPrompt(true)
     } else {
       setError(result.error)
     }
-  }, [onReadyToPrompt])
+  }, [])
 
   useEffect(() => {
     refreshPreferences()
@@ -159,7 +151,6 @@ function AppPreferencesSection({
     const result = await window.api.invoke('updateAppPreferences', patch)
     if (result.ok) {
       setPreferences(result.data)
-      if (patch.autoLaunchPrompted !== undefined) setShowPrompt(false)
     } else {
       setError(result.error)
     }
@@ -192,38 +183,9 @@ function AppPreferencesSection({
               aria-labelledby={openAtLoginLabelId}
               checked={openAtLogin}
               disabled={!preferences || saving}
-              onCheckedChange={(checked) =>
-                updatePreferences({ openAtLogin: checked, autoLaunchPrompted: true })
-              }
+              onCheckedChange={(checked) => updatePreferences({ openAtLogin: checked })}
             />
           </div>
-
-          {showPrompt && preferences && !preferences.autoLaunchPrompted && (
-            <div className="rounded-xl border border-border bg-card p-3">
-              <h3 className="text-[15px] font-medium leading-snug">Open VibeTime at login?</h3>
-              <p className="mt-1 text-[13px] text-muted-foreground leading-snug">
-                Keep the menubar timer available after you sign in.
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button
-                  disabled={saving}
-                  loading={saving}
-                  onClick={() => updatePreferences({ openAtLogin: true, autoLaunchPrompted: true })}
-                  size="sm"
-                >
-                  Open at login
-                </Button>
-                <Button
-                  disabled={saving}
-                  onClick={() => updatePreferences({ autoLaunchPrompted: true })}
-                  size="sm"
-                  variant="ghost"
-                >
-                  Not now
-                </Button>
-              </div>
-            </div>
-          )}
 
           {error && (
             <div className="rounded-lg bg-destructive/8 px-3 py-2 text-[13px] text-destructive-foreground leading-snug">
@@ -480,17 +442,6 @@ function About() {
 }
 
 export default function Settings() {
-  const [promptCandidate, setPromptCandidate] = useState<AppPreferences | null>(null)
-  const [promptKey, setPromptKey] = useState(0)
-  const maybePromptOpenAtLogin = useCallback(() => {
-    if (promptCandidate && !promptCandidate.autoLaunchPrompted) {
-      setPromptKey((key) => key + 1)
-    }
-  }, [promptCandidate])
-  const handleReadyToPrompt = useCallback((preferences: AppPreferences) => {
-    setPromptCandidate(preferences)
-  }, [])
-
   return (
     <PageShell prose className="space-y-12 pb-12">
       <header>
@@ -502,9 +453,9 @@ export default function Settings() {
         </p>
       </header>
       <div className="flex flex-col gap-12">
-        <AppPreferencesSection key={promptKey} onReadyToPrompt={handleReadyToPrompt} />
+        <AppPreferencesSection />
         <CliSection />
-        <ConnectAgents onSuccessfulConnection={maybePromptOpenAtLogin} />
+        <ConnectAgents />
         <ProjectAliases />
         <About />
       </div>

@@ -1,11 +1,14 @@
+import { join } from 'node:path'
 import type { MenuItemConstructorOptions, NativeImage } from 'electron'
 import { Menu, nativeImage, Tray } from 'electron'
 import type { MenubarState } from '../shared/ipc-types.js'
-import { formatMenubarTitle, queryMenubarState } from './db.js'
+import { formatMenubarTitle, formatMenubarTooltip, queryMenubarState } from './db.js'
 
 const MINUTE_SECONDS = 60
 const FALLBACK_TITLE = '●'
+const FALLBACK_TOOLTIP = "VibeTime: unable to read today's activity"
 const MENU_ICON_SIZE = 13
+const WINDOWS_TRAY_ICON_SIZE = 16
 
 let tray: Tray | null = null
 let activeRefreshTimer: ReturnType<typeof setTimeout> | null = null
@@ -39,7 +42,9 @@ function prepareTemplateImage(image: NativeImage, size: number): NativeImage {
   return resized
 }
 
-function icon(name: IconName): NativeImage {
+function menuIcon(name: IconName): NativeImage | undefined {
+  if (process.platform !== 'darwin') return undefined
+
   const cached = menuIcons.get(name)
   if (cached) return cached
 
@@ -47,6 +52,16 @@ function icon(name: IconName): NativeImage {
   const image = prepareTemplateImage(systemImage, MENU_ICON_SIZE)
   menuIcons.set(name, image)
   return image
+}
+
+function createTrayImage(): NativeImage {
+  if (process.platform === 'darwin') return nativeImage.createEmpty()
+
+  return nativeImage.createFromPath(join(__dirname, '../../build/icon.ico')).resize({
+    width: WINDOWS_TRAY_ICON_SIZE,
+    height: WINDOWS_TRAY_ICON_SIZE,
+    quality: 'best',
+  })
 }
 
 function formatDuration(seconds: number): string {
@@ -108,21 +123,26 @@ function scheduleActiveRefresh(state: MenubarState): void {
   activeRefreshTimer.unref?.()
 }
 
-function setMenubarTrayTitle(title: string): void {
+function setMenubarTrayStatus(title: string, tooltip: string): void {
   if (!tray || tray.isDestroyed()) return
-  tray.setTitle(title)
+  tray.setToolTip(tooltip)
+  if (process.platform === 'darwin') tray.setTitle(title)
 }
 
 function buildStatusMenu(): Menu {
   const state = readMenubarState()
   if (!state) {
     return Menu.buildFromTemplate([
-      { label: 'VibeTime', sublabel: 'Unable to read today’s activity', icon: icon('warning') },
+      {
+        label: 'VibeTime',
+        sublabel: "Unable to read today's activity",
+        icon: menuIcon('warning'),
+      },
       { type: 'separator' },
-      { label: 'Open', icon: icon('open'), click: () => openRoute() },
-      { label: 'Settings', icon: icon('settings'), click: () => trayActions?.openSettings() },
+      { label: 'Open', icon: menuIcon('open'), click: () => openRoute() },
+      { label: 'Settings', icon: menuIcon('settings'), click: () => trayActions?.openSettings() },
       { type: 'separator' },
-      { label: 'Quit', icon: icon('power'), click: () => trayActions?.quitApp() },
+      { label: 'Quit', icon: menuIcon('power'), click: () => trayActions?.quitApp() },
     ])
   }
 
@@ -130,7 +150,7 @@ function buildStatusMenu(): Menu {
     state.projects.length > 0
       ? state.projects.map((project) => ({
           label: labelWithDuration(truncateLabel(project.name), project.total),
-          icon: icon('folder'),
+          icon: menuIcon('folder'),
           click: () => openRoute('/history'),
         }))
       : []
@@ -139,7 +159,7 @@ function buildStatusMenu(): Menu {
     state.activeTurns.length > 0
       ? state.activeTurns.map((turn) => ({
           label: labelWithDuration(truncateLabel(turn.project), activeElapsedSeconds(turn)),
-          icon: icon('activity'),
+          icon: menuIcon('activity'),
           click: () => openRoute('/live'),
         }))
       : []
@@ -147,7 +167,7 @@ function buildStatusMenu(): Menu {
   const template: MenuItemConstructorOptions[] = [
     {
       label: labelWithDuration('Today', state.todayTotal),
-      icon: icon('clock'),
+      icon: menuIcon('clock'),
       click: () => openRoute('/'),
     },
     { type: 'separator' },
@@ -163,10 +183,10 @@ function buildStatusMenu(): Menu {
     },
     ...projectItems,
     { type: 'separator' },
-    { label: 'Open', icon: icon('open'), click: () => openRoute() },
-    { label: 'Settings', icon: icon('settings'), click: () => trayActions?.openSettings() },
+    { label: 'Open', icon: menuIcon('open'), click: () => openRoute() },
+    { label: 'Settings', icon: menuIcon('settings'), click: () => trayActions?.openSettings() },
     { type: 'separator' },
-    { label: 'Quit', icon: icon('power'), click: () => trayActions?.quitApp() },
+    { label: 'Quit', icon: menuIcon('power'), click: () => trayActions?.quitApp() },
   ]
 
   return Menu.buildFromTemplate(template)
@@ -184,7 +204,7 @@ export function createMenubarTray(actions: {
 }): void {
   trayActions = actions
   if (!tray || tray.isDestroyed()) {
-    tray = new Tray(nativeImage.createEmpty())
+    tray = new Tray(createTrayImage())
     tray.setToolTip('VibeTime')
     tray.setIgnoreDoubleClickEvents(true)
     tray.on('click', showStatusMenu)
@@ -199,12 +219,12 @@ export function refreshMenubarTray(): void {
 
   const state = readMenubarState()
   if (!state) {
-    setMenubarTrayTitle(FALLBACK_TITLE)
+    setMenubarTrayStatus(FALLBACK_TITLE, FALLBACK_TOOLTIP)
     stopActiveRefresh()
     return
   }
 
-  setMenubarTrayTitle(formatMenubarTitle(state))
+  setMenubarTrayStatus(formatMenubarTitle(state), formatMenubarTooltip(state))
 
   if (state.active) {
     scheduleActiveRefresh(state)

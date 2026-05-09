@@ -6,7 +6,8 @@ import type { IpcPushEvent } from '../shared/ipc-types.js'
 import { notifyRenderer } from './db.js'
 
 const SOCKET_DIR = join(homedir(), '.vibetime')
-const SOCKET_PATH = join(SOCKET_DIR, 'notify.sock')
+const SOCKET_PATH =
+  process.platform === 'win32' ? '\\\\.\\pipe\\vibetime-notify' : join(SOCKET_DIR, 'notify.sock')
 
 let server: Server | null = null
 let notifyTimer: ReturnType<typeof setTimeout> | null = null
@@ -24,8 +25,11 @@ function scheduleNotify(event: IpcPushEvent): void {
 export function startNotifyServer(): void {
   if (server) return
 
-  mkdirSync(SOCKET_DIR, { recursive: true, mode: 0o700 })
-  if (existsSync(SOCKET_PATH)) {
+  if (process.platform !== 'win32') {
+    mkdirSync(SOCKET_DIR, { recursive: true, mode: 0o700 })
+  }
+
+  if (process.platform !== 'win32' && existsSync(SOCKET_PATH)) {
     rmSync(SOCKET_PATH, { force: true })
   }
 
@@ -68,7 +72,7 @@ export function stopNotifyServer(): void {
   server?.close()
   server = null
 
-  if (existsSync(SOCKET_PATH)) {
+  if (process.platform !== 'win32' && existsSync(SOCKET_PATH)) {
     rmSync(SOCKET_PATH, { force: true })
   }
 }

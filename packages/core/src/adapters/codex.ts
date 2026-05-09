@@ -95,13 +95,15 @@ export const adaptCodex: AdapterFn = (rawPayload, eventName) => {
     // hasRequiredTurn guard above already proves the field is present.
     const turn_id = isTurn ? (rawPayload as unknown as { turn_id: string }).turn_id : undefined
 
-    // V0 meta whitelist (RESEARCH §G.8): model + source on session_start.
-    // No session_end branch — Codex doesn't emit it. Drop stop_hook_active /
-    // last_assistant_message etc. on Stop.
+    // Meta whitelist: persist vendor-provided model on session_start and
+    // turn_start. Do not infer it for Stop. No session_end branch — Codex
+    // doesn't emit it. Drop stop_hook_active / last_assistant_message etc.
     const meta: Record<string, unknown> = {}
-    if (event_type === 'session_start') {
+    if (event_type === 'session_start' || event_type === 'turn_start') {
       const model = (rawPayload as { model?: unknown }).model
       if (typeof model === 'string') meta.model = model
+    }
+    if (event_type === 'session_start') {
       const source = (rawPayload as { source?: unknown }).source
       if (typeof source === 'string') meta.source = source
     }

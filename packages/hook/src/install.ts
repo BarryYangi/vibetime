@@ -15,6 +15,7 @@ import {
   uninstallUserCli,
 } from './cli-link.js'
 import { appendLog } from './log.js'
+import { homePath } from './paths.js'
 
 export function resolveHookBinaryPath(): string {
   if (process.env.VIBETIME_HOOK_BINARY) return process.env.VIBETIME_HOOK_BINARY
@@ -187,7 +188,7 @@ function removeVibetimeHooksFromCodexHooksJson(hooksPath: string): void {
  * Idempotent — skips if vibetime hook already exists.
  */
 export function installClaudeCode(): void {
-  const settingsPath = `${process.env.HOME}/.claude/settings.json`
+  const settingsPath = homePath('.claude', 'settings.json')
   const hookBinaryPath = resolveHookCommandPath()
 
   try {
@@ -263,8 +264,8 @@ export function installClaudeCode(): void {
  * Idempotent — skips if vibetime hook already exists.
  */
 export function installCodex(): void {
-  const hooksPath = `${process.env.HOME}/.codex/hooks.json`
-  const configPath = `${process.env.HOME}/.codex/config.toml`
+  const hooksPath = homePath('.codex', 'hooks.json')
+  const configPath = homePath('.codex', 'config.toml')
   const hookBinaryPath = resolveHookCommandPath()
 
   try {
@@ -300,7 +301,7 @@ export function installCodex(): void {
  * Idempotent — skips if vibetime hook already exists.
  */
 export function installCursor(): void {
-  const hooksPath = `${process.env.HOME}/.cursor/hooks.json`
+  const hooksPath = homePath('.cursor', 'hooks.json')
   const hookBinaryPath = resolveHookCommandPath()
 
   try {
@@ -378,7 +379,7 @@ export function installAgent(agent: string): void {
  * Preserves unrelated user hooks and only removes VibeTime hook commands.
  */
 export function uninstallClaudeCode(): void {
-  const settingsPath = `${process.env.HOME}/.claude/settings.json`
+  const settingsPath = homePath('.claude', 'settings.json')
 
   try {
     if (!existsSync(settingsPath)) return
@@ -427,8 +428,8 @@ export function uninstallClaudeCode(): void {
  * marked the feature flag as one it changed during install.
  */
 export function uninstallCodex(): void {
-  const hooksPath = `${process.env.HOME}/.codex/hooks.json`
-  const configPath = `${process.env.HOME}/.codex/config.toml`
+  const hooksPath = homePath('.codex', 'hooks.json')
+  const configPath = homePath('.codex', 'config.toml')
 
   try {
     if (existsSync(hooksPath)) {
@@ -455,7 +456,7 @@ export function uninstallCodex(): void {
  * Preserves unrelated Cursor hooks.
  */
 export function uninstallCursor(): void {
-  const hooksPath = `${process.env.HOME}/.cursor/hooks.json`
+  const hooksPath = homePath('.cursor', 'hooks.json')
 
   try {
     if (!existsSync(hooksPath)) return

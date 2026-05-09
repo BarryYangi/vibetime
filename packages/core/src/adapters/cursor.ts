@@ -99,11 +99,11 @@ export const adaptCursor: AdapterFn = (rawPayload, eventName) => {
       ? (rawPayload as unknown as { generation_id: string }).generation_id
       : undefined
 
-    // V0 meta whitelist (RESEARCH §G.8): model on session_start (per the
-    // §A.3 doc-asymmetry, may or may not be present); reason on
-    // session_end. Drop status / loop_count / duration_ms / etc.
+    // Meta whitelist: persist vendor-provided model on session_start and
+    // turn_start. Do not infer it for stop. Keep reason on session_end.
+    // Drop status / loop_count / duration_ms / etc.
     const meta: Record<string, unknown> = {}
-    if (event_type === 'session_start') {
+    if (event_type === 'session_start' || event_type === 'turn_start') {
       const model = (rawPayload as { model?: unknown }).model
       if (typeof model === 'string') meta.model = model
     }

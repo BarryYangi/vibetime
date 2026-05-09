@@ -27,6 +27,22 @@ describe('adaptCodex — happy paths (PRD §8 mapping; only 3 GA events)', () =>
     expect(event && 'meta' in event).toBe(false)
   })
 
+  it('UserPromptSubmit WITH model → turn_start meta carries model', () => {
+    const event = adaptCodex(
+      {
+        session_id: 'abc-123',
+        turn_id: 't-456',
+        cwd: '/Users/barry/work/scenee',
+        hook_event_name: 'UserPromptSubmit',
+        model: 'gpt-5.4-mini',
+      },
+      'UserPromptSubmit',
+    )
+    expect(event).not.toBeNull()
+    expect(event?.event_type).toBe('turn_start')
+    expect(event?.meta).toEqual({ model: 'gpt-5.4-mini' })
+  })
+
   it('Stop → turn_end with vendor-provided turn_id; meta dropped', () => {
     const event = adaptCodex(
       {

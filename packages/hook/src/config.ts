@@ -2,11 +2,12 @@
 // FS-02: config.toml with [projects] and [display].timezone defaults.
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { ensureVibetimeDir } from './fs.js'
 
 // Compute at call time so tests can override process.env.HOME
 function getConfigPath(): string {
-  return `${process.env.HOME}/.vibetime/config.toml`
+  return join(ensureVibetimeDir(), 'config.toml')
 }
 
 export interface VibetimeConfig {
@@ -16,7 +17,6 @@ export interface VibetimeConfig {
   }
   app: {
     open_at_login: boolean
-    auto_launch_prompted: boolean
     last_view: string
   }
 }
@@ -28,7 +28,6 @@ const DEFAULT_CONFIG: VibetimeConfig = {
   },
   app: {
     open_at_login: false,
-    auto_launch_prompted: false,
     last_view: '/',
   },
 }
@@ -55,8 +54,6 @@ export function readConfig(): VibetimeConfig {
       },
       app: {
         open_at_login: config.app?.open_at_login ?? DEFAULT_CONFIG.app.open_at_login,
-        auto_launch_prompted:
-          config.app?.auto_launch_prompted ?? DEFAULT_CONFIG.app.auto_launch_prompted,
         last_view: config.app?.last_view ?? DEFAULT_CONFIG.app.last_view,
       },
     }
@@ -90,7 +87,6 @@ function serializeToml(config: VibetimeConfig): string {
   lines.push('')
   lines.push('[app]')
   lines.push(`open_at_login = ${config.app.open_at_login}`)
-  lines.push(`auto_launch_prompted = ${config.app.auto_launch_prompted}`)
   lines.push(`last_view = "${config.app.last_view}"`)
   return `${lines.join('\n')}\n`
 }

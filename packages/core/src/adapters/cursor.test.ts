@@ -27,6 +27,22 @@ describe('adaptCursor — happy paths (PRD §8 mapping; camelCase event names)',
     expect(event && 'meta' in event).toBe(false)
   })
 
+  it('beforeSubmitPrompt WITH model → turn_start meta carries model', () => {
+    const event = adaptCursor(
+      {
+        conversation_id: 'abc-123',
+        generation_id: 'g-456',
+        hook_event_name: 'beforeSubmitPrompt',
+        workspace_roots: ['/Users/barry/work/scenee'],
+        model: 'composer-2',
+      },
+      'beforeSubmitPrompt',
+    )
+    expect(event).not.toBeNull()
+    expect(event?.event_type).toBe('turn_start')
+    expect(event?.meta).toEqual({ model: 'composer-2' })
+  })
+
   it('stop → turn_end; turn_id from generation_id; meta dropped', () => {
     // PRD Appendix verbatim.
     const event = adaptCursor(

@@ -39,7 +39,6 @@ export interface VibetimeConfig {
   display: { timezone: string }
   app: {
     open_at_login: boolean
-    auto_launch_prompted: boolean
     last_view: string
   }
 }
@@ -110,7 +109,6 @@ export interface MenubarState {
 
 export interface AppPreferences {
   openAtLogin: boolean
-  autoLaunchPrompted: boolean
   lastView: string
 }
 

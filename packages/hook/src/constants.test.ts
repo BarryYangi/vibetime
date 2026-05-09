@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test'
+import { join } from 'node:path'
 import {
   CONFIG_PATH,
   DB_PATH,
@@ -15,15 +16,15 @@ describe('constants — exports', () => {
   })
 
   it('DB_PATH points to ~/.vibetime/data.db', () => {
-    expect(DB_PATH).toContain('.vibetime/data.db')
+    expect(DB_PATH).toContain(join('.vibetime', 'data.db'))
   })
 
   it('LOG_PATH points to ~/.vibetime/hook.log', () => {
-    expect(LOG_PATH).toContain('.vibetime/hook.log')
+    expect(LOG_PATH).toContain(join('.vibetime', 'hook.log'))
   })
 
   it('CONFIG_PATH points to ~/.vibetime/config.toml', () => {
-    expect(CONFIG_PATH).toContain('.vibetime/config.toml')
+    expect(CONFIG_PATH).toContain(join('.vibetime', 'config.toml'))
   })
 
   it('MAX_LOG_SIZE is 10MB', () => {
