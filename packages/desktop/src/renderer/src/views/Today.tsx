@@ -22,7 +22,7 @@ function formatDuration(seconds: number): string {
 }
 
 const durationFlowClass =
-  'inline-flex h-[2.75rem] min-w-[12rem] max-w-full items-baseline overflow-hidden font-mono font-bold tabular-nums text-[2.125rem] leading-none sm:h-[3.125rem] sm:min-w-[14rem] sm:text-[2.5rem]'
+  'inline-flex max-w-full items-baseline overflow-hidden font-heading font-semibold tabular-nums leading-none tracking-tight'
 const durationUnitClass =
   'ml-[0.08em] mr-[0.16em] text-[0.56em] font-semibold text-muted-foreground/80'
 const ACTIVE_REFRESH_INTERVAL_MS = 1000
@@ -59,18 +59,7 @@ function activeSeconds(turn: ActiveTurn, now: number, dayStart: number): number 
   return Math.max(0, now - Math.max(turn.started_at, dayStart))
 }
 
-function SummaryStat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="min-w-0">
-      <dt className="truncate text-[11px] text-muted-foreground leading-snug">{label}</dt>
-      <dd className="mt-1 flex h-6 items-baseline font-mono font-semibold text-[15px] tabular-nums leading-none">
-        <span className="inline-flex min-w-[2ch]">
-          <NumberFlow locales="en-US" value={value} />
-        </span>
-      </dd>
-    </div>
-  )
-}
+
 
 function ProjectBar({
   name,
@@ -115,6 +104,23 @@ function ProjectBar({
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+function StatTile({
+  label,
+  value,
+}: {
+  label: string
+  value: React.ReactNode
+}) {
+  return (
+    <div className="flex flex-col justify-between rounded-[18px] border border-border/40 bg-card/40 p-5 shadow-sm shadow-black/[0.01]">
+      <div className="space-y-1">
+        <p className="text-[13px] font-medium text-muted-foreground">{label}</p>
+        <div className="font-heading text-[26px] font-semibold tracking-tight text-foreground">{value}</div>
+      </div>
     </div>
   )
 }
@@ -264,26 +270,20 @@ export default function Today() {
 
   return (
     <PageShell className="flex flex-col gap-8 py-7 sm:px-7 sm:py-8" fluid>
-      <div className="flex flex-col gap-6">
-        <header className="space-y-1">
-          <p className="text-[13px] text-muted-foreground leading-snug">{displayDate}</p>
-          <h1 className="font-heading font-semibold text-2xl tracking-[-0.02em]">Today</h1>
-        </header>
+      <header className="space-y-1">
+        <p className="text-[13px] text-muted-foreground leading-snug">{displayDate}</p>
+        <h1 className="font-heading font-semibold text-2xl tracking-[-0.02em]">Today</h1>
+      </header>
 
-        <div className="grid gap-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-          <div className="min-w-0">
-            <p className="text-[13px] text-muted-foreground leading-snug">Total agent time</p>
-            <div className="mt-1 leading-none">
-              <TotalDurationFlow seconds={liveTotal} />
-            </div>
-          </div>
-          <dl className="grid w-full grid-cols-3 gap-8 pb-1 sm:w-[21rem]">
-            <SummaryStat label="Turns" value={turnCount} />
-            <SummaryStat label="Projects" value={activeProjectCount} />
-            <SummaryStat label="Running" value={activeTurns.length} />
-          </dl>
-        </div>
-      </div>
+      <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <StatTile
+          label="Total agent time"
+          value={<TotalDurationFlow seconds={liveTotal} />}
+        />
+        <StatTile label="Turns" value={<NumberFlow locales="en-US" value={turnCount} />} />
+        <StatTile label="Projects" value={<NumberFlow locales="en-US" value={activeProjectCount} />} />
+        <StatTile label="Running" value={<NumberFlow locales="en-US" value={activeTurns.length} />} />
+      </section>
 
       <section className="min-w-0 mt-2">
         <header className="mb-2.5 px-1">

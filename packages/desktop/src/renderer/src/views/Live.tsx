@@ -117,7 +117,7 @@ function TurnStage({
       initial={{ opacity: 0, y: 8 }}
       transition={{ duration: 0.2, ease: 'easeOut' }}
     >
-      <div className="relative isolate overflow-hidden rounded-xl border border-border/55 bg-card shadow-sm shadow-black/[0.02]">
+      <div className="relative isolate overflow-hidden rounded-[18px] border border-border/40 bg-card/40 shadow-sm shadow-black/[0.01]">
         <div aria-hidden className="absolute inset-x-0 top-0 h-1 bg-success/70" />
         <div className="px-5 pt-5 pb-2">
           <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
