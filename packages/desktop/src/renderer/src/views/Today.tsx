@@ -1,7 +1,6 @@
 import NumberFlow, { NumberFlowGroup } from '@number-flow/react'
 import { useEffect, useState } from 'react'
 import { PageShell } from '@/components/PageShell'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import type { ActiveTurn } from '../../../shared/ipc-types'
 import { useDocumentVisible } from '../hooks/useDocumentVisible'
@@ -286,13 +285,13 @@ export default function Today() {
         </div>
       </div>
 
-      <section className="min-w-0">
-        <Card className="overflow-hidden">
-          <CardHeader className="px-5 pt-5 pb-3">
-            <CardTitle>By project</CardTitle>
-            <CardDescription>Breakdown for today</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-0 px-5 pt-0 pb-5">
+      <section className="min-w-0 mt-4">
+        <div className="px-1">
+          <h2 className="text-[14px] font-semibold tracking-tight text-foreground">By project</h2>
+          <p className="mt-1 text-[13px] text-muted-foreground leading-snug">Breakdown for today</p>
+        </div>
+        <div className="mt-3 overflow-hidden rounded-xl border border-border/55 bg-card shadow-sm shadow-black/[0.02]">
+          <div className="flex flex-col gap-0 px-5 pt-2 pb-5">
             {projects.map(({ name, completed: projectCompleted, active, agents }) => (
               <ProjectBar
                 key={name}
@@ -303,8 +302,8 @@ export default function Today() {
                 maxTotal={maxTotal}
               />
             ))}
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </section>
     </PageShell>
   )

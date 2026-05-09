@@ -3,7 +3,6 @@ import { ActivityIcon, ClockIcon, FolderIcon, TimerIcon } from 'lucide-react'
 import { motion } from 'motion/react'
 import { useEffect, useMemo, useState } from 'react'
 import { PageShell } from '@/components/PageShell'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
 import type { ActiveTurn, TodayLiveState } from '../../../shared/ipc-types'
 import { useDocumentVisible } from '../hooks/useDocumentVisible'
@@ -118,38 +117,38 @@ function TurnStage({
       initial={{ opacity: 0, y: 8 }}
       transition={{ duration: 0.2, ease: 'easeOut' }}
     >
-      <Card className="relative isolate overflow-hidden">
+      <div className="relative isolate overflow-hidden rounded-xl border border-border/55 bg-card shadow-sm shadow-black/[0.02]">
         <div aria-hidden className="absolute inset-x-0 top-0 h-1 bg-success/70" />
-        <CardHeader className="pb-2">
+        <div className="px-5 pt-5 pb-2">
           <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
             <div className="min-w-0">
               <p className="text-[12px] font-medium leading-none text-muted-foreground">
                 {turn.agent}
               </p>
-              <CardTitle
+              <h2
                 className={
                   compact
-                    ? 'mt-1.5 truncate font-heading text-2xl leading-none'
-                    : 'mt-1.5 truncate font-heading text-[2rem] leading-none'
+                    ? 'mt-1.5 truncate font-heading text-2xl font-semibold leading-none text-foreground'
+                    : 'mt-1.5 truncate font-heading text-[2rem] font-semibold leading-none text-foreground'
                 }
               >
                 {turn.project}
-              </CardTitle>
+              </h2>
             </div>
             <span className="mt-0 rounded-full border border-success/35 bg-success/10 px-2.5 py-1 text-[11px] font-medium leading-none text-success">
               Live
             </span>
           </div>
-        </CardHeader>
-        <CardContent className="flex min-w-0 flex-col gap-5">
+        </div>
+        <div className="flex min-w-0 flex-col gap-5 px-5 pt-0 pb-5">
           <LiveTimer seconds={elapsed} />
           <div className="grid gap-2 md:grid-cols-3">
             <Metric icon={ClockIcon} label="Started" value={formatClock(turn.started_at)} />
             <Metric icon={TimerIcon} label="Project today" value={formatCompactDuration(total)} />
             <Metric icon={FolderIcon} label="Session" value={turn.session_id.slice(0, 12)} />
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </motion.div>
   )
 }
@@ -200,19 +199,17 @@ export default function Live() {
   if (turns.length === 0) {
     return (
       <PageShell className="flex h-full min-h-[calc(100vh-2rem)] items-center justify-center" fluid>
-        <Card className="w-full max-w-xl text-center">
-          <CardContent className="flex flex-col items-center px-8 py-14">
-            <div className="flex size-11 items-center justify-center rounded-full border border-border bg-muted/40">
-              <ActivityIcon aria-hidden className="size-5 text-muted-foreground" />
-            </div>
-            <h1 className="mt-5 font-heading text-3xl font-semibold leading-none">
-              No active turn
-            </h1>
-            <p className="mt-3 max-w-sm text-[13px] text-muted-foreground leading-relaxed">
-              Start a coding-agent turn and it will appear here.
-            </p>
-          </CardContent>
-        </Card>
+        <div className="flex w-full max-w-xl flex-col items-center px-8 py-14 text-center">
+          <div className="flex size-11 items-center justify-center rounded-full border border-border bg-muted/40 shadow-sm shadow-black/[0.02]">
+            <ActivityIcon aria-hidden className="size-5 text-muted-foreground" />
+          </div>
+          <h1 className="mt-5 font-heading text-3xl font-semibold leading-none text-foreground">
+            No active turn
+          </h1>
+          <p className="mt-3 max-w-sm text-[13px] text-muted-foreground leading-relaxed">
+            Start a coding-agent turn and it will appear here.
+          </p>
+        </div>
       </PageShell>
     )
   }

@@ -2,7 +2,7 @@ import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { type EChartsCoreOption, echarts } from '@/charts/echarts'
 import { PageShell } from '@/components/PageShell'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { cn } from '@/lib/utils'
 import {
   Table,
   TableBody,
@@ -13,6 +13,32 @@ import {
 } from '@/components/ui/table'
 import type { HistorySummary, TopProjectRow } from '../../../shared/ipc-types'
 import '../charts/theme'
+
+function DashboardPanel({
+  title,
+  description,
+  children,
+  className,
+}: {
+  title: string
+  description?: string
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <div className={cn('flex min-w-0 flex-col', className)}>
+      <div className="px-1">
+        <h2 className="text-[14px] font-semibold tracking-tight text-foreground">{title}</h2>
+        {description && (
+          <p className="mt-1 text-[13px] text-muted-foreground leading-snug">{description}</p>
+        )}
+      </div>
+      <div className="mt-3 flex-1 overflow-hidden rounded-xl border border-border/55 bg-card shadow-sm shadow-black/[0.02]">
+        <div className="flex h-full flex-col px-5 pt-3 pb-5">{children}</div>
+      </div>
+    </div>
+  )
+}
 
 const PERIODS = [7, 30, 90, 365] as const
 type SortKey = 'project' | 'total' | 'turns' | 'lastActive'
@@ -806,12 +832,7 @@ export default function History() {
         </section>
       )}
 
-      <Card className="overflow-hidden">
-        <CardHeader className="pb-1">
-          <CardTitle>Contribution heatmap</CardTitle>
-          <CardDescription>Last 365 days, GitHub-style intensity</CardDescription>
-        </CardHeader>
-        <CardContent className="pt-0">
+      <DashboardPanel title="Contribution heatmap" description="Last 365 days, GitHub-style intensity">
           {insights && (
             <InsightBar
               items={[
@@ -829,15 +850,9 @@ export default function History() {
             />
           )}
           <CalendarHeatmap summary={summary} />
-        </CardContent>
-      </Card>
+        </DashboardPanel>
 
-      <Card className="overflow-hidden">
-        <CardHeader className="pb-1">
-          <CardTitle>Project trends</CardTitle>
-          <CardDescription>Daily stacked duration by project</CardDescription>
-        </CardHeader>
-        <CardContent className="pt-0">
+      <DashboardPanel title="Project trends" description="Daily stacked duration by project">
           {stats && (
             <InsightBar
               items={[
@@ -863,16 +878,10 @@ export default function History() {
             />
           )}
           <TrendChart summary={summary} />
-        </CardContent>
-      </Card>
+        </DashboardPanel>
 
       <section className="grid gap-5 xl:grid-cols-2">
-        <Card className="overflow-hidden">
-          <CardHeader className="pb-1">
-            <CardTitle>Project share</CardTitle>
-            <CardDescription>Where time went in the selected period</CardDescription>
-          </CardHeader>
-          <CardContent className="pt-0">
+        <DashboardPanel title="Project share" description="Where time went in the selected period">
             {stats && (
               <InsightBar
                 items={[
@@ -893,15 +902,9 @@ export default function History() {
               />
             )}
             <ProjectShareChart summary={summary} />
-          </CardContent>
-        </Card>
+          </DashboardPanel>
 
-        <Card className="overflow-hidden">
-          <CardHeader className="pb-1">
-            <CardTitle>Hourly rhythm</CardTitle>
-            <CardDescription>Weekday x hour intensity</CardDescription>
-          </CardHeader>
-          <CardContent className="pt-0">
+        <DashboardPanel title="Hourly rhythm" description="Weekday x hour intensity">
             {stats && (
               <InsightBar
                 items={[
@@ -922,17 +925,11 @@ export default function History() {
               />
             )}
             <HourlyActivityHeatmap summary={summary} />
-          </CardContent>
-        </Card>
+          </DashboardPanel>
       </section>
 
       <section className="grid gap-5 xl:grid-cols-2">
-        <Card className="overflow-hidden">
-          <CardHeader className="pb-1">
-            <CardTitle>Turn length buckets</CardTitle>
-            <CardDescription>Fragmented turns vs focus blocks</CardDescription>
-          </CardHeader>
-          <CardContent className="pt-0">
+        <DashboardPanel title="Turn length buckets" description="Fragmented turns vs focus blocks">
             {stats && insights && (
               <InsightBar
                 items={[
@@ -954,15 +951,9 @@ export default function History() {
               />
             )}
             <TurnLengthBuckets summary={summary} />
-          </CardContent>
-        </Card>
+          </DashboardPanel>
 
-        <Card className="overflow-hidden">
-          <CardHeader className="pb-1">
-            <CardTitle>Agent contribution</CardTitle>
-            <CardDescription>Agent split inside top projects</CardDescription>
-          </CardHeader>
-          <CardContent className="pt-0">
+        <DashboardPanel title="Agent contribution" description="Agent split inside top projects">
             {insights && (
               <InsightBar
                 items={[
@@ -983,25 +974,14 @@ export default function History() {
               />
             )}
             <AgentContributionBars summary={summary} />
-          </CardContent>
-        </Card>
+          </DashboardPanel>
       </section>
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle>Project signals</CardTitle>
-          <CardDescription>Total time, focus blocks, and median turn length</CardDescription>
-        </CardHeader>
-        <CardContent className="pt-0">
+      <DashboardPanel title="Project signals" description="Total time, focus blocks, and median turn length">
           <TopProjectSignals summary={summary} />
-        </CardContent>
-      </Card>
+        </DashboardPanel>
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle>Top projects</CardTitle>
-        </CardHeader>
-        <CardContent className="pt-0">
+      <DashboardPanel title="Top projects">
           <Table className="text-[13px]">
             <TableHeader className="[&_tr]:border-border/35">
               <TableRow className="border-border/35">
@@ -1038,8 +1018,7 @@ export default function History() {
               ))}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
+        </DashboardPanel>
     </PageShell>
   )
 }
