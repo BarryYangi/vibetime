@@ -773,7 +773,11 @@ export default function History() {
         <Tabs value={periodDays.toString()} onValueChange={(v) => setPeriodDays(Number(v) as typeof PERIODS[number])}>
           <TabsList>
             {PERIODS.map((period) => (
-              <TabsTab key={period} value={period.toString()} className="h-7 text-[12px] px-3">
+              <TabsTab
+                key={period}
+                value={period.toString()}
+                className="h-7 px-3 font-heading text-[12.5px] tracking-tight tabular-nums"
+              >
                 {period}d
               </TabsTab>
             ))}
