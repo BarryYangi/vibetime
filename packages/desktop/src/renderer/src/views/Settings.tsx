@@ -3,10 +3,10 @@ import { useEffect, useId, useState } from 'react'
 import { PageShell } from '@/components/PageShell'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import type { AppPreferences } from '../../../shared/ipc-types'
+import { cn } from '@/lib/utils'
 import {
   agentStatusAtom,
   appPreferencesAtom,
@@ -22,6 +22,36 @@ const AGENTS = [
   { id: 'codex', name: 'Codex', description: 'OpenAI Codex CLI' },
   { id: 'cursor', name: 'Cursor', description: 'Cursor IDE' },
 ] as const
+
+function SettingsSection({
+  title,
+  description,
+  children,
+}: {
+  title: string
+  description?: string
+  children: React.ReactNode
+}) {
+  return (
+    <section className="space-y-3">
+      <div className="px-1">
+        <h2 className="text-[14px] font-semibold tracking-tight text-foreground">{title}</h2>
+        {description && (
+          <p className="mt-1 text-[13px] text-muted-foreground leading-snug">{description}</p>
+        )}
+      </div>
+      <div className="overflow-hidden rounded-xl border border-border/55 bg-card shadow-sm shadow-black/[0.02]">
+        <div className="flex flex-col divide-y divide-border/40">
+          {children}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function SettingsRow({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <div className={cn('flex items-center justify-between gap-4 p-4', className)}>{children}</div>
+}
 
 function ConnectAgents() {
   const statuses = useAtomValue(agentStatusAtom)
@@ -61,68 +91,52 @@ function ConnectAgents() {
   }
 
   return (
-    <section className="space-y-3">
-      <h2 className="font-heading font-semibold text-[13px] tracking-[-0.01em] text-foreground">
-        Connect agents
-      </h2>
-      <Card>
-        <CardHeader>
-          <CardTitle>Hooks</CardTitle>
-          <CardDescription>
-            Manage VibeTime hooks without touching other agent hooks.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-2">
-          {AGENTS.map(({ id, name, description }) => {
-            const status = statuses?.find((s) => s.agent === id)
-            const statusKnown = status !== undefined
-            const isInstalled = status?.installed ?? false
-            const isInstalling = activeAction === `${id}:install`
-            const isUninstalling = activeAction === `${id}:uninstall`
-            const isBusy = isInstalling || isUninstalling
-            const labelId = `agent-hook-${id}`
+    <SettingsSection
+      title="Agent Hooks"
+      description="Manage VibeTime hooks for your AI agents without touching other configurations."
+    >
+      {AGENTS.map(({ id, name, description }) => {
+        const status = statuses?.find((s) => s.agent === id)
+        const statusKnown = status !== undefined
+        const isInstalled = status?.installed ?? false
+        const isInstalling = activeAction === `${id}:install`
+        const isUninstalling = activeAction === `${id}:uninstall`
+        const isBusy = isInstalling || isUninstalling
+        const labelId = `agent-hook-${id}`
 
-            return (
-              <div
-                key={id}
-                className="flex flex-col gap-3 rounded-xl bg-muted/35 p-3 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span
-                      aria-hidden="true"
-                      className={`size-2 shrink-0 rounded-full ${isInstalled ? 'bg-success' : 'bg-muted-foreground'}`}
-                    />
-                    <div className="text-[15px] font-medium leading-snug" id={labelId}>
-                      {name}
-                    </div>
-                    <span className="text-[11px] text-muted-foreground leading-snug">
-                      {isInstalled ? 'Hook installed' : 'Not installed'}
-                    </span>
-                  </div>
-                  <div className="mt-1 text-[13px] text-muted-foreground leading-snug">
-                    {description}
-                  </div>
-                </div>
-                <div className="flex shrink-0 items-center justify-end gap-2">
-                  <Switch
-                    aria-labelledby={labelId}
-                    checked={isInstalled}
-                    disabled={isBusy || !statusKnown}
-                    onCheckedChange={(checked) => handleToggle(id, checked)}
-                  />
+        return (
+          <SettingsRow key={id}>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2.5">
+                <span
+                  aria-hidden="true"
+                  className={`size-2 shrink-0 rounded-full ${isInstalled ? 'bg-success shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-muted-foreground/30'}`}
+                />
+                <div className="text-[14px] font-medium text-foreground" id={labelId}>
+                  {name}
                 </div>
               </div>
-            )
-          })}
-          {error && (
-            <div className="rounded-lg bg-destructive/8 px-3 py-2 text-[13px] text-destructive-foreground leading-snug">
-              {error}
+              <div className="mt-1 pl-4.5 text-[13px] text-muted-foreground leading-snug">
+                {description}
+              </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
-    </section>
+            <div className="flex shrink-0 items-center justify-end">
+              <Switch
+                aria-labelledby={labelId}
+                checked={isInstalled}
+                disabled={isBusy || !statusKnown}
+                onCheckedChange={(checked) => handleToggle(id, checked)}
+              />
+            </div>
+          </SettingsRow>
+        )
+      })}
+      {error && (
+        <div className="bg-destructive/5 px-4 py-3 text-[13px] text-destructive-foreground">
+          {error}
+        </div>
+      )}
+    </SettingsSection>
   )
 }
 
@@ -147,41 +161,29 @@ function AppPreferencesSection() {
   const openAtLogin = preferences?.openAtLogin ?? false
 
   return (
-    <section className="space-y-3">
-      <h2 className="font-heading font-semibold text-[13px] tracking-[-0.01em] text-foreground">
-        App
-      </h2>
-      <Card>
-        <CardHeader>
-          <CardTitle>Startup</CardTitle>
-          <CardDescription>Control the menubar timer lifecycle.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <div className="flex flex-col gap-3 rounded-xl bg-muted/35 p-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="text-[15px] font-medium leading-snug" id={openAtLoginLabelId}>
-                Open at login
-              </div>
-              <p className="mt-1 text-[13px] text-muted-foreground leading-snug">
-                Keep VibeTime available in the menu bar after sign in.
-              </p>
-            </div>
-            <Switch
-              aria-labelledby={openAtLoginLabelId}
-              checked={openAtLogin}
-              disabled={!preferences || saving}
-              onCheckedChange={(checked) => updatePreferences({ openAtLogin: checked })}
-            />
+    <SettingsSection title="App Startup" description="Control the VibeTime menubar lifecycle.">
+      <SettingsRow>
+        <div className="min-w-0 flex-1">
+          <div className="text-[14px] font-medium text-foreground" id={openAtLoginLabelId}>
+            Open at login
           </div>
-
-          {error && (
-            <div className="rounded-lg bg-destructive/8 px-3 py-2 text-[13px] text-destructive-foreground leading-snug">
-              {error}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </section>
+          <p className="mt-1 text-[13px] text-muted-foreground leading-snug">
+            Keep VibeTime available in the menu bar after sign in.
+          </p>
+        </div>
+        <Switch
+          aria-labelledby={openAtLoginLabelId}
+          checked={openAtLogin}
+          disabled={!preferences || saving}
+          onCheckedChange={(checked) => updatePreferences({ openAtLogin: checked })}
+        />
+      </SettingsRow>
+      {error && (
+        <div className="bg-destructive/5 px-4 py-3 text-[13px] text-destructive-foreground">
+          {error}
+        </div>
+      )}
+    </SettingsSection>
   )
 }
 
@@ -211,55 +213,48 @@ function CliSection() {
   const installed = status?.installed ?? false
 
   return (
-    <section className="space-y-3">
-      <h2 className="font-heading font-semibold text-[13px] tracking-[-0.01em] text-foreground">
-        Command line
-      </h2>
-      <Card>
-        <CardHeader>
-          <CardTitle>CLI</CardTitle>
-          <CardDescription>Expose the stable VibeTime command in your shell.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <div className="flex flex-col gap-3 rounded-xl bg-muted/35 p-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <div className="text-[15px] font-medium leading-snug" id={cliLabelId}>
-                Install CLI
-              </div>
-              <p className="mt-1 break-all text-[13px] text-muted-foreground leading-snug">
-                {status
-                  ? `${displayHomePath(status.linkPath)} -> ${displayHomePath(status.targetPath)}`
-                  : 'Checking CLI link...'}
-              </p>
-            </div>
-            <Switch
-              aria-labelledby={cliLabelId}
-              checked={installed}
-              disabled={!status || saving || status.conflict}
-              onCheckedChange={updateCli}
-            />
+    <SettingsSection
+      title="Command Line"
+      description="Expose the stable VibeTime command in your shell."
+    >
+      <SettingsRow>
+        <div className="min-w-0 flex-1">
+          <div className="text-[14px] font-medium text-foreground" id={cliLabelId}>
+            Install CLI tool
           </div>
+          <p className="mt-1 break-all text-[13px] text-muted-foreground leading-snug">
+            {status
+              ? `${displayHomePath(status.linkPath)} → ${displayHomePath(status.targetPath)}`
+              : 'Checking CLI link...'}
+          </p>
+        </div>
+        <Switch
+          aria-labelledby={cliLabelId}
+          checked={installed}
+          disabled={!status || saving || status.conflict}
+          onCheckedChange={updateCli}
+        />
+      </SettingsRow>
 
-          {status && !status.binDirInPath && (
-            <div className="rounded-lg bg-muted/35 px-3 py-2 text-[13px] text-muted-foreground leading-snug">
-              Add {displayHomePath(status.binDir)} to PATH to run vibetime from any shell.
-            </div>
-          )}
+      {status && !status.binDirInPath && (
+        <div className="bg-muted/20 px-4 py-3 text-[13px] text-muted-foreground">
+          Add <span className="font-mono text-foreground">{displayHomePath(status.binDir)}</span> to
+          PATH to run vibetime from any shell.
+        </div>
+      )}
 
-          {status?.conflict && (
-            <div className="rounded-lg bg-destructive/8 px-3 py-2 text-[13px] text-destructive-foreground leading-snug">
-              {displayHomePath(status.linkPath)} already exists and is not managed by VibeTime.
-            </div>
-          )}
+      {status?.conflict && (
+        <div className="bg-destructive/5 px-4 py-3 text-[13px] text-destructive-foreground">
+          {displayHomePath(status.linkPath)} already exists and is not managed by VibeTime.
+        </div>
+      )}
 
-          {error && (
-            <div className="rounded-lg bg-destructive/8 px-3 py-2 text-[13px] text-destructive-foreground leading-snug">
-              {error}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </section>
+      {error && (
+        <div className="bg-destructive/5 px-4 py-3 text-[13px] text-destructive-foreground">
+          {error}
+        </div>
+      )}
+    </SettingsSection>
   )
 }
 
@@ -305,77 +300,70 @@ function ProjectAliases() {
   }
 
   return (
-    <section className="space-y-3">
-      <h2 className="font-heading font-semibold text-[13px] tracking-[-0.01em] text-foreground">
-        Project aliases
-      </h2>
-      <Card>
-        <CardHeader>
-          <CardTitle>Directory names</CardTitle>
-          <CardDescription>
-            Map project directory names to display names. Changes are saved to config.toml.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            {Object.entries(aliases).map(([key, value]) => (
-              <div
-                key={key}
-                className="flex min-w-0 flex-col gap-2 rounded-xl bg-muted/35 p-2 sm:flex-row sm:items-center"
-              >
-                <Badge variant="outline" className="w-fit shrink-0 font-mono">
-                  {key}
-                </Badge>
-                <span className="hidden text-muted-foreground sm:inline">&rarr;</span>
-                <span className="min-w-0 flex-1 text-[13px] leading-snug">{value}</span>
-                <Button
-                  onClick={() => handleRemove(key)}
-                  size="xs"
-                  variant="ghost"
-                  className="self-start text-destructive-foreground sm:self-center"
-                >
-                  Remove
-                </Button>
-              </div>
-            ))}
-            {Object.keys(aliases).length === 0 && (
-              <p className="text-[13px] text-muted-foreground italic leading-snug">
-                No aliases configured.
-              </p>
-            )}
-          </div>
-
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-            <Input
-              type="text"
-              placeholder="Directory name"
-              value={newKey}
-              onChange={(e) => setNewKey(e.target.value)}
-              className="min-w-0 sm:min-w-[8rem] sm:flex-1"
-            />
-            <Input
-              type="text"
-              placeholder="Display name"
-              value={newValue}
-              onChange={(e) => setNewValue(e.target.value)}
-              className="min-w-0 sm:min-w-[8rem] sm:flex-1"
-            />
+    <SettingsSection
+      title="Project Aliases"
+      description="Map raw project directory names to display names. Changes are saved to config.toml."
+    >
+      <div className="flex flex-col gap-3 p-4">
+        {Object.entries(aliases).map(([key, value]) => (
+          <div
+            key={key}
+            className="group flex min-w-0 items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2"
+          >
+            <div className="flex min-w-0 items-center gap-3">
+              <Badge variant="outline" className="shrink-0 font-mono text-[12px] opacity-80">
+                {key}
+              </Badge>
+              <span className="text-muted-foreground/60 shrink-0">&rarr;</span>
+              <span className="min-w-0 truncate text-[13px] font-medium">{value}</span>
+            </div>
             <Button
-              onClick={handleAdd}
-              disabled={!newKey.trim() || !newValue.trim()}
-              variant="secondary"
-              className="w-full sm:w-auto"
+              onClick={() => handleRemove(key)}
+              size="xs"
+              variant="ghost"
+              className="text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
             >
-              Add
+              Remove
             </Button>
           </div>
+        ))}
+        {Object.keys(aliases).length === 0 && (
+          <p className="py-2 text-[13px] italic text-muted-foreground">
+            No aliases configured yet.
+          </p>
+        )}
 
-          <Button onClick={handleSave} disabled={saving} loading={saving} className="self-start">
-            Save changes
+        <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+          <Input
+            type="text"
+            placeholder="Directory name"
+            value={newKey}
+            onChange={(e) => setNewKey(e.target.value)}
+            className="flex-1"
+          />
+          <Input
+            type="text"
+            placeholder="Display name"
+            value={newValue}
+            onChange={(e) => setNewValue(e.target.value)}
+            className="flex-1"
+          />
+          <Button
+            onClick={handleAdd}
+            disabled={!newKey.trim() || !newValue.trim()}
+            variant="secondary"
+            className="shrink-0"
+          >
+            Add
           </Button>
-        </CardContent>
-      </Card>
-    </section>
+        </div>
+      </div>
+      <div className="bg-muted/20 px-4 py-3">
+        <Button onClick={handleSave} disabled={saving} loading={saving}>
+          Save Changes
+        </Button>
+      </div>
+    </SettingsSection>
   )
 }
 
@@ -393,23 +381,25 @@ function About() {
   }, [])
 
   return (
-    <section className="space-y-4 border-border/55 border-t pt-10">
-      <div>
-        <h2 className="font-heading font-semibold text-[13px] tracking-[-0.01em] text-foreground">
-          About
-        </h2>
-        <p className="mt-0.5 text-[13px] text-muted-foreground leading-snug">
-          Build and local data
+    <section className="space-y-3 pt-6 border-t border-border/40">
+      <div className="px-1">
+        <h2 className="text-[14px] font-semibold text-foreground">About VibeTime</h2>
+        <p className="mt-1 text-[13px] text-muted-foreground leading-snug">
+          Build info and local data storage.
         </p>
       </div>
-      <dl className="grid max-w-lg gap-x-8 gap-y-3 text-[13px] leading-snug sm:grid-cols-[7rem_1fr]">
-        <dt className="text-muted-foreground">Version</dt>
-        <dd className="min-w-0 font-mono">{version}</dd>
-        <dt className="text-muted-foreground">Database</dt>
-        <dd className="min-w-0 break-all font-mono text-muted-foreground">{dbPath}</dd>
-        <dt className="text-muted-foreground">License</dt>
-        <dd>MIT</dd>
-      </dl>
+      <div className="px-1 mt-4">
+        <dl className="grid grid-cols-[8rem_1fr] gap-y-3 text-[13px]">
+          <dt className="text-muted-foreground">Version</dt>
+          <dd className="font-mono text-foreground font-medium">{version}</dd>
+          
+          <dt className="text-muted-foreground">Database</dt>
+          <dd className="break-all font-mono text-muted-foreground">{dbPath}</dd>
+          
+          <dt className="text-muted-foreground">License</dt>
+          <dd className="text-foreground">MIT</dd>
+        </dl>
+      </div>
     </section>
   )
 }
@@ -427,16 +417,16 @@ export default function Settings() {
   }
 
   return (
-    <PageShell prose className="space-y-12 pb-12">
-      <header>
-        <h1 className="font-heading font-semibold text-2xl tracking-[-0.02em] text-foreground">
+    <PageShell prose className="space-y-10 pb-12">
+      <header className="px-1">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
           Settings
         </h1>
         <p className="mt-1.5 text-[13px] text-muted-foreground leading-snug">
-          Hooks, project names, and app info
+          Manage your app preferences, CLI tools, and agent hooks.
         </p>
       </header>
-      <div className="flex flex-col gap-12">
+      <div className="flex flex-col gap-10">
         <AppPreferencesSection />
         <CliSection />
         <ConnectAgents />
@@ -446,3 +436,4 @@ export default function Settings() {
     </PageShell>
   )
 }
+
