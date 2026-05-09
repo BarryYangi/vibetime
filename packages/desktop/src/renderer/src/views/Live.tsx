@@ -85,13 +85,13 @@ function Metric({
   value: string
 }) {
   return (
-    <div className="flex min-w-0 items-center gap-3 rounded-lg border border-border/50 bg-muted/25 px-3 py-2.5">
-      <Icon aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+    <div className="flex min-w-0 items-center gap-3 py-2">
+      <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted/40">
+        <Icon aria-hidden className="size-4 text-muted-foreground" />
+      </div>
       <div className="min-w-0">
-        <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-          {label}
-        </p>
-        <p className="mt-0.5 truncate font-mono text-[13px] tabular-nums">{value}</p>
+        <p className="text-[12px] font-medium text-muted-foreground leading-none">{label}</p>
+        <p className="mt-1 truncate font-mono text-[14px] font-medium leading-none tabular-nums text-foreground">{value}</p>
       </div>
     </div>
   )

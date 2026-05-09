@@ -592,17 +592,23 @@ function StatTile({
   detail: string
   tone?: 'neutral' | 'good' | 'warn'
 }) {
-  const toneClass =
-    tone === 'good'
-      ? 'border-emerald-200/70 bg-emerald-50/70 dark:border-emerald-950 dark:bg-emerald-950/20'
-      : tone === 'warn'
-        ? 'border-amber-200/80 bg-amber-50/70 dark:border-amber-950 dark:bg-amber-950/20'
-        : 'border-border/55 bg-card'
   return (
-    <div className={`rounded-lg border px-4 py-3 shadow-sm shadow-black/[0.02] ${toneClass}`}>
-      <p className="text-[11px] font-medium text-muted-foreground leading-snug">{label}</p>
-      <p className="mt-2 font-mono text-[22px] font-semibold leading-none tabular-nums">{value}</p>
-      <p className="mt-2 truncate text-[12px] text-muted-foreground leading-snug">{detail}</p>
+    <div className="flex flex-col justify-between rounded-[18px] border border-border/40 bg-card/40 p-5 shadow-sm shadow-black/[0.01]">
+      <div className="space-y-1">
+        <p className="text-[13px] font-medium text-muted-foreground">{label}</p>
+        <p className="font-heading text-[26px] font-semibold tracking-tight text-foreground">{value}</p>
+      </div>
+      <div className="mt-4 flex items-center gap-1.5">
+        {tone !== 'neutral' && (
+          <span
+            className={cn(
+              'size-1.5 shrink-0 rounded-full',
+              tone === 'good' ? 'bg-success' : 'bg-warning',
+            )}
+          />
+        )}
+        <p className="truncate text-[12px] text-muted-foreground">{detail}</p>
+      </div>
     </div>
   )
 }
@@ -613,26 +619,23 @@ function InsightBar({
   items: Array<{ label: string; value: string; tone?: 'neutral' | 'good' | 'warn' }>
 }) {
   return (
-    <div className="mb-3 grid gap-2 sm:grid-cols-3">
-      {items.map((item) => {
-        const toneClass =
-          item.tone === 'good'
-            ? 'border-emerald-200/70 bg-emerald-50/60 text-emerald-950 dark:border-emerald-950 dark:bg-emerald-950/20 dark:text-emerald-100'
-            : item.tone === 'warn'
-              ? 'border-amber-200/80 bg-amber-50/60 text-amber-950 dark:border-amber-950 dark:bg-amber-950/20 dark:text-amber-100'
-              : 'border-border/45 bg-muted/35 text-foreground'
-        return (
-          <div
-            className={`rounded-md border px-3 py-2 ${toneClass}`}
-            key={`${item.label}-${item.value}`}
-          >
-            <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-              {item.label}
-            </p>
-            <p className="mt-1 truncate text-[13px] font-medium">{item.value}</p>
+    <div className="mb-6 flex flex-wrap items-center gap-x-8 gap-y-4 px-1">
+      {items.map((item) => (
+        <div key={`${item.label}-${item.value}`} className="flex flex-col">
+          <div className="flex items-center gap-1.5">
+            {item.tone && item.tone !== 'neutral' && (
+              <span
+                className={cn(
+                  'size-1.5 shrink-0 rounded-full',
+                  item.tone === 'good' ? 'bg-success' : 'bg-warning',
+                )}
+              />
+            )}
+            <p className="text-[12px] font-medium text-muted-foreground">{item.label}</p>
           </div>
-        )
-      })}
+          <p className="mt-0.5 text-[15px] font-medium text-foreground">{item.value}</p>
+        </div>
+      ))}
     </div>
   )
 }
