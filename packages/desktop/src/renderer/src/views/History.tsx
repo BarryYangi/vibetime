@@ -783,7 +783,7 @@ export default function History() {
       </header>
 
       {stats && (
-        <section className="grid gap-3 md:grid-cols-4">
+        <section className="grid gap-2 md:grid-cols-4">
           <StatTile
             detail={formatDelta(summary.periodCompare.deltaRatio)}
             label={`${summary.periodDays}-day total`}
