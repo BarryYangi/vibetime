@@ -1,7 +1,6 @@
 import { useAtomValue } from 'jotai'
 import { useEffect, useId, useState } from 'react'
 import { PageShell } from '@/components/PageShell'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
@@ -107,16 +106,10 @@ function ConnectAgents() {
         return (
           <SettingsRow key={id}>
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2.5">
-                <span
-                  aria-hidden="true"
-                  className={`size-2 shrink-0 rounded-full ${isInstalled ? 'bg-success shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-muted-foreground/30'}`}
-                />
-                <div className="text-[14px] font-medium text-foreground" id={labelId}>
-                  {name}
-                </div>
+              <div className="text-[14px] font-medium text-foreground" id={labelId}>
+                {name}
               </div>
-              <div className="mt-1 pl-4.5 text-[13px] text-muted-foreground leading-snug">
+              <div className="mt-1 text-[13px] text-muted-foreground leading-snug">
                 {description}
               </div>
             </div>
@@ -311,9 +304,9 @@ function ProjectAliases() {
             className="group flex min-w-0 items-center justify-between gap-3 rounded-md bg-muted/40 px-3 py-2"
           >
             <div className="flex min-w-0 items-center gap-3">
-              <Badge variant="outline" className="shrink-0 font-mono text-[12px] opacity-80">
+              <span className="shrink-0 rounded bg-muted/60 px-1.5 py-0.5 font-mono text-[12px] text-foreground">
                 {key}
-              </Badge>
+              </span>
               <span className="text-muted-foreground/60 shrink-0">&rarr;</span>
               <span className="min-w-0 truncate text-[13px] font-medium">{value}</span>
             </div>
