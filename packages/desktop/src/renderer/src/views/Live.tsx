@@ -135,9 +135,12 @@ function TurnStage({
                 {turn.project}
               </h2>
             </div>
-            <span className="mt-0 rounded-full border border-success/35 bg-success/10 px-2.5 py-1 text-[11px] font-medium leading-none text-success">
-              Live
-            </span>
+            <div className="mt-1 flex items-center gap-1.5 px-2">
+              <span className="size-1.5 animate-pulse rounded-full bg-success" />
+              <span className="text-[11px] font-medium tracking-wide text-success uppercase">
+                Live
+              </span>
+            </div>
           </div>
         </div>
         <div className="flex min-w-0 flex-col gap-5 px-5 pt-0 pb-5">
