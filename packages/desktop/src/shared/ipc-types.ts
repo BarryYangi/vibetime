@@ -1,5 +1,9 @@
 export type IpcResult<T> = { ok: true; data: T } | { ok: false; error: string }
 
+export const APP_LANGUAGES = ['en', 'zh'] as const
+export const APP_THEMES = ['system', 'light', 'dark'] as const
+export const HISTORY_PERIODS = [7, 30, 90, 365] as const
+
 export interface TodaySummary {
   date: string
   grandTotal: number
@@ -34,11 +38,17 @@ export interface AgentStatus {
   installed: boolean
 }
 
+export type AppLanguage = (typeof APP_LANGUAGES)[number]
+export type AppTheme = (typeof APP_THEMES)[number]
+export type HistoryPeriodDays = (typeof HISTORY_PERIODS)[number]
+
 export interface VibetimeConfig {
   projects: Record<string, string>
   display: { timezone: string }
   app: {
+    language: AppLanguage
     open_at_login: boolean
+    theme: AppTheme
     last_view: string
   }
 }
@@ -89,7 +99,7 @@ export interface HistoryPeriodCompare {
 }
 
 export interface HistorySummary {
-  periodDays: 7 | 30 | 90 | 365
+  periodDays: HistoryPeriodDays
   calendar: HistoryCalendarDay[]
   trendProjects: string[]
   trends: HistoryTrendDay[]
@@ -108,7 +118,9 @@ export interface MenubarState {
 }
 
 export interface AppPreferences {
+  language: AppLanguage
   openAtLogin: boolean
+  theme: AppTheme
   lastView: string
 }
 

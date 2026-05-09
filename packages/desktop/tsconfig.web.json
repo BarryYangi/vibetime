@@ -7,8 +7,8 @@
     "strict": true,
     "jsx": "react-jsx",
     "esModuleInterop": true,
+    "resolveJsonModule": true,
     "skipLibCheck": true,
-    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/renderer/src/*"]

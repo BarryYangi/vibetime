@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { readConfig } from '@vibetime/hook/config'
 import type { MenuItemConstructorOptions } from 'electron'
-import { app, BrowserWindow, Menu } from 'electron'
+import { app, BrowserWindow, Menu, nativeTheme } from 'electron'
 import { setDbChangeListener, startDbChangeWatcher, stopDbChangeWatcher } from './db.js'
 import { registerIpcHandlers } from './ipc-handlers'
 import { startNotifyServer, stopNotifyServer } from './notify-server.js'
@@ -110,6 +110,14 @@ function lastViewRoute(): string {
   }
 }
 
+function applyStoredNativeTheme(): void {
+  try {
+    nativeTheme.themeSource = readConfig().app.theme
+  } catch {
+    nativeTheme.themeSource = 'system'
+  }
+}
+
 function loadRendererRoute(win: BrowserWindow, route: string): void {
   const hash = normalizeAppRoute(route)
   const rendererUrl = trustedRendererUrl()
@@ -122,6 +130,7 @@ function loadRendererRoute(win: BrowserWindow, route: string): void {
 
 function createMainWindow(route = lastViewRoute()): BrowserWindow {
   if (mainWindow && !mainWindow.isDestroyed()) return mainWindow
+  applyStoredNativeTheme()
 
   mainWindow = new BrowserWindow({
     title: APP_NAME,

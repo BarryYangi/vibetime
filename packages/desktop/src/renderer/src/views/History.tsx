@@ -1,5 +1,10 @@
+import type {
+  CustomSeriesRenderItemAPI,
+  CustomSeriesRenderItemParams,
+} from 'echarts/types/dist/echarts'
 import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useResolvedColorScheme } from '@/appearance'
 import { type EChartsCoreOption, echarts } from '@/charts/echarts'
 import { PageShell } from '@/components/PageShell'
 import { getAgentTheme, StackedProgress } from '@/components/StackedProgress'
@@ -12,9 +17,21 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsList, TabsTab } from '@/components/ui/tabs'
+import {
+  calendarDayLabels,
+  calendarMonthLabels,
+  formatDurationFull,
+  formatDurationSummary,
+  formatPeriodLabel,
+  formatShortDate,
+  localizeDurationRangeLabel,
+  weekdayLabels,
+} from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { HistorySummary, TopProjectRow } from '../../../shared/ipc-types'
-import '../charts/theme'
+import { HISTORY_PERIODS } from '../../../shared/ipc-types'
+import { getChartThemeName, getChartTokens } from '../charts/theme'
+import { useI18n } from '../i18n'
 
 function DashboardPanel({
   title,
@@ -42,68 +59,132 @@ function DashboardPanel({
   )
 }
 
-const PERIODS = [7, 30, 90, 365] as const
+const PERIODS = HISTORY_PERIODS
 type SortKey = 'project' | 'total' | 'turns' | 'lastActive'
+type ChartTokens = ReturnType<typeof getChartTokens>
+type TFunction = ReturnType<typeof useI18n>['t']
+type ChartAppearance = {
+  chartThemeName: string
+  locale: string
+  tokens: ChartTokens
+}
+type ColorPalette = readonly [string, ...string[]]
 
-const chartPalette = ['#2563eb', '#10b981', '#f59e0b', '#e11d48', '#7c3aed', '#737373']
-const githubHeatmapPalette = ['#ebedf0', '#9be9a8', '#40c463', '#30a14e', '#216e39']
-const axisLabelStyle = { color: '#737373', fontSize: 11, fontFamily: 'SN Pro' }
-const splitLineStyle = { color: '#0000000f', width: 1 }
-const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-const heatmapHoverEmphasis = {
+const baseAxisLabelStyle = { fontSize: 11, fontFamily: 'SN Pro' }
+
+function formatPeriodTotalLabel(days: number, locale: string, t: TFunction): string {
+  return locale === 'zh-CN'
+    ? `${days}${t('history.dayTotalSuffix')}`
+    : `${days}-${t('history.dayTotalSuffix')}`
+}
+
+function axisLabelStyle(tokens: ChartTokens) {
+  return { ...baseAxisLabelStyle, color: tokens.axisLabel }
+}
+
+function splitLineStyle(tokens: ChartTokens) {
+  return { color: tokens.splitLine, width: 1 }
+}
+
+function tooltipExtraCss(tokens: ChartTokens) {
+  return `box-shadow: 0 8px 24px ${tokens.tooltipShadow}; border-radius: 8px;`
+}
+
+const calendarHeatmapEmphasis = {
   itemStyle: {
-    borderColor: 'rgba(115,115,115,0.55)',
-    borderWidth: 1,
     borderRadius: 2,
-  },
-} as const
-const hourlyHeatmapHoverEmphasis = {
-  itemStyle: {
-    borderColor: 'rgba(115,115,115,0.55)',
-    borderWidth: 1,
-    borderRadius: 4,
+    color: 'inherit',
+    opacity: 0.75,
   },
 } as const
 
-function formatDuration(seconds: number): string {
-  const whole = Math.max(0, Math.floor(seconds))
-  if (whole < 60) return `${whole}s`
-  if (whole < 3600) return `${Math.floor(whole / 60)}m`
-  const h = Math.floor(whole / 3600)
-  const m = Math.floor((whole % 3600) / 60)
-  return `${h}h ${m}m`
+function parseHexColor(color: string) {
+  const hex = color.replace('#', '')
+  return {
+    r: Number.parseInt(hex.slice(0, 2), 16),
+    g: Number.parseInt(hex.slice(2, 4), 16),
+    b: Number.parseInt(hex.slice(4, 6), 16),
+  }
 }
 
-function formatTooltipDuration(seconds: number): string {
-  const whole = Math.max(0, Math.floor(seconds))
-  if (whole < 60) return `${whole}s`
-  if (whole < 3600) return `${Math.round(whole / 60)}m`
-  const h = Math.floor(whole / 3600)
-  const m = Math.round((whole % 3600) / 60)
-  return m > 0 ? `${h}h ${m}m` : `${h}h`
+function interpolateHexColor(from: string, to: string, amount: number) {
+  const start = parseHexColor(from)
+  const end = parseHexColor(to)
+  const mix = (a: number, b: number) => Math.round(a + (b - a) * amount)
+  return {
+    r: mix(start.r, end.r),
+    g: mix(start.g, end.g),
+    b: mix(start.b, end.b),
+  }
 }
 
-function formatDelta(ratio: number | null): string {
-  if (ratio === null) return 'no prior period'
+function heatmapPaletteColor(palette: ColorPalette, value: number, max: number, alpha: number) {
+  if (palette.length === 1 || max <= 0) {
+    const color = parseHexColor(palette[0])
+    return `rgba(${color.r},${color.g},${color.b},${alpha})`
+  }
+  const normalized = Math.max(0, Math.min(1, value / max))
+  const position = normalized * (palette.length - 1)
+  const index = Math.min(palette.length - 2, Math.floor(position))
+  const color = interpolateHexColor(
+    palette[index] ?? palette[0] ?? '#000000',
+    palette[index + 1] ?? palette[index] ?? palette[0] ?? '#000000',
+    position - index,
+  )
+  return `rgba(${color.r},${color.g},${color.b},${alpha})`
+}
+
+function renderHourlyHeatmapCell(
+  tokens: ChartTokens,
+  max: number,
+  _params: CustomSeriesRenderItemParams,
+  api: CustomSeriesRenderItemAPI,
+) {
+  const point = api.coord([api.value(0), api.value(1)])
+  const size = api.size([1, 1])
+  const gap = 1
+  const width = Math.max(0, Number(size[0]) - gap)
+  const height = Math.max(0, Number(size[1]) - gap)
+  const total = Number(api.value(2))
+  const radius = 4
+
+  return {
+    type: 'rect',
+    shape: {
+      x: Number(point[0]) - width / 2,
+      y: Number(point[1]) - height / 2,
+      width,
+      height,
+      r: radius,
+    },
+    style: {
+      fill: heatmapPaletteColor(tokens.hourlyHeatmap, total, max, 1),
+    },
+    emphasis: {
+      style: {
+        fill: heatmapPaletteColor(tokens.hourlyHeatmap, total, max, 0.75),
+      },
+    },
+  }
+}
+
+function formatDelta(ratio: number | null, t: TFunction): string {
+  if (ratio === null) return t('history.noPriorPeriod')
   const pct = Math.round(ratio * 100)
-  return `${pct >= 0 ? '+' : ''}${pct}% vs previous`
+  return `${pct >= 0 ? '+' : ''}${pct}% ${t('history.vsPrevious')}`
 }
 
 function formatPercent(value: number): string {
   return `${Math.round(value * 100)}%`
 }
 
-function formatLastActive(ts: number | null): string {
-  if (!ts) return '-'
-  return new Date(ts * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
-
 function sumTrendDay(day: HistorySummary['trends'][number]): number {
   return Object.values(day.projects).reduce((sum, value) => sum + value, 0)
 }
 
-function formatHourWindow(weekday: number, hour: number): string {
-  return `${weekdayLabels[weekday] ?? '-'} ${String(hour).padStart(2, '0')}:00`
+function formatHourWindow(weekday: number, hour: number, locale: string): string {
+  const labels = weekdayLabels(locale)
+  return `${labels[weekday] ?? '-'} ${String(hour).padStart(2, '0')}:00`
 }
 
 function quantile(values: number[], q: number): number {
@@ -116,23 +197,47 @@ function quantile(values: number[], q: number): number {
   return (values[base] ?? 0) + rest * (next - (values[base] ?? 0))
 }
 
-function useChart(ref: React.RefObject<HTMLDivElement | null>, options: EChartsCoreOption | null) {
+function useChart(
+  ref: React.RefObject<HTMLDivElement | null>,
+  options: EChartsCoreOption | null,
+  themeName: string,
+) {
+  const chartRef = useRef<ReturnType<typeof echarts.init> | null>(null)
+  const optionsRef = useRef(options)
+  optionsRef.current = options
+
   useEffect(() => {
-    if (!ref.current || !options) return
-    const chart = echarts.init(ref.current, 'cossNeutral')
-    chart.setOption(options)
+    if (!ref.current) return
+    const chart = echarts.init(ref.current, themeName)
+    chartRef.current = chart
+    if (optionsRef.current) chart.setOption(optionsRef.current, true)
     const resize = () => chart.resize()
     window.addEventListener('resize', resize)
     return () => {
       window.removeEventListener('resize', resize)
+      chartRef.current = null
       chart.dispose()
     }
-  }, [options, ref])
+  }, [ref, themeName])
+
+  useEffect(() => {
+    const chart = chartRef.current
+    if (!chart || !options) return
+    chart.setOption(options, true)
+  }, [options])
 }
 
-function CalendarHeatmap({ summary }: { summary: HistorySummary }) {
+function CalendarHeatmap({
+  chartThemeName,
+  locale,
+  summary,
+  tokens,
+}: ChartAppearance & { summary: HistorySummary }) {
   const ref = useRef<HTMLDivElement>(null)
-  const values = summary.calendar.map((day) => [day.date, day.total])
+  const values = useMemo(
+    () => summary.calendar.map((day) => [day.date, day.total]),
+    [summary.calendar],
+  )
   const max = Math.max(1, ...values.map(([, total]) => Number(total)))
   const option = useMemo<EChartsCoreOption>(
     () => ({
@@ -140,15 +245,16 @@ function CalendarHeatmap({ summary }: { summary: HistorySummary }) {
       tooltip: {
         borderWidth: 0,
         confine: true,
-        extraCssText: 'box-shadow: 0 8px 24px rgba(0,0,0,0.10); border-radius: 8px;',
+        extraCssText: tooltipExtraCss(tokens),
+        backgroundColor: tokens.tooltipBg,
         formatter: (params: { value: [string, number] }) =>
-          `<div style="font-size:12px;color:#737373">${params.value[0]}</div><div style="margin-top:2px;font-size:13px;font-weight:600;color:#262626">${formatTooltipDuration(params.value[1])}</div>`,
+          `<div style="font-size:12px;color:${tokens.tooltipMuted}">${params.value[0]}</div><div style="margin-top:2px;font-size:13px;font-weight:600;color:${tokens.text}">${formatDurationFull(params.value[1], locale)}</div>`,
       },
       visualMap: {
         min: 0,
         max,
         show: false,
-        inRange: { color: githubHeatmapPalette },
+        inRange: { color: tokens.heatmap },
       },
       calendar: {
         top: 22,
@@ -159,18 +265,24 @@ function CalendarHeatmap({ summary }: { summary: HistorySummary }) {
         range: [summary.calendar[0]?.date, summary.calendar[summary.calendar.length - 1]?.date],
         splitLine: { show: false },
         itemStyle: {
+          color: tokens.calendarFill,
           borderWidth: 2,
-          borderColor: '#ffffff',
+          borderColor: tokens.calendarBorder,
           borderRadius: 2,
         },
         yearLabel: { show: false },
-        monthLabel: { color: '#737373', fontSize: 11, margin: 7 },
+        monthLabel: {
+          color: tokens.axisLabel,
+          fontSize: 11,
+          margin: 7,
+          nameMap: calendarMonthLabels(locale),
+        },
         dayLabel: {
-          color: '#a3a3a3',
+          color: tokens.weakAxisLabel,
           firstDay: 1,
           fontSize: 10,
           margin: 7,
-          nameMap: ['S', 'M', 'T', 'W', 'T', 'F', 'S'],
+          nameMap: calendarDayLabels(locale),
         },
       },
       series: [
@@ -178,28 +290,36 @@ function CalendarHeatmap({ summary }: { summary: HistorySummary }) {
           type: 'heatmap',
           coordinateSystem: 'calendar',
           data: values,
-          emphasis: heatmapHoverEmphasis,
+          emphasis: calendarHeatmapEmphasis,
           itemStyle: { borderRadius: 2 },
         },
       ],
     }),
-    [max, summary.calendar, values],
+    [locale, max, summary.calendar, tokens, values],
   )
-  useChart(ref, option)
+  useChart(ref, option, chartThemeName)
   return <div ref={ref} className="h-[138px] w-full" />
 }
 
-function TrendChart({ summary }: { summary: HistorySummary }) {
+function TrendChart({
+  chartThemeName,
+  locale,
+  summary,
+  tokens,
+  t,
+}: ChartAppearance & { summary: HistorySummary; t: TFunction }) {
   const ref = useRef<HTMLDivElement>(null)
-  const option = useMemo<EChartsCoreOption>(
-    () => ({
-      color: chartPalette,
+  const option = useMemo<EChartsCoreOption>(() => {
+    const labels = axisLabelStyle(tokens)
+    return {
+      color: tokens.seriesPalette,
       tooltip: {
         trigger: 'axis',
         borderWidth: 0,
         confine: true,
-        extraCssText: 'box-shadow: 0 8px 24px rgba(0,0,0,0.10); border-radius: 8px;',
-        axisPointer: { type: 'shadow', shadowStyle: { color: '#0000000a' } },
+        extraCssText: tooltipExtraCss(tokens),
+        backgroundColor: tokens.tooltipBg,
+        axisPointer: { type: 'shadow', z: 0, shadowStyle: { color: tokens.axisPointer } },
         formatter: (
           params: Array<{ marker: string; seriesName: string; value: number; axisValue: string }>,
         ) => {
@@ -207,10 +327,10 @@ function TrendChart({ summary }: { summary: HistorySummary }) {
             .filter((item) => item.value > 0)
             .map(
               (item) =>
-                `<div style="display:flex;align-items:center;justify-content:space-between;gap:24px;margin-top:4px">${item.marker}<span style="color:#404040">${item.seriesName}</span><span style="font-weight:600;color:#262626">${formatTooltipDuration(item.value)}</span></div>`,
+                `<div style="display:flex;align-items:center;justify-content:space-between;gap:24px;margin-top:4px">${item.marker}<span style="color:${tokens.tooltipRow}">${item.seriesName}</span><span style="font-weight:600;color:${tokens.text}">${formatDurationFull(item.value, locale)}</span></div>`,
             )
             .join('')
-          return `<div style="font-size:12px;color:#737373">${params[0]?.axisValue ?? ''}</div>${rows || '<div style="margin-top:4px;color:#737373">No activity</div>'}`
+          return `<div style="font-size:12px;color:${tokens.tooltipMuted}">${params[0]?.axisValue ?? ''}</div>${rows || `<div style="margin-top:4px;color:${tokens.tooltipMuted}">${t('history.noActivity')}</div>`}`
         },
       },
       legend: {
@@ -219,7 +339,7 @@ function TrendChart({ summary }: { summary: HistorySummary }) {
         icon: 'roundRect',
         itemHeight: 8,
         itemWidth: 14,
-        textStyle: axisLabelStyle,
+        textStyle: labels,
       },
       grid: { left: 34, right: 10, top: 34, bottom: 26 },
       xAxis: {
@@ -229,7 +349,7 @@ function TrendChart({ summary }: { summary: HistorySummary }) {
         axisLine: { show: false },
         axisTick: { show: false },
         axisLabel: {
-          ...axisLabelStyle,
+          ...labels,
           hideOverlap: true,
           interval: Math.max(0, Math.floor(summary.trends.length / 8)),
         },
@@ -240,10 +360,10 @@ function TrendChart({ summary }: { summary: HistorySummary }) {
         axisLine: { show: false },
         axisTick: { show: false },
         axisLabel: {
-          ...axisLabelStyle,
-          formatter: (value: number) => formatTooltipDuration(value),
+          ...labels,
+          formatter: (value: number) => formatDurationSummary(value, locale),
         },
-        splitLine: { lineStyle: splitLineStyle },
+        splitLine: { lineStyle: splitLineStyle(tokens) },
       },
       series: summary.trendProjects.map((project, index) => ({
         name: project,
@@ -257,34 +377,40 @@ function TrendChart({ summary }: { summary: HistorySummary }) {
         emphasis: { focus: 'series' },
         data: summary.trends.map((day) => day.projects[project] ?? 0),
       })),
-    }),
-    [summary.trendProjects, summary.trends],
-  )
-  useChart(ref, option)
+    }
+  }, [locale, summary.trendProjects, summary.trends, t, tokens])
+  useChart(ref, option, chartThemeName)
   return <div ref={ref} className="h-[260px] w-full" />
 }
 
-function ProjectShareChart({ summary }: { summary: HistorySummary }) {
+function ProjectShareChart({
+  chartThemeName,
+  locale,
+  summary,
+  tokens,
+}: ChartAppearance & { summary: HistorySummary }) {
   const ref = useRef<HTMLDivElement>(null)
   const rows = useMemo(
     () => [...summary.topProjects].sort((a, b) => a.total - b.total).slice(-6),
     [summary.topProjects],
   )
   const total = rows.reduce((sum, row) => sum + row.total, 0)
-  const option = useMemo<EChartsCoreOption>(
-    () => ({
-      color: ['#262626'],
+  const option = useMemo<EChartsCoreOption>(() => {
+    const labels = axisLabelStyle(tokens)
+    return {
+      color: [tokens.text],
       tooltip: {
         trigger: 'axis',
-        axisPointer: { type: 'shadow', shadowStyle: { color: '#0000000a' } },
+        axisPointer: { type: 'shadow', z: 0, shadowStyle: { color: tokens.axisPointer } },
         borderWidth: 0,
         confine: true,
-        extraCssText: 'box-shadow: 0 8px 24px rgba(0,0,0,0.10); border-radius: 8px;',
+        extraCssText: tooltipExtraCss(tokens),
+        backgroundColor: tokens.tooltipBg,
         formatter: (params: Array<{ name: string; value: number }>) => {
           const item = params[0]
           if (!item) return ''
           const pct = total > 0 ? Math.round((item.value / total) * 100) : 0
-          return `<div style="font-size:12px;color:#737373">${item.name}</div><div style="margin-top:2px;font-size:13px;font-weight:600;color:#262626">${formatTooltipDuration(item.value)} · ${pct}%</div>`
+          return `<div style="font-size:12px;color:${tokens.tooltipMuted}">${item.name}</div><div style="margin-top:2px;font-size:13px;font-weight:600;color:${tokens.text}">${formatDurationFull(item.value, locale)} · ${pct}%</div>`
         },
       },
       grid: { left: 88, right: 18, top: 8, bottom: 18 },
@@ -293,17 +419,17 @@ function ProjectShareChart({ summary }: { summary: HistorySummary }) {
         axisLine: { show: false },
         axisTick: { show: false },
         axisLabel: {
-          ...axisLabelStyle,
-          formatter: (value: number) => formatTooltipDuration(value),
+          ...labels,
+          formatter: (value: number) => formatDurationSummary(value, locale),
         },
-        splitLine: { lineStyle: splitLineStyle },
+        splitLine: { lineStyle: splitLineStyle(tokens) },
       },
       yAxis: {
         type: 'category',
         data: rows.map((row) => row.project),
         axisLine: { show: false },
         axisTick: { show: false },
-        axisLabel: { ...axisLabelStyle, width: 76, overflow: 'truncate' },
+        axisLabel: { ...labels, width: 76, overflow: 'truncate' },
       },
       series: [
         {
@@ -311,33 +437,40 @@ function ProjectShareChart({ summary }: { summary: HistorySummary }) {
           data: rows.map((row, index) => ({
             value: row.total,
             itemStyle: {
-              color: chartPalette[index % chartPalette.length],
+              color: tokens.seriesPalette[index % tokens.seriesPalette.length],
               borderRadius: [0, 4, 4, 0],
             },
           })),
           barWidth: 10,
         },
       ],
-    }),
-    [rows, total],
-  )
-  useChart(ref, option)
+    }
+  }, [locale, rows, tokens, total])
+  useChart(ref, option, chartThemeName)
   return <div ref={ref} className="h-[220px] w-full" />
 }
 
-function HourlyActivityHeatmap({ summary }: { summary: HistorySummary }) {
+function HourlyActivityHeatmap({
+  chartThemeName,
+  locale,
+  summary,
+  tokens,
+}: ChartAppearance & { summary: HistorySummary }) {
   const ref = useRef<HTMLDivElement>(null)
   const max = Math.max(1, ...summary.hourlyMatrix.map((cell) => cell.total))
-  const option = useMemo<EChartsCoreOption>(
-    () => ({
+  const option = useMemo<EChartsCoreOption>(() => {
+    const labels = axisLabelStyle(tokens)
+    const dayLabels = weekdayLabels(locale)
+    return {
       stateAnimation: { duration: 0 },
       tooltip: {
         borderWidth: 0,
         confine: true,
-        extraCssText: 'box-shadow: 0 8px 24px rgba(0,0,0,0.10); border-radius: 8px;',
+        extraCssText: tooltipExtraCss(tokens),
+        backgroundColor: tokens.tooltipBg,
         formatter: (params: { value: [number, number, number] }) => {
           const [hour, weekday, total] = params.value
-          return `<div style="font-size:12px;color:#737373">${weekdayLabels[weekday]} · ${String(hour).padStart(2, '0')}:00</div><div style="margin-top:2px;font-size:13px;font-weight:600;color:#262626">${formatTooltipDuration(total)}</div>`
+          return `<div style="font-size:12px;color:${tokens.tooltipMuted}">${dayLabels[weekday]} · ${String(hour).padStart(2, '0')}:00</div><div style="margin-top:2px;font-size:13px;font-weight:600;color:${tokens.text}">${formatDurationFull(total, locale)}</div>`
         },
       },
       grid: { left: 34, right: 14, top: 10, bottom: 28 },
@@ -346,37 +479,37 @@ function HourlyActivityHeatmap({ summary }: { summary: HistorySummary }) {
         data: Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, '0')),
         axisLine: { show: false },
         axisTick: { show: false },
-        axisLabel: { ...axisLabelStyle, interval: 2 },
+        axisLabel: { ...labels, interval: 2 },
       },
       yAxis: {
         type: 'category',
-        data: weekdayLabels,
+        data: dayLabels,
         axisLine: { show: false },
         axisTick: { show: false },
-        axisLabel: axisLabelStyle,
-      },
-      visualMap: {
-        min: 0,
-        max,
-        show: false,
-        inRange: { color: ['#f7f7f7', '#dbeafe', '#93c5fd', '#3b82f6', '#1e3a8a'] },
+        axisLabel: labels,
       },
       series: [
         {
-          type: 'heatmap',
+          type: 'custom',
+          coordinateSystem: 'cartesian2d',
           data: summary.hourlyMatrix.map((cell) => [cell.hour, cell.weekday, cell.total]),
-          emphasis: hourlyHeatmapHoverEmphasis,
-          itemStyle: { borderColor: '#ffffff', borderRadius: 4, borderWidth: 1 },
+          renderItem: (params: CustomSeriesRenderItemParams, api: CustomSeriesRenderItemAPI) =>
+            renderHourlyHeatmapCell(tokens, max, params, api),
         },
       ],
-    }),
-    [max, summary.hourlyMatrix],
-  )
-  useChart(ref, option)
+    }
+  }, [locale, max, summary.hourlyMatrix, tokens])
+  useChart(ref, option, chartThemeName)
   return <div ref={ref} className="h-[220px] w-full" />
 }
 
-function TurnLengthBuckets({ summary }: { summary: HistorySummary }) {
+function TurnLengthBuckets({
+  chartThemeName,
+  locale,
+  summary,
+  tokens,
+  t,
+}: ChartAppearance & { summary: HistorySummary; t: TFunction }) {
   const ref = useRef<HTMLDivElement>(null)
   const buckets = useMemo(() => {
     const ranges = [
@@ -391,28 +524,30 @@ function TurnLengthBuckets({ summary }: { summary: HistorySummary }) {
         (turn) => turn.duration >= range.min && turn.duration < range.max,
       )
       return {
-        label: range.label,
+        label: localizeDurationRangeLabel(range.label, locale),
         count: turns.length,
         total: turns.reduce((sum, turn) => sum + turn.duration, 0),
       }
     })
-  }, [summary.turnDurations])
+  }, [locale, summary.turnDurations])
   const totalTurns = buckets.reduce((sum, bucket) => sum + bucket.count, 0)
-  const option = useMemo<EChartsCoreOption>(
-    () => ({
-      color: ['#2563eb'],
+  const option = useMemo<EChartsCoreOption>(() => {
+    const labels = axisLabelStyle(tokens)
+    return {
+      color: [tokens.turnBucket.standard],
       tooltip: {
         trigger: 'axis',
-        axisPointer: { type: 'shadow', shadowStyle: { color: '#0000000a' } },
+        axisPointer: { type: 'shadow', z: 0, shadowStyle: { color: tokens.axisPointer } },
         borderWidth: 0,
         confine: true,
-        extraCssText: 'box-shadow: 0 8px 24px rgba(0,0,0,0.10); border-radius: 8px;',
+        extraCssText: tooltipExtraCss(tokens),
+        backgroundColor: tokens.tooltipBg,
         formatter: (params: Array<{ dataIndex: number; name: string }>) => {
           const item = params[0]
           const bucket = item ? buckets[item.dataIndex] : undefined
           if (!item || !bucket) return ''
           const pct = totalTurns > 0 ? Math.round((bucket.count / totalTurns) * 100) : 0
-          return `<div style="font-size:12px;color:#737373">${item.name}</div><div style="margin-top:2px;font-size:13px;font-weight:600;color:#262626">${bucket.count} turns · ${pct}%</div><div style="margin-top:2px;color:#737373">${formatTooltipDuration(bucket.total)} total</div>`
+          return `<div style="font-size:12px;color:${tokens.tooltipMuted}">${item.name}</div><div style="margin-top:2px;font-size:13px;font-weight:600;color:${tokens.text}">${bucket.count} ${t('history.turns')} · ${pct}%</div><div style="margin-top:2px;color:${tokens.tooltipMuted}">${formatDurationFull(bucket.total, locale)} ${t('history.total')}</div>`
         },
       },
       grid: { left: 34, right: 12, top: 18, bottom: 28 },
@@ -421,15 +556,15 @@ function TurnLengthBuckets({ summary }: { summary: HistorySummary }) {
         data: buckets.map((bucket) => bucket.label),
         axisLine: { show: false },
         axisTick: { show: false },
-        axisLabel: axisLabelStyle,
+        axisLabel: labels,
       },
       yAxis: {
         type: 'value',
         minInterval: 1,
         axisLine: { show: false },
         axisTick: { show: false },
-        axisLabel: axisLabelStyle,
-        splitLine: { lineStyle: splitLineStyle },
+        axisLabel: labels,
+        splitLine: { lineStyle: splitLineStyle(tokens) },
       },
       series: [
         {
@@ -437,7 +572,12 @@ function TurnLengthBuckets({ summary }: { summary: HistorySummary }) {
           data: buckets.map((bucket, index) => ({
             value: bucket.count,
             itemStyle: {
-              color: index === 0 ? '#f59e0b' : index >= 3 ? '#10b981' : '#2563eb',
+              color:
+                index === 0
+                  ? tokens.turnBucket.short
+                  : index >= 3
+                    ? tokens.turnBucket.long
+                    : tokens.turnBucket.standard,
               borderRadius: [4, 4, 0, 0],
             },
           })),
@@ -445,20 +585,27 @@ function TurnLengthBuckets({ summary }: { summary: HistorySummary }) {
           label: {
             show: true,
             position: 'top',
-            color: '#737373',
+            color: tokens.axisLabel,
             fontSize: 11,
             formatter: ({ value }: { value: number }) => String(value),
           },
         },
       ],
-    }),
-    [buckets, totalTurns],
-  )
-  useChart(ref, option)
+    }
+  }, [buckets, locale, t, tokens, totalTurns])
+  useChart(ref, option, chartThemeName)
   return <div ref={ref} className="h-[220px] w-full" />
 }
 
-function AgentContributionBars({ summary }: { summary: HistorySummary }) {
+function AgentContributionBars({
+  locale,
+  summary,
+  t,
+}: {
+  locale: string
+  summary: HistorySummary
+  t: TFunction
+}) {
   const rows = useMemo(
     () => summary.projectAgentTotals.filter((project) => project.total > 0).slice(0, 6),
     [summary.projectAgentTotals],
@@ -475,9 +622,7 @@ function AgentContributionBars({ summary }: { summary: HistorySummary }) {
 
   if (rows.length === 0) {
     return (
-      <div className="py-8 text-[13px] text-muted-foreground">
-        No agent activity in this period.
-      </div>
+      <div className="py-8 text-[13px] text-muted-foreground">{t('history.noAgentActivity')}</div>
     )
   }
 
@@ -489,7 +634,7 @@ function AgentContributionBars({ summary }: { summary: HistorySummary }) {
             <div className="mb-2 flex items-center justify-between gap-4">
               <p className="truncate text-[13px] font-medium">{project.project}</p>
               <p className="shrink-0 font-heading tracking-tight text-[12px] text-muted-foreground tabular-nums">
-                {formatDuration(project.total)}
+                {formatDurationSummary(project.total, locale)}
               </p>
             </div>
             <div className="px-1">
@@ -502,7 +647,7 @@ function AgentContributionBars({ summary }: { summary: HistorySummary }) {
                     label: agent.agent,
                     value: agent.total,
                     colorClass: theme.bg,
-                    tooltip: `${agent.agent}: ${formatDuration(agent.total)} (${Math.round(agentPct)}%)`,
+                    tooltip: `${agent.agent}: ${formatDurationSummary(agent.total, locale)} (${Math.round(agentPct)}%)`,
                   }
                 })}
                 total={project.total}
@@ -519,7 +664,7 @@ function AgentContributionBars({ summary }: { summary: HistorySummary }) {
               <span className={cn('font-medium transition-colors', theme.text)}>{agent}</span>
               <span className="mx-1 text-muted-foreground/40">·</span>
               <span className="font-heading tracking-tight tabular-nums text-muted-foreground/70">
-                {formatDuration(total)}
+                {formatDurationSummary(total, locale)}
               </span>
             </div>
           )
@@ -529,7 +674,15 @@ function AgentContributionBars({ summary }: { summary: HistorySummary }) {
   )
 }
 
-function TopProjectSignals({ summary }: { summary: HistorySummary }) {
+function TopProjectSignals({
+  locale,
+  summary,
+  t,
+}: {
+  locale: string
+  summary: HistorySummary
+  t: TFunction
+}) {
   const rows = useMemo(() => {
     const durationsByProject = new Map<string, number[]>()
     for (const turn of summary.turnDurations) {
@@ -554,13 +707,13 @@ function TopProjectSignals({ summary }: { summary: HistorySummary }) {
         >
           <p className="truncate text-[13px] font-medium">{row.project}</p>
           <p className="font-heading tracking-tight text-[12px] tabular-nums">
-            {formatDuration(row.total)}
+            {formatDurationSummary(row.total, locale)}
           </p>
           <p className="font-heading tracking-tight text-[12px] text-muted-foreground tabular-nums">
-            {row.focusTurns} focus
+            {row.focusTurns} {t('history.focus')}
           </p>
           <p className="text-right font-heading tracking-tight text-[12px] text-muted-foreground tabular-nums">
-            med {formatDuration(row.median)}
+            {t('history.med')} {formatDurationSummary(row.median, locale)}
           </p>
         </div>
       ))}
@@ -602,11 +755,15 @@ function InsightBar({ items }: { items: Array<{ label: string; value: string }> 
 }
 
 export default function History() {
+  const colorScheme = useResolvedColorScheme()
+  const { locale, t } = useI18n()
   const [periodDays, setPeriodDays] = useState<HistorySummary['periodDays']>(30)
   const [summary, setSummary] = useState<HistorySummary | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>('total')
   const [sortAsc, setSortAsc] = useState(false)
+  const chartThemeName = getChartThemeName(colorScheme)
+  const tokens = getChartTokens(colorScheme)
 
   useEffect(() => {
     let alive = true
@@ -708,8 +865,7 @@ export default function History() {
         agentGrandTotal += agent.total
       }
     }
-    const [topAgentName = 'No agent', topAgentTotal = 0] =
-      [...topAgentTotals.entries()].sort((a, b) => b[1] - a[1])[0] ?? []
+    const topAgentEntry = [...topAgentTotals.entries()].sort((a, b) => b[1] - a[1])[0]
     const focusShare = stats.turnCount > 0 ? stats.focusTurns / stats.turnCount : 0
     const activeDayRate = stats.activeDays / summary.periodDays
     return {
@@ -718,9 +874,9 @@ export default function History() {
       bestCalendarDay,
       focusShare,
       currentStreak,
-      topAgentName,
-      topAgentShare: agentGrandTotal > 0 ? topAgentTotal / agentGrandTotal : 0,
-      topAgentTotal,
+      topAgentName: topAgentEntry?.[0] ?? null,
+      topAgentShare: agentGrandTotal > 0 ? (topAgentEntry?.[1] ?? 0) / agentGrandTotal : 0,
+      topAgentTotal: topAgentEntry?.[1] ?? 0,
     }
   }, [stats, summary])
 
@@ -732,12 +888,12 @@ export default function History() {
     return (
       <PageShell className="py-8" fluid>
         <header>
-          <h1 className="font-heading text-2xl font-semibold">History</h1>
+          <h1 className="font-heading text-2xl font-semibold">{t('history.title')}</h1>
         </header>
         <div className="mt-8">
-          <h2 className="font-heading text-xl font-semibold">No history yet</h2>
+          <h2 className="font-heading text-xl font-semibold">{t('history.noHistoryYet')}</h2>
           <p className="mt-2 text-[13px] text-muted-foreground">
-            {error ?? 'Captured turns will appear here after your first completed session.'}
+            {error ?? t('history.noHistoryDescription')}
           </p>
         </div>
       </PageShell>
@@ -748,8 +904,8 @@ export default function History() {
     <PageShell className="flex flex-col gap-5 py-7 sm:px-7 sm:py-8" fluid>
       <header className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-[13px] text-muted-foreground">Retrospective analytics</p>
-          <h1 className="font-heading text-2xl font-semibold">History</h1>
+          <p className="text-[13px] text-muted-foreground">{t('history.retrospective')}</p>
+          <h1 className="font-heading text-2xl font-semibold">{t('history.title')}</h1>
         </div>
         <Tabs
           value={periodDays.toString()}
@@ -762,7 +918,7 @@ export default function History() {
                 value={period.toString()}
                 className="h-6 px-2.5 font-heading text-[11.5px] tracking-tight tabular-nums"
               >
-                {period}d
+                {formatPeriodLabel(period, locale)}
               </TabsTab>
             ))}
           </TabsList>
@@ -772,172 +928,214 @@ export default function History() {
       {stats && (
         <section className="grid gap-2 md:grid-cols-4">
           <StatTile
-            detail={formatDelta(summary.periodCompare.deltaRatio)}
-            label={`${summary.periodDays}-day total`}
-            value={formatDuration(stats.periodTotal)}
+            detail={formatDelta(summary.periodCompare.deltaRatio, t)}
+            label={formatPeriodTotalLabel(summary.periodDays, locale, t)}
+            value={formatDurationSummary(stats.periodTotal, locale)}
           />
           <StatTile
-            detail={`${stats.turnCount} turns · p75 ${formatDuration(stats.p75Turn)}`}
-            label="Median turn"
-            value={formatDuration(stats.medianTurn)}
+            detail={`${stats.turnCount} ${t('history.turns')} · p75 ${formatDurationSummary(stats.p75Turn, locale)}`}
+            label={t('history.medianTurn')}
+            value={formatDurationSummary(stats.medianTurn, locale)}
           />
           <StatTile
-            detail={`${Math.round(stats.shortTurnRate * 100)}% under 5m`}
-            label="Focus blocks"
+            detail={`${Math.round(stats.shortTurnRate * 100)}% ${t('history.underFive')}`}
+            label={t('history.focusBlocks')}
             value={`${stats.focusTurns}`}
           />
           <StatTile
-            detail={`${formatDuration(stats.peakHour.total)} · ${stats.topProject?.project ?? 'No project'} ${Math.round(stats.topProjectShare * 100)}%`}
-            label="Peak rhythm"
-            value={formatHourWindow(stats.peakHour.weekday, stats.peakHour.hour)}
+            detail={`${formatDurationSummary(stats.peakHour.total, locale)} · ${stats.topProject?.project ?? t('common.noProject')} ${Math.round(stats.topProjectShare * 100)}%`}
+            label={t('history.peakRhythm')}
+            value={formatHourWindow(stats.peakHour.weekday, stats.peakHour.hour, locale)}
           />
         </section>
       )}
 
       <DashboardPanel
-        title="Contribution heatmap"
-        description="Last 365 days, GitHub-style intensity"
+        title={t('history.contributionHeatmap')}
+        description={t('history.contributionHeatmapDescription')}
       >
         {insights && (
           <InsightBar
             items={[
-              { label: 'Active days', value: `${insights.activeCalendarDays} / 365` },
+              { label: t('history.activeDays'), value: `${insights.activeCalendarDays} / 365` },
               {
-                label: 'Current streak',
-                value: `${insights.currentStreak} days`,
+                label: t('history.currentStreak'),
+                value: `${insights.currentStreak} ${t('history.days')}`,
               },
               {
-                label: 'Best day',
-                value: `${insights.bestCalendarDay.date.slice(5)} · ${formatDuration(insights.bestCalendarDay.total)}`,
+                label: t('history.bestDay'),
+                value: `${insights.bestCalendarDay.date.slice(5)} · ${formatDurationSummary(insights.bestCalendarDay.total, locale)}`,
               },
             ]}
           />
         )}
-        <CalendarHeatmap summary={summary} />
+        <CalendarHeatmap
+          chartThemeName={chartThemeName}
+          locale={locale}
+          summary={summary}
+          tokens={tokens}
+        />
       </DashboardPanel>
 
-      <DashboardPanel title="Project trends" description="Daily stacked duration by project">
+      <DashboardPanel
+        title={t('history.projectTrends')}
+        description={t('history.projectTrendsDescription')}
+      >
         {stats && (
           <InsightBar
             items={[
               {
-                label: 'Change',
-                value: formatDelta(summary.periodCompare.deltaRatio),
+                label: t('history.change'),
+                value: formatDelta(summary.periodCompare.deltaRatio, t),
               },
               {
-                label: 'Active days',
+                label: t('history.activeDays'),
                 value: `${stats.activeDays} / ${summary.periodDays}`,
               },
               {
-                label: 'Best day',
-                value: `${stats.bestDay.date.slice(5)} · ${formatDuration(stats.bestDay.total)}`,
+                label: t('history.bestDay'),
+                value: `${stats.bestDay.date.slice(5)} · ${formatDurationSummary(stats.bestDay.total, locale)}`,
               },
             ]}
           />
         )}
-        <TrendChart summary={summary} />
+        <TrendChart
+          chartThemeName={chartThemeName}
+          locale={locale}
+          summary={summary}
+          t={t}
+          tokens={tokens}
+        />
       </DashboardPanel>
 
       <section className="grid gap-5 xl:grid-cols-2">
-        <DashboardPanel title="Project share" description="Where time went in the selected period">
+        <DashboardPanel
+          title={t('history.projectShare')}
+          description={t('history.projectShareDescription')}
+        >
           {stats && (
             <InsightBar
               items={[
                 {
-                  label: 'Top project',
-                  value: `${stats.topProject?.project ?? 'No project'} · ${formatPercent(stats.topProjectShare)}`,
+                  label: t('history.topProject'),
+                  value: `${stats.topProject?.project ?? t('common.noProject')} · ${formatPercent(stats.topProjectShare)}`,
                 },
                 {
-                  label: 'Avg active day',
-                  value: formatDuration(stats.averageActiveDay),
+                  label: t('history.avgActiveDay'),
+                  value: formatDurationSummary(stats.averageActiveDay, locale),
                 },
                 {
-                  label: 'Turns',
+                  label: t('history.turns'),
                   value: `${stats.turnCount}`,
                 },
               ]}
             />
           )}
-          <ProjectShareChart summary={summary} />
+          <ProjectShareChart
+            chartThemeName={chartThemeName}
+            locale={locale}
+            summary={summary}
+            tokens={tokens}
+          />
         </DashboardPanel>
 
-        <DashboardPanel title="Hourly rhythm" description="Weekday x hour intensity">
+        <DashboardPanel
+          title={t('history.hourlyRhythm')}
+          description={t('history.hourlyRhythmDescription')}
+        >
           {stats && (
             <InsightBar
               items={[
                 {
-                  label: 'Peak window',
-                  value: formatHourWindow(stats.peakHour.weekday, stats.peakHour.hour),
+                  label: t('history.peakWindow'),
+                  value: formatHourWindow(stats.peakHour.weekday, stats.peakHour.hour, locale),
                 },
                 {
-                  label: 'Peak total',
-                  value: formatDuration(stats.peakHour.total),
+                  label: t('history.peakTotal'),
+                  value: formatDurationSummary(stats.peakHour.total, locale),
                 },
                 {
-                  label: 'Best day',
+                  label: t('history.bestDay'),
                   value: stats.bestDay.date.slice(5) || '-',
                 },
               ]}
             />
           )}
-          <HourlyActivityHeatmap summary={summary} />
+          <HourlyActivityHeatmap
+            chartThemeName={chartThemeName}
+            locale={locale}
+            summary={summary}
+            tokens={tokens}
+          />
         </DashboardPanel>
       </section>
 
       <section className="grid gap-5 xl:grid-cols-2">
-        <DashboardPanel title="Turn length buckets" description="Fragmented turns vs focus blocks">
+        <DashboardPanel
+          title={t('history.turnLengthBuckets')}
+          description={t('history.turnLengthBucketsDescription')}
+        >
           {stats && insights && (
             <InsightBar
               items={[
                 {
-                  label: 'Focus share',
+                  label: t('history.focusShare'),
                   value: formatPercent(insights.focusShare),
                 },
                 {
-                  label: 'Fragmented',
+                  label: t('history.fragmented'),
                   value: formatPercent(stats.shortTurnRate),
                 },
                 {
-                  label: 'Median',
-                  value: formatDuration(stats.medianTurn),
+                  label: t('history.median'),
+                  value: formatDurationSummary(stats.medianTurn, locale),
                 },
               ]}
             />
           )}
-          <TurnLengthBuckets summary={summary} />
+          <TurnLengthBuckets
+            chartThemeName={chartThemeName}
+            locale={locale}
+            summary={summary}
+            t={t}
+            tokens={tokens}
+          />
         </DashboardPanel>
 
-        <DashboardPanel title="Agent contribution" description="Agent split inside top projects">
+        <DashboardPanel
+          title={t('history.agentContribution')}
+          description={t('history.agentContributionDescription')}
+        >
           {insights && (
             <InsightBar
               items={[
                 {
-                  label: 'Top agent',
-                  value: insights.topAgentName,
+                  label: t('history.topAgent'),
+                  value: insights.topAgentName ?? t('common.noAgent'),
                 },
                 {
-                  label: 'Share',
+                  label: t('history.share'),
                   value: formatPercent(insights.topAgentShare),
                 },
                 {
-                  label: 'Total',
-                  value: formatDuration(insights.topAgentTotal),
+                  label: t('history.total'),
+                  value: formatDurationSummary(insights.topAgentTotal, locale),
                 },
               ]}
             />
           )}
-          <AgentContributionBars summary={summary} />
+          <AgentContributionBars locale={locale} summary={summary} t={t} />
         </DashboardPanel>
       </section>
 
       <DashboardPanel
-        title="Project signals"
-        description="Total time, focus blocks, and median turn length"
+        title={t('history.projectSignals')}
+        description={t('history.projectSignalsDescription')}
       >
-        <TopProjectSignals summary={summary} />
+        <TopProjectSignals locale={locale} summary={summary} t={t} />
       </DashboardPanel>
 
-      <DashboardPanel title="Top projects">
+      <DashboardPanel title={t('history.topProjects')}>
         <Table className="text-[13px]">
           <TableHeader className="[&_tr]:border-border/35">
             <TableRow className="border-border/35">
@@ -949,12 +1147,12 @@ export default function History() {
                     type="button"
                   >
                     {key === 'project'
-                      ? 'Project'
+                      ? t('history.project')
                       : key === 'lastActive'
-                        ? 'Last Active'
+                        ? t('history.lastActive')
                         : key === 'total'
-                          ? 'Total'
-                          : 'Turns'}
+                          ? t('history.total')
+                          : t('history.turns')}
                     <SortIcon active={sortKey === key} asc={sortAsc} />
                   </button>
                 </TableHead>
@@ -966,12 +1164,14 @@ export default function History() {
               <TableRow className="border-border/25" key={row.project}>
                 <TableCell className="px-3 py-3">{row.project}</TableCell>
                 <TableCell className="px-3 py-3 font-heading tracking-tight tabular-nums">
-                  {formatDuration(row.total)}
+                  {formatDurationSummary(row.total, locale)}
                 </TableCell>
                 <TableCell className="px-3 py-3 font-heading tracking-tight tabular-nums">
                   {row.turns}
                 </TableCell>
-                <TableCell className="px-3 py-3">{formatLastActive(row.lastActive)}</TableCell>
+                <TableCell className="px-3 py-3">
+                  {formatShortDate(row.lastActive, locale)}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

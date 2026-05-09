@@ -4,37 +4,15 @@ import { motion } from 'motion/react'
 import { useEffect, useMemo, useState } from 'react'
 import { PageShell } from '@/components/PageShell'
 import { Spinner } from '@/components/ui/spinner'
+import { durationParts, durationUnit, formatClockTime, formatDurationFull } from '@/lib/format'
 import type { ActiveTurn, TodayLiveState } from '../../../shared/ipc-types'
 import { useDocumentVisible } from '../hooks/useDocumentVisible'
 import { useIpcQuery } from '../hooks/useIpcQuery'
+import { useI18n } from '../i18n'
 import { setTodayLiveState, todayLiveStateAtom } from '../store'
 
+type TFunction = ReturnType<typeof useI18n>['t']
 const TICK_MS = 1000
-
-function formatDurationParts(seconds: number): { h: number; m: number; s: number } {
-  const whole = Math.max(0, Math.floor(seconds))
-  return {
-    h: Math.floor(whole / 3600),
-    m: Math.floor((whole % 3600) / 60),
-    s: whole % 60,
-  }
-}
-
-function formatCompactDuration(seconds: number): string {
-  const whole = Math.max(0, Math.floor(seconds))
-  if (whole < 60) return `${whole}s`
-  if (whole < 3600) return `${Math.floor(whole / 60)}m ${whole % 60}s`
-  const h = Math.floor(whole / 3600)
-  const m = Math.floor((whole % 3600) / 60)
-  return `${h}h ${m}m`
-}
-
-function formatClock(ts: number): string {
-  return new Date(ts * 1000).toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
 
 function formatStableId(id: string): string {
   const uuid = id.match(/^([0-9a-f]{8})-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-([0-9a-f]{12})$/i)
@@ -58,8 +36,8 @@ function projectTotal(project: string, state: TodayLiveState, now: number): numb
   return completed + active
 }
 
-function LiveTimer({ seconds }: { seconds: number }) {
-  const { h, m, s } = formatDurationParts(seconds)
+function LiveTimer({ seconds, locale }: { seconds: number; locale: string }) {
+  const { h, m, s } = durationParts(seconds)
 
   return (
     <NumberFlowGroup>
@@ -67,8 +45,8 @@ function LiveTimer({ seconds }: { seconds: number }) {
         {h > 0 && (
           <NumberFlow
             className="duration-number-flow"
-            locales="en-US"
-            suffix="h"
+            locales={locale}
+            suffix={durationUnit('h', locale)}
             value={h}
             willChange
           />
@@ -76,16 +54,16 @@ function LiveTimer({ seconds }: { seconds: number }) {
         {(h > 0 || m > 0) && (
           <NumberFlow
             className="duration-number-flow"
-            locales="en-US"
-            suffix="m"
+            locales={locale}
+            suffix={durationUnit('m', locale)}
             value={m}
             willChange
           />
         )}
         <NumberFlow
           className="duration-number-flow"
-          locales="en-US"
-          suffix="s"
+          locales={locale}
+          suffix={durationUnit('s', locale)}
           value={s}
           willChange
         />
@@ -123,11 +101,15 @@ function TurnStage({
   state,
   now,
   compact,
+  locale,
+  t,
 }: {
   turn: ActiveTurn
   state: TodayLiveState
   now: number
   compact: boolean
+  locale: string
+  t: TFunction
 }) {
   const elapsed = activeSeconds(turn, state, now)
   const total = projectTotal(turn.project, state, now)
@@ -159,17 +141,29 @@ function TurnStage({
             <div className="mt-1 flex items-center gap-1.5 px-2">
               <span className="size-1.5 animate-pulse rounded-full bg-success" />
               <span className="text-[11px] font-medium tracking-wide text-success uppercase">
-                Live
+                {t('live.liveBadge')}
               </span>
             </div>
           </div>
         </div>
         <div className="flex min-w-0 flex-col gap-5 px-5 pt-0 pb-5">
-          <LiveTimer seconds={elapsed} />
+          <LiveTimer locale={locale} seconds={elapsed} />
           <div className="grid gap-2 md:grid-cols-3">
-            <Metric icon={ClockIcon} label="Started" value={formatClock(turn.started_at)} />
-            <Metric icon={TimerIcon} label="Project today" value={formatCompactDuration(total)} />
-            <Metric icon={FolderIcon} label="Session" value={formatStableId(turn.session_id)} />
+            <Metric
+              icon={ClockIcon}
+              label={t('live.started')}
+              value={formatClockTime(turn.started_at, locale)}
+            />
+            <Metric
+              icon={TimerIcon}
+              label={t('live.projectToday')}
+              value={formatDurationFull(total, locale)}
+            />
+            <Metric
+              icon={FolderIcon}
+              label={t('live.session')}
+              value={formatStableId(turn.session_id)}
+            />
           </div>
         </div>
       </div>
@@ -178,6 +172,7 @@ function TurnStage({
 }
 
 export default function Live() {
+  const { locale, t } = useI18n()
   const {
     data: liveState,
     error,
@@ -213,9 +208,7 @@ export default function Live() {
   if (!liveState) {
     return (
       <PageShell className="py-8" fluid>
-        <p className="text-[13px] text-muted-foreground">
-          {error ?? 'Unable to load data. Try reopening VibeTime.'}
-        </p>
+        <p className="text-[13px] text-muted-foreground">{error ?? t('live.unable')}</p>
       </PageShell>
     )
   }
@@ -228,10 +221,10 @@ export default function Live() {
             <ActivityIcon aria-hidden className="size-5 text-muted-foreground" />
           </div>
           <h1 className="mt-5 font-heading text-3xl font-semibold leading-none text-foreground">
-            No active turn
+            {t('live.noActiveTurn')}
           </h1>
           <p className="mt-3 max-w-sm text-[13px] text-muted-foreground leading-relaxed">
-            Start a coding-agent turn and it will appear here.
+            {t('live.noActiveTurnDescription')}
           </p>
         </div>
       </PageShell>
@@ -242,11 +235,11 @@ export default function Live() {
     <PageShell className="flex h-full min-h-[calc(100vh-2rem)] flex-col gap-5 p-5" fluid>
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-[13px] text-muted-foreground">Active now</p>
-          <h1 className="font-heading text-2xl font-semibold">Live</h1>
+          <p className="text-[13px] text-muted-foreground">{t('live.activeNow')}</p>
+          <h1 className="font-heading text-2xl font-semibold">{t('live.title')}</h1>
         </div>
         <span className="font-heading tracking-tight text-[13px] text-muted-foreground tabular-nums">
-          {turns.length} running
+          {turns.length} {t('live.running')}
         </span>
       </div>
       <div className="grid min-h-0 flex-1 content-start gap-4">
@@ -254,8 +247,10 @@ export default function Live() {
           <TurnStage
             key={turn.turn_id}
             compact={turns.length > 1}
+            locale={locale}
             now={now}
             state={liveState}
+            t={t}
             turn={turn}
           />
         ))}

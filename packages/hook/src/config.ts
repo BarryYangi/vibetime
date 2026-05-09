@@ -16,7 +16,9 @@ export interface VibetimeConfig {
     timezone: string
   }
   app: {
+    language: 'en' | 'zh'
     open_at_login: boolean
+    theme: 'system' | 'light' | 'dark'
     last_view: string
   }
 }
@@ -27,9 +29,23 @@ const DEFAULT_CONFIG: VibetimeConfig = {
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   },
   app: {
+    language: 'en',
     open_at_login: false,
+    theme: 'system',
     last_view: '/',
   },
+}
+
+function readEnum<T extends string>(value: unknown, values: readonly T[], fallback: T): T {
+  return typeof value === 'string' && values.includes(value as T) ? (value as T) : fallback
+}
+
+function readBoolean(value: unknown, fallback: boolean): boolean {
+  return typeof value === 'boolean' ? value : fallback
+}
+
+function readString(value: unknown, fallback: string): string {
+  return typeof value === 'string' ? value : fallback
 }
 
 /**
@@ -50,11 +66,13 @@ export function readConfig(): VibetimeConfig {
     return {
       projects: config.projects ?? {},
       display: {
-        timezone: config.display?.timezone ?? DEFAULT_CONFIG.display.timezone,
+        timezone: readString(config.display?.timezone, DEFAULT_CONFIG.display.timezone),
       },
       app: {
-        open_at_login: config.app?.open_at_login ?? DEFAULT_CONFIG.app.open_at_login,
-        last_view: config.app?.last_view ?? DEFAULT_CONFIG.app.last_view,
+        language: readEnum(config.app?.language, ['en', 'zh'], DEFAULT_CONFIG.app.language),
+        open_at_login: readBoolean(config.app?.open_at_login, DEFAULT_CONFIG.app.open_at_login),
+        theme: readEnum(config.app?.theme, ['system', 'light', 'dark'], DEFAULT_CONFIG.app.theme),
+        last_view: readString(config.app?.last_view, DEFAULT_CONFIG.app.last_view),
       },
     }
   } catch {
@@ -79,16 +97,36 @@ function serializeToml(config: VibetimeConfig): string {
   const lines: string[] = []
   lines.push('[projects]')
   for (const [key, value] of Object.entries(config.projects)) {
-    lines.push(`${key} = "${value}"`)
+    lines.push(`"${escapeTomlString(key)}" = "${escapeTomlString(value)}"`)
   }
   lines.push('')
   lines.push('[display]')
-  lines.push(`timezone = "${config.display.timezone}"`)
+  lines.push(`timezone = "${escapeTomlString(config.display.timezone)}"`)
   lines.push('')
   lines.push('[app]')
+  lines.push(`language = "${config.app.language}"`)
   lines.push(`open_at_login = ${config.app.open_at_login}`)
-  lines.push(`last_view = "${config.app.last_view}"`)
+  lines.push(`theme = "${config.app.theme}"`)
+  lines.push(`last_view = "${escapeTomlString(config.app.last_view)}"`)
   return `${lines.join('\n')}\n`
+}
+
+function escapeTomlString(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
+function unescapeTomlString(value: string): string {
+  return value.replace(/\\"/g, '"').replace(/\\\\/g, '\\')
+}
+
+function parseTomlValue(rawValue: string): string | boolean {
+  const value = rawValue.trim()
+  if (value === 'true') return true
+  if (value === 'false') return false
+  if (value.startsWith('"') && value.endsWith('"')) {
+    return unescapeTomlString(value.slice(1, -1))
+  }
+  return value
 }
 
 /**
@@ -114,12 +152,12 @@ function parseToml(raw: string): Partial<VibetimeConfig> {
       continue
     }
 
-    const kvMatch = trimmed.match(/^(\w+)\s*=\s*"?(.+?)"?$/)
+    const kvMatch = trimmed.match(/^(?:"((?:\\.|[^"\\])*)"|([A-Za-z0-9_-]+))\s*=\s*(.+)$/)
     if (kvMatch && currentSectionName) {
-      const key = kvMatch[1]
-      const rawValue = kvMatch[2]?.replace(/^"|"$/g, '')
+      const key = kvMatch[1] ? unescapeTomlString(kvMatch[1]) : kvMatch[2]
+      const rawValue = kvMatch[3]
       if (!key || rawValue === undefined) continue
-      currentSection[key] = rawValue === 'true' ? true : rawValue === 'false' ? false : rawValue
+      currentSection[key] = parseTomlValue(rawValue)
     }
   }
 

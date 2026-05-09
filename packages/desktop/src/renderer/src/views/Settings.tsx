@@ -3,25 +3,40 @@ import { useEffect, useId, useState } from 'react'
 import { PageShell } from '@/components/PageShell'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
-import type { AppPreferences } from '../../../shared/ipc-types'
+import type { AppLanguage, AppPreferences, AppTheme } from '../../../shared/ipc-types'
+import { APP_LANGUAGES, type TranslationKey, useI18n } from '../i18n'
 import {
   agentStatusAtom,
   appPreferencesAtom,
   cliStatusAtom,
-  configAtom,
   refreshAgentStatus,
   refreshCliStatus,
   store,
 } from '../store'
 
 const AGENTS = [
-  { id: 'claude-code', name: 'Claude Code', description: 'Anthropic Claude Code CLI' },
-  { id: 'codex', name: 'Codex', description: 'OpenAI Codex CLI' },
-  { id: 'cursor', name: 'Cursor', description: 'Cursor IDE' },
-  { id: 'gemini-cli', name: 'Gemini CLI', description: 'Google Gemini CLI' },
+  { id: 'claude-code', name: 'Claude Code', descriptionKey: 'settings.agents.claudeDescription' },
+  { id: 'codex', name: 'Codex', descriptionKey: 'settings.agents.codexDescription' },
+  { id: 'cursor', name: 'Cursor', descriptionKey: 'settings.agents.cursorDescription' },
+  { id: 'gemini-cli', name: 'Gemini CLI', descriptionKey: 'settings.agents.geminiDescription' },
 ] as const
+
+const THEME_OPTIONS: Array<{ labelKey: TranslationKey; value: AppTheme }> = [
+  { labelKey: 'settings.theme.system', value: 'system' },
+  { labelKey: 'settings.theme.light', value: 'light' },
+  { labelKey: 'settings.theme.dark', value: 'dark' },
+]
+
+const LANGUAGE_OPTIONS: Array<{
+  label: string
+  value: AppLanguage
+}> = APP_LANGUAGES.map((value) => ({
+  label: value === 'zh' ? '中文' : 'English',
+  value,
+}))
 
 function SettingsSection({
   title,
@@ -53,7 +68,114 @@ function SettingsRow({ children, className }: { children: React.ReactNode; class
   )
 }
 
+function GeneralSettingsSection() {
+  const themeLabelId = useId()
+  const languageLabelId = useId()
+  const { t } = useI18n()
+  const preferences = useAtomValue(appPreferencesAtom)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const updatePreferences = async (patch: Partial<AppPreferences>) => {
+    setSaving(true)
+    setError(null)
+    try {
+      const result = await window.api.invoke('updateAppPreferences', patch)
+      if (result.ok) {
+        store.set(appPreferencesAtom, result.data)
+      } else {
+        setError(result.error)
+      }
+    } catch (err) {
+      setError(String(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const theme = preferences?.theme ?? 'system'
+  const language = preferences?.language ?? 'en'
+  const themeItems = THEME_OPTIONS.map((item) => ({
+    label: t(item.labelKey),
+    value: item.value,
+  }))
+
+  return (
+    <SettingsSection
+      title={t('settings.general.title')}
+      description={t('settings.general.description')}
+    >
+      <SettingsRow>
+        <div className="min-w-0 flex-1">
+          <div className="text-[14px] font-medium text-foreground" id={themeLabelId}>
+            {t('settings.general.theme')}
+          </div>
+          <p className="mt-1 text-[13px] text-muted-foreground leading-snug">
+            {t('settings.general.themeDescription')}
+          </p>
+        </div>
+        <Select
+          aria-labelledby={themeLabelId}
+          disabled={!preferences || saving}
+          items={themeItems}
+          onValueChange={(value) => {
+            if (value) void updatePreferences({ theme: value as AppTheme })
+          }}
+          value={theme}
+        >
+          <SelectTrigger className="w-40 shrink-0">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectPopup>
+            {themeItems.map((item) => (
+              <SelectItem key={item.value} value={item.value}>
+                {item.label}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+      </SettingsRow>
+      <SettingsRow>
+        <div className="min-w-0 flex-1">
+          <div className="text-[14px] font-medium text-foreground" id={languageLabelId}>
+            {t('settings.general.language')}
+          </div>
+          <p className="mt-1 text-[13px] text-muted-foreground leading-snug">
+            {t('settings.general.languageDescription')}
+          </p>
+        </div>
+        <Select
+          aria-labelledby={languageLabelId}
+          disabled={!preferences || saving}
+          items={LANGUAGE_OPTIONS}
+          onValueChange={(value) => {
+            if (value) void updatePreferences({ language: value as AppLanguage })
+          }}
+          value={language}
+        >
+          <SelectTrigger className="w-40 shrink-0">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectPopup>
+            {LANGUAGE_OPTIONS.map((item) => (
+              <SelectItem key={item.value} value={item.value}>
+                {item.label}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+      </SettingsRow>
+      {error && (
+        <div className="bg-destructive/5 px-4 py-3 text-[13px] text-destructive-foreground">
+          {error}
+        </div>
+      )}
+    </SettingsSection>
+  )
+}
+
 function ConnectAgents() {
+  const { t } = useI18n()
   const statuses = useAtomValue(agentStatusAtom)
   const [activeAction, setActiveAction] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -92,10 +214,10 @@ function ConnectAgents() {
 
   return (
     <SettingsSection
-      title="Agent Hooks"
-      description="Manage VibeTime hooks for your AI agents without touching other configurations."
+      title={t('settings.agents.title')}
+      description={t('settings.agents.description')}
     >
-      {AGENTS.map(({ id, name, description }) => {
+      {AGENTS.map(({ id, name, descriptionKey }) => {
         const status = statuses?.find((s) => s.agent === id)
         const statusKnown = status !== undefined
         const isInstalled = status?.installed ?? false
@@ -111,7 +233,7 @@ function ConnectAgents() {
                 {name}
               </div>
               <div className="mt-1 text-[13px] text-muted-foreground leading-snug">
-                {description}
+                {t(descriptionKey)}
               </div>
             </div>
             <div className="flex shrink-0 items-center justify-end">
@@ -136,6 +258,7 @@ function ConnectAgents() {
 
 function AppPreferencesSection() {
   const openAtLoginLabelId = useId()
+  const { t } = useI18n()
   const preferences = useAtomValue(appPreferencesAtom)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -155,14 +278,17 @@ function AppPreferencesSection() {
   const openAtLogin = preferences?.openAtLogin ?? false
 
   return (
-    <SettingsSection title="App Startup" description="Control the VibeTime menubar lifecycle.">
+    <SettingsSection
+      title={t('settings.startup.title')}
+      description={t('settings.startup.description')}
+    >
       <SettingsRow>
         <div className="min-w-0 flex-1">
           <div className="text-[14px] font-medium text-foreground" id={openAtLoginLabelId}>
-            Open at login
+            {t('settings.startup.openAtLogin')}
           </div>
           <p className="mt-1 text-[13px] text-muted-foreground leading-snug">
-            Keep VibeTime available in the menu bar after sign in.
+            {t('settings.startup.openAtLoginDescription')}
           </p>
         </div>
         <Switch
@@ -187,6 +313,7 @@ function displayHomePath(path: string): string {
 
 function CliSection() {
   const cliLabelId = useId()
+  const { t } = useI18n()
   const status = useAtomValue(cliStatusAtom)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -207,19 +334,16 @@ function CliSection() {
   const installed = status?.installed ?? false
 
   return (
-    <SettingsSection
-      title="Command Line"
-      description="Expose the stable VibeTime command in your shell."
-    >
+    <SettingsSection title={t('settings.cli.title')} description={t('settings.cli.description')}>
       <SettingsRow>
         <div className="min-w-0 flex-1">
           <div className="text-[14px] font-medium text-foreground" id={cliLabelId}>
-            Install CLI tool
+            {t('settings.cli.install')}
           </div>
           <p className="mt-1 break-all text-[13px] text-muted-foreground leading-snug">
             {status
               ? `${displayHomePath(status.linkPath)} → ${displayHomePath(status.targetPath)}`
-              : 'Checking CLI link...'}
+              : t('settings.cli.checking')}
           </p>
         </div>
         <Switch
@@ -232,14 +356,15 @@ function CliSection() {
 
       {status && !status.binDirInPath && (
         <div className="bg-muted/20 px-4 py-3 text-[13px] text-muted-foreground">
-          Add <span className="font-mono text-foreground">{displayHomePath(status.binDir)}</span> to
-          PATH to run vibetime from any shell.
+          {t('settings.cli.addPathPrefix')}{' '}
+          <span className="font-mono text-foreground">{displayHomePath(status.binDir)}</span>{' '}
+          {t('settings.cli.addPathSuffix')}
         </div>
       )}
 
       {status?.conflict && (
         <div className="bg-destructive/5 px-4 py-3 text-[13px] text-destructive-foreground">
-          {displayHomePath(status.linkPath)} already exists and is not managed by VibeTime.
+          {displayHomePath(status.linkPath)} {t('settings.cli.conflictSuffix')}
         </div>
       )}
 
@@ -253,15 +378,16 @@ function CliSection() {
 }
 
 function ProjectAliases() {
+  const { t } = useI18n()
   const [aliases, setAliases] = useState<Record<string, string>>({})
   const [newKey, setNewKey] = useState('')
   const [newValue, setNewValue] = useState('')
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     window.api.invoke('getConfig').then((result) => {
       if (result.ok) {
-        store.set(configAtom, result.data)
         setAliases(result.data.projects ?? {})
       }
     })
@@ -269,12 +395,17 @@ function ProjectAliases() {
 
   const handleSave = async () => {
     setSaving(true)
-    const result = await window.api.invoke('updateConfig', { projects: aliases })
-    if (result.ok) {
-      const configResult = await window.api.invoke('getConfig')
-      if (configResult.ok) store.set(configAtom, configResult.data)
+    setError(null)
+    try {
+      const result = await window.api.invoke('updateConfig', { projects: aliases })
+      if (!result.ok) {
+        setError(result.error)
+      }
+    } catch (err) {
+      setError(String(err))
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
   }
 
   const handleAdd = () => {
@@ -295,8 +426,8 @@ function ProjectAliases() {
 
   return (
     <SettingsSection
-      title="Project Aliases"
-      description="Map raw project directory names to display names. Changes are saved to config.toml."
+      title={t('settings.aliases.title')}
+      description={t('settings.aliases.description')}
     >
       <div className="flex flex-col gap-3 p-4">
         {Object.entries(aliases).map(([key, value]) => (
@@ -317,27 +448,27 @@ function ProjectAliases() {
               variant="ghost"
               className="text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
             >
-              Remove
+              {t('common.remove')}
             </Button>
           </div>
         ))}
         {Object.keys(aliases).length === 0 && (
           <p className="py-2 text-[13px] italic text-muted-foreground">
-            No aliases configured yet.
+            {t('settings.aliases.empty')}
           </p>
         )}
 
         <div className="mt-2 flex flex-col gap-2 sm:flex-row">
           <Input
             type="text"
-            placeholder="Directory name"
+            placeholder={t('settings.aliases.directoryPlaceholder')}
             value={newKey}
             onChange={(e) => setNewKey(e.target.value)}
             className="flex-1"
           />
           <Input
             type="text"
-            placeholder="Display name"
+            placeholder={t('settings.aliases.displayPlaceholder')}
             value={newValue}
             onChange={(e) => setNewValue(e.target.value)}
             className="flex-1"
@@ -348,13 +479,14 @@ function ProjectAliases() {
             variant="secondary"
             className="shrink-0"
           >
-            Add
+            {t('common.add')}
           </Button>
         </div>
+        {error && <p className="text-[13px] text-destructive-foreground">{error}</p>}
       </div>
       <div className="bg-muted/20 px-4 py-3">
         <Button onClick={handleSave} disabled={saving} loading={saving}>
-          Save Changes
+          {t('common.saveChanges')}
         </Button>
       </div>
     </SettingsSection>
@@ -362,6 +494,7 @@ function ProjectAliases() {
 }
 
 function About() {
+  const { t } = useI18n()
   const [version, setVersion] = useState('...')
   const [dbPath, setDbPath] = useState('...')
 
@@ -377,20 +510,20 @@ function About() {
   return (
     <section className="space-y-3 pt-6 border-t border-border/40">
       <div className="px-1">
-        <h2 className="text-[14px] font-semibold text-foreground">About VibeTime</h2>
+        <h2 className="text-[14px] font-semibold text-foreground">{t('settings.about.title')}</h2>
         <p className="mt-1 text-[13px] text-muted-foreground leading-snug">
-          Build info and local data storage.
+          {t('settings.about.description')}
         </p>
       </div>
       <div className="px-1 mt-4">
         <dl className="grid grid-cols-[8rem_1fr] gap-y-3 text-[13px]">
-          <dt className="text-muted-foreground">Version</dt>
+          <dt className="text-muted-foreground">{t('settings.about.version')}</dt>
           <dd className="font-mono text-foreground font-medium">{version}</dd>
 
-          <dt className="text-muted-foreground">Database</dt>
+          <dt className="text-muted-foreground">{t('settings.about.database')}</dt>
           <dd className="break-all font-mono text-muted-foreground">{dbPath}</dd>
 
-          <dt className="text-muted-foreground">License</dt>
+          <dt className="text-muted-foreground">{t('settings.about.license')}</dt>
           <dd className="text-foreground">MIT</dd>
         </dl>
       </div>
@@ -399,6 +532,7 @@ function About() {
 }
 
 export default function Settings() {
+  const { t } = useI18n()
   const preferences = useAtomValue(appPreferencesAtom)
   const agentStatus = useAtomValue(agentStatusAtom)
   const cliStatus = useAtomValue(cliStatusAtom)
@@ -413,12 +547,15 @@ export default function Settings() {
   return (
     <PageShell prose className="space-y-10 pb-12">
       <header className="px-1">
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Settings</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          {t('settings.title')}
+        </h1>
         <p className="mt-1.5 text-[13px] text-muted-foreground leading-snug">
-          Manage your app preferences, CLI tools, and agent hooks.
+          {t('settings.description')}
         </p>
       </header>
       <div className="flex flex-col gap-10">
+        <GeneralSettingsSection />
         <AppPreferencesSection />
         <CliSection />
         <ConnectAgents />

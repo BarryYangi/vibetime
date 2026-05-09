@@ -1,9 +1,12 @@
+import { useAtomValue } from 'jotai'
 import { OverlayScrollbarsComponent } from 'overlayscrollbars-react'
 import { lazy, Suspense, useEffect } from 'react'
 import { HashRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
+import { useResolvedColorScheme } from './appearance'
 import Sidebar from './components/Sidebar'
-import { handlePush, prefetchSettingsData } from './store'
+import { APP_LOCALES, i18n } from './i18n'
+import { appPreferencesAtom, handlePush, prefetchSettingsData } from './store'
 import Live from './views/Live'
 import Settings from './views/Settings'
 import Today from './views/Today'
@@ -63,10 +66,28 @@ function AppRoutes() {
 }
 
 export default function App() {
+  const preferences = useAtomValue(appPreferencesAtom)
+  const colorScheme = useResolvedColorScheme()
+
   useEffect(() => {
     prefetchSettingsData()
     return window.api.onPush(handlePush)
   }, [])
+
+  useEffect(() => {
+    const root = document.documentElement
+    const theme = preferences?.theme ?? 'system'
+    const language = preferences?.language ?? 'en'
+
+    root.classList.toggle('dark', colorScheme === 'dark')
+    root.dataset.theme = theme
+    root.dataset.resolvedTheme = colorScheme
+    root.lang = language
+    root.dataset.locale = APP_LOCALES[language]
+    if (i18n.language !== language) {
+      void i18n.changeLanguage(language)
+    }
+  }, [colorScheme, preferences?.language, preferences?.theme])
 
   return (
     <HashRouter>

@@ -2,19 +2,22 @@ import { BarChart3Icon, CalendarDaysIcon, RadioIcon, SettingsIcon } from 'lucide
 import { NavLink } from 'react-router-dom'
 import { buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { useI18n } from '../i18n'
 
 const navItems = [
-  { to: '/', label: 'Today', icon: BarChart3Icon },
-  { to: '/live', label: 'Live', icon: RadioIcon },
-  { to: '/history', label: 'History', icon: CalendarDaysIcon },
-  { to: '/settings', label: 'Settings', icon: SettingsIcon },
-]
+  { to: '/', labelKey: 'nav.today', icon: BarChart3Icon },
+  { to: '/live', labelKey: 'nav.live', icon: RadioIcon },
+  { to: '/history', labelKey: 'nav.history', icon: CalendarDaysIcon },
+  { to: '/settings', labelKey: 'nav.settings', icon: SettingsIcon },
+] as const
 
 type SidebarProps = {
   className?: string
 }
 
 export default function Sidebar({ className }: SidebarProps) {
+  const { t } = useI18n()
+
   return (
     <aside
       className={cn('flex w-[13rem] shrink-0 flex-col items-stretch py-3 text-left', className)}
@@ -25,7 +28,7 @@ export default function Sidebar({ className }: SidebarProps) {
         </p>
       </div>
       <nav className="electron-no-drag flex flex-1 flex-col gap-1 pl-0 pr-1">
-        {navItems.map(({ to, label, icon: Icon }) => (
+        {navItems.map(({ to, labelKey, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
@@ -39,7 +42,7 @@ export default function Sidebar({ className }: SidebarProps) {
             }
           >
             <Icon aria-hidden="true" className="size-[18px]" />
-            <span className="leading-none">{label}</span>
+            <span className="leading-none">{t(labelKey)}</span>
           </NavLink>
         ))}
       </nav>

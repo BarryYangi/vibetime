@@ -8,8 +8,14 @@ import {
   uninstallAgent,
   uninstallUserCli,
 } from '@vibetime/hook/install'
-import { app, ipcMain } from 'electron'
-import type { AppPreferences, IpcResult, VibetimeConfig } from '../shared/ipc-types.js'
+import { app, ipcMain, nativeTheme } from 'electron'
+import type {
+  AppPreferences,
+  HistoryPeriodDays,
+  IpcResult,
+  VibetimeConfig,
+} from '../shared/ipc-types.js'
+import { APP_LANGUAGES, APP_THEMES, HISTORY_PERIODS } from '../shared/ipc-types.js'
 import {
   queryAgentStatus,
   queryHistorySummary,
@@ -20,7 +26,9 @@ import {
 import { normalizeAppRoute } from './window-security.js'
 
 const VALID_AGENTS = new Set(['claude-code', 'codex', 'cursor', 'gemini-cli'])
-const VALID_HISTORY_PERIODS = new Set([7, 30, 90, 365])
+const VALID_HISTORY_PERIODS = new Set<number>(HISTORY_PERIODS)
+const VALID_APP_LANGUAGES = new Set<string>(APP_LANGUAGES)
+const VALID_APP_THEMES = new Set<string>(APP_THEMES)
 
 function assertValidAgent(agent: unknown): asserts agent is string {
   if (typeof agent !== 'string' || !VALID_AGENTS.has(agent)) {
@@ -38,14 +46,32 @@ function mergeConfig(current: VibetimeConfig, patch: Partial<VibetimeConfig>): V
 
 function appPreferencesFromConfig(config: VibetimeConfig): AppPreferences {
   return {
+    language: config.app.language,
     openAtLogin: app.getLoginItemSettings().openAtLogin,
+    theme: config.app.theme,
     lastView: config.app.last_view,
   }
 }
 
-function assertValidHistoryArgs(args: unknown): asserts args is { periodDays: 7 | 30 | 90 | 365 } {
+function normalizeAppLanguage(language: unknown, fallback: AppPreferences['language']) {
+  return typeof language === 'string' && VALID_APP_LANGUAGES.has(language)
+    ? (language as AppPreferences['language'])
+    : fallback
+}
+
+function normalizeAppTheme(theme: unknown, fallback: AppPreferences['theme']) {
+  return typeof theme === 'string' && VALID_APP_THEMES.has(theme)
+    ? (theme as AppPreferences['theme'])
+    : fallback
+}
+
+function applyNativeTheme(theme: AppPreferences['theme']) {
+  nativeTheme.themeSource = theme
+}
+
+function assertValidHistoryArgs(args: unknown): asserts args is { periodDays: HistoryPeriodDays } {
   const periodDays = (args as { periodDays?: unknown } | undefined)?.periodDays
-  if (!VALID_HISTORY_PERIODS.has(periodDays as 7 | 30 | 90 | 365)) {
+  if (typeof periodDays !== 'number' || !VALID_HISTORY_PERIODS.has(periodDays)) {
     throw new Error('Invalid history period')
   }
 }
@@ -119,11 +145,14 @@ export function registerIpcHandlers(
   ipcMain.handle('getAppPreferences', async (): Promise<IpcResult<AppPreferences>> => {
     try {
       const current = readConfig()
+      applyNativeTheme(current.app.theme)
       const openAtLogin = app.getLoginItemSettings().openAtLogin
+      let next = current
       if (current.app.open_at_login !== openAtLogin) {
-        writeConfig(mergeConfig(current, { app: { ...current.app, open_at_login: openAtLogin } }))
+        next = mergeConfig(current, { app: { ...current.app, open_at_login: openAtLogin } })
+        writeConfig(next)
       }
-      return { ok: true, data: appPreferencesFromConfig(readConfig()) }
+      return { ok: true, data: appPreferencesFromConfig(next) }
     } catch (err) {
       return { ok: false, error: String(err) }
     }
@@ -140,7 +169,9 @@ export function registerIpcHandlers(
         const openAtLogin = app.getLoginItemSettings().openAtLogin
         const next = mergeConfig(current, {
           app: {
+            language: normalizeAppLanguage(preferences.language, current.app.language),
             open_at_login: openAtLogin,
+            theme: normalizeAppTheme(preferences.theme, current.app.theme),
             last_view:
               preferences.lastView === undefined
                 ? current.app.last_view
@@ -148,6 +179,9 @@ export function registerIpcHandlers(
           },
         })
         writeConfig(next)
+        if (preferences.theme !== undefined) {
+          applyNativeTheme(next.app.theme)
+        }
         return { ok: true, data: appPreferencesFromConfig(next) }
       } catch (err) {
         return { ok: false, error: String(err) }

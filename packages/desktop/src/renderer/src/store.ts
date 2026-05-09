@@ -7,13 +7,11 @@ import type {
   IpcPushEvent,
   MenubarState,
   TodayLiveState,
-  VibetimeConfig,
 } from '../../shared/ipc-types'
 
 export const store = createStore()
 
 export const todayLiveStateAtom = atom<TodayLiveState | null>(null)
-export const configAtom = atom<VibetimeConfig | null>(null)
 export const historySummaryAtom = atom<HistorySummary | null>(null)
 export const menubarStateAtom = atom<MenubarState | null>(null)
 export const appPreferencesAtom = atom<AppPreferences | null>(null)

@@ -3,54 +3,49 @@ import { useEffect, useState } from 'react'
 import { PageShell } from '@/components/PageShell'
 import { getAgentTheme, StackedProgress } from '@/components/StackedProgress'
 import { Spinner } from '@/components/ui/spinner'
+import { durationParts, durationUnit, formatDurationFull } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { ActiveTurn } from '../../../shared/ipc-types'
 import { useDocumentVisible } from '../hooks/useDocumentVisible'
 import { useIpcQuery } from '../hooks/useIpcQuery'
+import { useI18n } from '../i18n'
 import { refreshTodayLiveState, setTodayLiveState, todayLiveStateAtom } from '../store'
 
-function formatDuration(seconds: number): string {
-  const wholeSeconds = Math.max(0, Math.floor(seconds))
-  if (wholeSeconds < 60) return `${wholeSeconds}s`
-  if (wholeSeconds < 3600) {
-    const minutes = Math.floor(wholeSeconds / 60)
-    const secs = wholeSeconds % 60
-    return `${minutes}m${secs}s`
-  }
-  const h = Math.floor(wholeSeconds / 3600)
-  const m = Math.floor((wholeSeconds % 3600) / 60)
-  const s = wholeSeconds % 60
-  return `${h}h${m}m${s}s`
-}
+type TFunction = ReturnType<typeof useI18n>['t']
 
 const durationFlowClass =
   'inline-flex max-w-full items-baseline overflow-hidden font-heading font-semibold tabular-nums leading-none tracking-tight'
 const ACTIVE_REFRESH_INTERVAL_MS = 1000
 
-function DurationSegment({ value, unit }: { value: number; unit: string }) {
+function DurationSegment({
+  value,
+  unit,
+  locale,
+}: {
+  value: number
+  unit: 'h' | 'm' | 's'
+  locale: string
+}) {
   return (
     <NumberFlow
       className="duration-number-flow"
-      locales="en-US"
-      suffix={unit}
+      locales={locale}
+      suffix={durationUnit(unit, locale)}
       value={value}
       willChange
     />
   )
 }
 
-function TotalDurationFlow({ seconds }: { seconds: number }) {
-  const s = Math.max(0, Math.floor(seconds))
-  const h = Math.floor(s / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  const sec = s % 60
+function TotalDurationFlow({ seconds, locale }: { seconds: number; locale: string }) {
+  const { h, m, s } = durationParts(seconds)
 
   return (
     <NumberFlowGroup>
       <span className={durationFlowClass}>
-        {h > 0 && <DurationSegment unit="h" value={h} />}
-        {(h > 0 || m > 0) && <DurationSegment unit="m" value={m} />}
-        <DurationSegment unit="s" value={sec} />
+        {h > 0 && <DurationSegment locale={locale} unit="h" value={h} />}
+        {(h > 0 || m > 0) && <DurationSegment locale={locale} unit="m" value={m} />}
+        <DurationSegment locale={locale} unit="s" value={s} />
       </span>
     </NumberFlowGroup>
   )
@@ -72,12 +67,16 @@ function ProjectBar({
   active,
   agents,
   todayTotal,
+  locale,
+  t,
 }: {
   name: string
   completed: number
   active: number
   agents: Array<{ agent: string; completed: number; active: number }>
   todayTotal: number
+  locale: string
+  t: TFunction
 }) {
   const total = completed + active
   const share = todayTotal > 0 ? total / todayTotal : 0
@@ -91,7 +90,7 @@ function ProjectBar({
       label: a.agent,
       value: agentTotal,
       colorClass: theme.bg,
-      tooltip: `${a.agent}: ${formatDuration(agentTotal)} (${Math.round(agentPct)}% of project)`,
+      tooltip: `${a.agent}: ${formatDurationFull(agentTotal, locale)} (${Math.round(agentPct)}% ${t('today.ofProject')})`,
     }
   })
 
@@ -103,7 +102,7 @@ function ProjectBar({
         </span>
         <div className="flex shrink-0 items-baseline gap-2 text-right">
           <span className="font-heading text-[13px] font-medium text-foreground/80 tabular-nums tracking-tight">
-            {formatDuration(total)}
+            {formatDurationFull(total, locale)}
           </span>
           <span className="min-w-9 font-heading text-[11px] text-muted-foreground/50 tabular-nums tracking-tight">
             {formatPercent(share)}
@@ -124,7 +123,7 @@ function ProjectBar({
                 <span className={cn('font-medium transition-colors', theme.text)}>{agent}</span>
                 <span className="mx-1.5 text-muted-foreground/75">·</span>
                 <span className="font-heading text-muted-foreground/70 tabular-nums tracking-tight">
-                  {formatDuration(agentCompleted + agentActive)}
+                  {formatDurationFull(agentCompleted + agentActive, locale)}
                 </span>
               </span>
             )
@@ -149,6 +148,7 @@ function StatTile({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 export default function Today() {
+  const { locale, t } = useI18n()
   const {
     data: liveState,
     error,
@@ -195,9 +195,11 @@ export default function Today() {
     return (
       <PageShell className="py-7 sm:py-8" fluid>
         <header className="space-y-1">
-          <h1 className="font-heading font-semibold text-2xl tracking-[-0.02em]">Today</h1>
+          <h1 className="font-heading font-semibold text-2xl tracking-[-0.02em]">
+            {t('today.title')}
+          </h1>
           <p className="text-[13px] text-muted-foreground leading-snug">
-            {error ?? 'Unable to load today summary.'}
+            {error ?? t('today.unable')}
           </p>
         </header>
       </PageShell>
@@ -276,7 +278,7 @@ export default function Today() {
   const activeProjectCount = projects.length
   const { date } = completed
 
-  const displayDate = new Date(`${date}T00:00:00`).toLocaleDateString('en-US', {
+  const displayDate = new Date(`${date}T00:00:00`).toLocaleDateString(locale, {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
@@ -287,9 +289,13 @@ export default function Today() {
       <PageShell className="py-7 sm:py-8" fluid>
         <header className="space-y-1">
           <p className="text-[13px] text-muted-foreground leading-snug">{displayDate}</p>
-          <h1 className="font-heading font-semibold text-2xl tracking-[-0.02em]">Today</h1>
+          <h1 className="font-heading font-semibold text-2xl tracking-[-0.02em]">
+            {t('today.title')}
+          </h1>
         </header>
-        <p className="mt-5 text-[13px] text-muted-foreground leading-relaxed">No activity today.</p>
+        <p className="mt-5 text-[13px] text-muted-foreground leading-relaxed">
+          {t('today.noActivity')}
+        </p>
       </PageShell>
     )
   }
@@ -298,26 +304,38 @@ export default function Today() {
     <PageShell className="flex flex-col gap-8 py-7 sm:px-7 sm:py-8" fluid>
       <header className="space-y-1">
         <p className="text-[13px] text-muted-foreground leading-snug">{displayDate}</p>
-        <h1 className="font-heading font-semibold text-2xl tracking-[-0.02em]">Today</h1>
+        <h1 className="font-heading font-semibold text-2xl tracking-[-0.02em]">
+          {t('today.title')}
+        </h1>
       </header>
 
       <section className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile label="Total agent time" value={<TotalDurationFlow seconds={liveTotal} />} />
-        <StatTile label="Turns" value={<NumberFlow locales="en-US" value={turnCount} />} />
         <StatTile
-          label="Projects"
-          value={<NumberFlow locales="en-US" value={activeProjectCount} />}
+          label={t('today.totalAgentTime')}
+          value={<TotalDurationFlow locale={locale} seconds={liveTotal} />}
         />
         <StatTile
-          label="Running"
-          value={<NumberFlow locales="en-US" value={activeTurns.length} />}
+          label={t('today.turns')}
+          value={<NumberFlow locales={locale} value={turnCount} />}
+        />
+        <StatTile
+          label={t('today.projects')}
+          value={<NumberFlow locales={locale} value={activeProjectCount} />}
+        />
+        <StatTile
+          label={t('today.running')}
+          value={<NumberFlow locales={locale} value={activeTurns.length} />}
         />
       </section>
 
       <section className="min-w-0 mt-2">
         <header className="mb-2.5 px-1">
-          <h2 className="text-[14px] font-semibold tracking-tight text-foreground">By project</h2>
-          <p className="mt-1 text-[13px] text-muted-foreground leading-snug">Breakdown for today</p>
+          <h2 className="text-[14px] font-semibold tracking-tight text-foreground">
+            {t('today.byProject')}
+          </h2>
+          <p className="mt-1 text-[13px] text-muted-foreground leading-snug">
+            {t('today.breakdown')}
+          </p>
         </header>
         <div className="overflow-hidden rounded-[18px] border border-border/40 bg-card/40 shadow-sm shadow-black/[0.01]">
           <div className="flex flex-col gap-0 px-5 py-2">
@@ -329,6 +347,8 @@ export default function Today() {
                 active={active}
                 agents={agents}
                 todayTotal={liveTotal}
+                locale={locale}
+                t={t}
               />
             ))}
           </div>
