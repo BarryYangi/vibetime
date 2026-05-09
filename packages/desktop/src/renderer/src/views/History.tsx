@@ -26,14 +26,16 @@ function DashboardPanel({
   className?: string
 }) {
   return (
-    <section className={cn('flex min-w-0 flex-col pt-2', className)}>
-      <header className="mb-4 px-1">
+    <section className={cn('flex min-w-0 flex-col pt-1', className)}>
+      <header className="mb-2.5 px-1">
         <h2 className="text-[14px] font-semibold tracking-tight text-foreground">{title}</h2>
         {description && (
-          <p className="mt-1.5 text-[13px] text-muted-foreground leading-snug">{description}</p>
+          <p className="mt-1 text-[13px] text-muted-foreground leading-snug">{description}</p>
         )}
       </header>
-      <div className="flex min-w-0 flex-1 flex-col">{children}</div>
+      <div className="flex-1 overflow-hidden rounded-xl border border-border/60 bg-card/40 shadow-sm shadow-black/[0.01]">
+        <div className="flex h-full flex-col px-5 pt-4 pb-5">{children}</div>
+      </div>
     </section>
   )
 }
