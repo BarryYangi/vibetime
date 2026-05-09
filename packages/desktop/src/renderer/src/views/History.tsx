@@ -2,7 +2,7 @@ import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { type EChartsCoreOption, echarts } from '@/charts/echarts'
 import { PageShell } from '@/components/PageShell'
-import { cn } from '@/lib/utils'
+import { Spinner } from '@/components/ui/spinner'
 import {
   Table,
   TableBody,
@@ -11,6 +11,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { Tabs, TabsList, TabsTab } from '@/components/ui/tabs'
+import { cn } from '@/lib/utils'
 import type { HistorySummary, TopProjectRow } from '../../../shared/ipc-types'
 import '../charts/theme'
 
@@ -768,18 +770,15 @@ export default function History() {
           <p className="text-[13px] text-muted-foreground">Retrospective analytics</p>
           <h1 className="font-heading text-2xl font-semibold">History</h1>
         </div>
-        <div className="flex rounded-lg border border-border p-1">
-          {PERIODS.map((period) => (
-            <button
-              className={`h-7 rounded-md px-3 text-[12px] font-medium ${periodDays === period ? 'bg-accent text-foreground' : 'text-muted-foreground'}`}
-              key={period}
-              onClick={() => setPeriodDays(period)}
-              type="button"
-            >
-              {period}d
-            </button>
-          ))}
-        </div>
+        <Tabs value={periodDays.toString()} onValueChange={(v) => setPeriodDays(Number(v) as typeof PERIODS[number])}>
+          <TabsList>
+            {PERIODS.map((period) => (
+              <TabsTab key={period} value={period.toString()} className="h-7 text-[12px] px-3">
+                {period}d
+              </TabsTab>
+            ))}
+          </TabsList>
+        </Tabs>
       </header>
 
       {stats && (
