@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "overlayscrollbars/overlayscrollbars.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -153,4 +154,24 @@ summary,
   --success-foreground: var(--color-emerald-400);
   --warning: var(--color-amber-500);
   --warning-foreground: var(--color-amber-400);
+}
+
+/* Custom OverlayScrollbars overrides to avoid clipping with container border-radius */
+.scrollbar-shell > .os-scrollbar-vertical {
+  padding-top: 16px !important;
+  padding-bottom: 16px !important;
+  right: 4px !important;
+}
+.scrollbar-shell > .os-scrollbar-horizontal {
+  padding-left: 16px !important;
+  padding-right: 16px !important;
+  bottom: 4px !important;
+}
+
+.dark .os-scrollbar {
+  --os-handle-bg: rgba(255, 255, 255, 0.35);
+  --os-handle-bg-hover: rgba(255, 255, 255, 0.5);
+  --os-handle-bg-active: rgba(255, 255, 255, 0.6);
+  --os-track-bg-hover: rgba(255, 255, 255, 0.05);
+  --os-track-bg-active: rgba(255, 255, 255, 0.05);
 }

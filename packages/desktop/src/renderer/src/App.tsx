@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react'
+import { OverlayScrollbarsComponent } from 'overlayscrollbars-react'
 import { HashRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import Sidebar from './components/Sidebar'
@@ -41,7 +42,11 @@ function AppRoutes() {
             'dark:shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_4px_24px_-6px_rgba(0,0,0,0.65)]',
           )}
         >
-          <div className="h-full overflow-auto scroll-smooth">
+          <OverlayScrollbarsComponent
+            className="scrollbar-shell h-full scroll-smooth"
+            defer
+            options={{ scrollbars: { autoHide: 'leave', autoHideDelay: 100 } }}
+          >
             <Suspense fallback={<RouteFallback />}>
               <Routes>
                 <Route path="/" element={<Today />} />
@@ -50,7 +55,7 @@ function AppRoutes() {
                 <Route path="/settings" element={<Settings />} />
               </Routes>
             </Suspense>
-          </div>
+          </OverlayScrollbarsComponent>
         </main>
       </div>
     </div>
