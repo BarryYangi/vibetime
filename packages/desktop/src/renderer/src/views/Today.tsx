@@ -78,7 +78,7 @@ function ProjectBar({
   const pct = maxTotal > 0 ? (total / maxTotal) * 100 : 0
 
   return (
-    <div className="flex flex-col gap-2.5 border-border/45 border-b py-3 last:border-b-0 last:pb-0 first:pt-0">
+    <div className="flex flex-col gap-2.5 border-border/45 border-b py-4 last:border-b-0">
       <div className="flex items-baseline justify-between gap-6">
         <span className="truncate text-[13px] font-medium leading-snug">{name}</span>
         <span className="min-w-[6.75rem] shrink-0 text-right font-mono text-[13px] text-muted-foreground tabular-nums leading-snug">
@@ -290,8 +290,8 @@ export default function Today() {
           <h2 className="text-[14px] font-semibold tracking-tight text-foreground">By project</h2>
           <p className="mt-1 text-[13px] text-muted-foreground leading-snug">Breakdown for today</p>
         </header>
-        <div className="overflow-hidden rounded-xl border border-border/60 bg-card/40 shadow-sm shadow-black/[0.01]">
-          <div className="flex flex-col gap-0 px-5 pt-3 pb-5">
+        <div className="overflow-hidden rounded-[18px] border border-border/40 bg-card/40 shadow-sm shadow-black/[0.01]">
+          <div className="flex flex-col gap-0 px-5 py-2">
             {projects.map(({ name, completed: projectCompleted, active, agents }) => (
               <ProjectBar
                 key={name}
