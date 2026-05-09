@@ -776,7 +776,7 @@ export default function History() {
               <TabsTab
                 key={period}
                 value={period.toString()}
-                className="h-7 px-3 font-heading text-[12.5px] tracking-tight tabular-nums"
+                className="h-6 px-2.5 font-heading text-[11.5px] tracking-tight tabular-nums"
               >
                 {period}d
               </TabsTab>
