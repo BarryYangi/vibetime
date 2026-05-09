@@ -120,6 +120,25 @@ summary,
   background: color-mix(in srgb, var(--color-primary) 16%, transparent);
 }
 
+.duration-number-flow::part(suffix) {
+  color: color-mix(in oklab, var(--muted-foreground) 80%, transparent);
+  font-size: 0.56em;
+  font-weight: 600;
+  margin-left: 0.08em;
+  margin-right: 0.16em;
+}
+
+.live-duration-flow .duration-number-flow::part(suffix) {
+  color: var(--muted-foreground);
+  font-size: 0.38em;
+  margin-left: 0.12em;
+  margin-right: 0.2em;
+}
+
+.live-duration-flow .duration-number-flow:last-child::part(suffix) {
+  margin-right: 0;
+}
+
 .electron-drag {
   -webkit-app-region: drag;
 }

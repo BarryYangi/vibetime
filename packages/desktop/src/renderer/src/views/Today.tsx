@@ -25,16 +25,17 @@ function formatDuration(seconds: number): string {
 
 const durationFlowClass =
   'inline-flex max-w-full items-baseline overflow-hidden font-heading font-semibold tabular-nums leading-none tracking-tight'
-const durationUnitClass =
-  'ml-[0.08em] mr-[0.16em] text-[0.56em] font-semibold text-muted-foreground/80'
 const ACTIVE_REFRESH_INTERVAL_MS = 1000
 
 function DurationSegment({ value, unit }: { value: number; unit: string }) {
   return (
-    <span className="inline-flex items-baseline">
-      <NumberFlow locales="en-US" value={value} />
-      <span className={durationUnitClass}>{unit}</span>
-    </span>
+    <NumberFlow
+      className="duration-number-flow"
+      locales="en-US"
+      suffix={unit}
+      value={value}
+      willChange
+    />
   )
 }
 
@@ -47,11 +48,9 @@ function TotalDurationFlow({ seconds }: { seconds: number }) {
   return (
     <NumberFlowGroup>
       <span className={durationFlowClass}>
-        <span className="inline-flex items-baseline">
-          {h > 0 && <DurationSegment unit="h" value={h} />}
-          {(h > 0 || m > 0) && <DurationSegment unit="m" value={m} />}
-          <DurationSegment unit="s" value={sec} />
-        </span>
+        {h > 0 && <DurationSegment unit="h" value={h} />}
+        {(h > 0 || m > 0) && <DurationSegment unit="m" value={m} />}
+        <DurationSegment unit="s" value={sec} />
       </span>
     </NumberFlowGroup>
   )

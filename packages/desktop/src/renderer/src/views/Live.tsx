@@ -63,23 +63,32 @@ function LiveTimer({ seconds }: { seconds: number }) {
 
   return (
     <NumberFlowGroup>
-      <div className="flex min-h-[4.75rem] items-baseline overflow-hidden font-heading tracking-tight font-bold tabular-nums text-[3.75rem] leading-none lg:text-[5rem]">
+      <div className="live-duration-flow flex min-h-[4.75rem] items-baseline overflow-hidden font-heading tracking-tight font-bold tabular-nums text-[3.75rem] leading-none lg:text-[5rem]">
         {h > 0 && (
-          <span className="inline-flex items-baseline">
-            <NumberFlow locales="en-US" value={h} />
-            <span className="mx-1 text-[0.38em] text-muted-foreground">h</span>
-          </span>
+          <NumberFlow
+            className="duration-number-flow"
+            locales="en-US"
+            suffix="h"
+            value={h}
+            willChange
+          />
         )}
         {(h > 0 || m > 0) && (
-          <span className="inline-flex items-baseline">
-            <NumberFlow locales="en-US" value={m} />
-            <span className="mx-1 text-[0.38em] text-muted-foreground">m</span>
-          </span>
+          <NumberFlow
+            className="duration-number-flow"
+            locales="en-US"
+            suffix="m"
+            value={m}
+            willChange
+          />
         )}
-        <span className="inline-flex items-baseline">
-          <NumberFlow locales="en-US" value={s} />
-          <span className="ml-1 text-[0.38em] text-muted-foreground">s</span>
-        </span>
+        <NumberFlow
+          className="duration-number-flow"
+          locales="en-US"
+          suffix="s"
+          value={s}
+          willChange
+        />
       </div>
     </NumberFlowGroup>
   )
