@@ -585,12 +585,10 @@ function StatTile({
   label,
   value,
   detail,
-  tone = 'neutral',
 }: {
   label: string
   value: string
   detail: string
-  tone?: 'neutral' | 'good' | 'warn'
 }) {
   return (
     <div className="flex flex-col justify-between rounded-[18px] border border-border/40 bg-card/40 p-5 shadow-sm shadow-black/[0.01]">
@@ -598,17 +596,7 @@ function StatTile({
         <p className="text-[13px] font-medium text-muted-foreground">{label}</p>
         <p className="font-heading text-[26px] font-semibold tracking-tight text-foreground">{value}</p>
       </div>
-      <div className="mt-4 flex items-center gap-1.5">
-        {tone !== 'neutral' && (
-          <span
-            className={cn(
-              'size-1.5 shrink-0 rounded-full',
-              tone === 'good' ? 'bg-success' : 'bg-warning',
-            )}
-          />
-        )}
-        <p className="truncate text-[12px] text-muted-foreground">{detail}</p>
-      </div>
+      <p className="mt-4 truncate text-[12px] text-muted-foreground">{detail}</p>
     </div>
   )
 }
@@ -616,23 +604,13 @@ function StatTile({
 function InsightBar({
   items,
 }: {
-  items: Array<{ label: string; value: string; tone?: 'neutral' | 'good' | 'warn' }>
+  items: Array<{ label: string; value: string }>
 }) {
   return (
     <div className="mb-6 flex flex-wrap items-center gap-x-8 gap-y-4 px-1">
       {items.map((item) => (
         <div key={`${item.label}-${item.value}`} className="flex flex-col">
-          <div className="flex items-center gap-1.5">
-            {item.tone && item.tone !== 'neutral' && (
-              <span
-                className={cn(
-                  'size-1.5 shrink-0 rounded-full',
-                  item.tone === 'good' ? 'bg-success' : 'bg-warning',
-                )}
-              />
-            )}
-            <p className="text-[12px] font-medium text-muted-foreground">{item.label}</p>
-          </div>
+          <p className="text-[12px] font-medium text-muted-foreground">{item.label}</p>
           <p className="mt-0.5 text-[15px] font-medium text-foreground">{item.value}</p>
         </div>
       ))}
@@ -810,11 +788,6 @@ export default function History() {
             detail={formatDelta(summary.periodCompare.deltaRatio)}
             label={`${summary.periodDays}-day total`}
             value={formatDuration(stats.periodTotal)}
-            tone={
-              summary.periodCompare.deltaRatio === null || summary.periodCompare.deltaRatio >= 0
-                ? 'good'
-                : 'warn'
-            }
           />
           <StatTile
             detail={`${stats.turnCount} turns · p75 ${formatDuration(stats.p75Turn)}`}
@@ -825,7 +798,6 @@ export default function History() {
             detail={`${Math.round(stats.shortTurnRate * 100)}% under 5m`}
             label="Focus blocks"
             value={`${stats.focusTurns}`}
-            tone={stats.shortTurnRate > 0.35 ? 'warn' : 'neutral'}
           />
           <StatTile
             detail={`${formatDuration(stats.peakHour.total)} · ${stats.topProject?.project ?? 'No project'} ${Math.round(stats.topProjectShare * 100)}%`}
@@ -843,7 +815,6 @@ export default function History() {
                 {
                   label: 'Current streak',
                   value: `${insights.currentStreak} days`,
-                  tone: insights.currentStreak >= 5 ? 'good' : 'neutral',
                 },
                 {
                   label: 'Best day',
@@ -862,16 +833,10 @@ export default function History() {
                 {
                   label: 'Change',
                   value: formatDelta(summary.periodCompare.deltaRatio),
-                  tone:
-                    summary.periodCompare.deltaRatio === null ||
-                    summary.periodCompare.deltaRatio >= 0
-                      ? 'good'
-                      : 'warn',
                 },
                 {
                   label: 'Active days',
                   value: `${stats.activeDays} / ${summary.periodDays}`,
-                  tone: insights && insights.activeDayRate >= 0.7 ? 'good' : 'neutral',
                 },
                 {
                   label: 'Best day',
@@ -891,7 +856,6 @@ export default function History() {
                   {
                     label: 'Top project',
                     value: `${stats.topProject?.project ?? 'No project'} · ${formatPercent(stats.topProjectShare)}`,
-                    tone: stats.topProjectShare > 0.65 ? 'warn' : 'neutral',
                   },
                   {
                     label: 'Avg active day',
@@ -914,7 +878,6 @@ export default function History() {
                   {
                     label: 'Peak window',
                     value: formatHourWindow(stats.peakHour.weekday, stats.peakHour.hour),
-                    tone: 'good',
                   },
                   {
                     label: 'Peak total',
@@ -939,12 +902,10 @@ export default function History() {
                   {
                     label: 'Focus share',
                     value: formatPercent(insights.focusShare),
-                    tone: insights.focusShare >= 0.35 ? 'good' : 'neutral',
                   },
                   {
                     label: 'Fragmented',
                     value: formatPercent(stats.shortTurnRate),
-                    tone: stats.shortTurnRate > 0.35 ? 'warn' : 'neutral',
                   },
                   {
                     label: 'Median',
@@ -967,7 +928,6 @@ export default function History() {
                   {
                     label: 'Share',
                     value: formatPercent(insights.topAgentShare),
-                    tone: insights.topAgentShare > 0.75 ? 'warn' : 'neutral',
                   },
                   {
                     label: 'Total',
