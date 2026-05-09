@@ -53,7 +53,7 @@ function LiveTimer({ seconds }: { seconds: number }) {
 
   return (
     <NumberFlowGroup>
-      <div className="flex min-h-[4.75rem] items-baseline overflow-hidden font-mono font-bold tabular-nums text-[3.75rem] leading-none lg:text-[5rem]">
+      <div className="flex min-h-[4.75rem] items-baseline overflow-hidden font-heading tracking-tight font-bold tabular-nums text-[3.75rem] leading-none lg:text-[5rem]">
         {h > 0 && (
           <span className="inline-flex items-baseline">
             <NumberFlow locales="en-US" value={h} />
@@ -91,7 +91,7 @@ function Metric({
       </div>
       <div className="min-w-0">
         <p className="text-[12px] font-medium text-muted-foreground leading-none">{label}</p>
-        <p className="mt-1 truncate font-mono text-[14px] font-medium leading-none tabular-nums text-foreground">{value}</p>
+        <p className="mt-1 truncate font-heading tracking-tight text-[14px] font-medium leading-none tabular-nums text-foreground">{value}</p>
       </div>
     </div>
   )
@@ -224,7 +224,7 @@ export default function Live() {
           <p className="text-[13px] text-muted-foreground">Active now</p>
           <h1 className="font-heading text-2xl font-semibold">Live</h1>
         </div>
-        <span className="font-mono text-[13px] text-muted-foreground tabular-nums">
+        <span className="font-heading tracking-tight text-[13px] text-muted-foreground tabular-nums">
           {turns.length} running
         </span>
       </div>

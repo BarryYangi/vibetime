@@ -1,6 +1,7 @@
 import NumberFlow, { NumberFlowGroup } from '@number-flow/react'
 import { useEffect, useState } from 'react'
 import { PageShell } from '@/components/PageShell'
+import { Progress } from '@/components/ui/progress'
 import { Spinner } from '@/components/ui/spinner'
 import type { ActiveTurn } from '../../../shared/ipc-types'
 import { useDocumentVisible } from '../hooks/useDocumentVisible'
@@ -81,23 +82,18 @@ function ProjectBar({
     <div className="flex flex-col gap-2.5 border-border/45 border-b py-4 last:border-b-0">
       <div className="flex items-baseline justify-between gap-6">
         <span className="truncate text-[13px] font-medium leading-snug">{name}</span>
-        <span className="min-w-[6.75rem] shrink-0 text-right font-mono text-[13px] text-muted-foreground tabular-nums leading-snug">
+        <span className="min-w-[6.75rem] shrink-0 text-right font-heading tracking-tight text-[13px] text-muted-foreground tabular-nums leading-snug">
           {formatDuration(total)}
         </span>
       </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-        <div
-          className="h-full rounded-full bg-primary transition-all duration-500"
-          style={{ width: `${Math.max(pct, 1)}%` }}
-        />
-      </div>
+      <Progress value={Math.max(pct, 1)} />
       {agents.length > 0 && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
           {agents.map(({ agent, completed: agentCompleted, active: agentActive }) => (
             <span key={agent} className="min-w-0 text-[11px] text-muted-foreground leading-snug">
               <span>{agent}</span>
               <span className="mx-1.5 text-muted-foreground/60">·</span>
-              <span className="font-mono tabular-nums">
+              <span className="font-heading tracking-tight tabular-nums">
                 {formatDuration(agentCompleted + agentActive)}
               </span>
             </span>

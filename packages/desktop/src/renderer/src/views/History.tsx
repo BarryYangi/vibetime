@@ -493,7 +493,7 @@ function AgentContributionBars({ summary }: { summary: HistorySummary }) {
           <div key={project.project}>
             <div className="mb-2 flex items-center justify-between gap-4">
               <p className="truncate text-[13px] font-medium">{project.project}</p>
-              <p className="shrink-0 font-mono text-[12px] text-muted-foreground tabular-nums">
+              <p className="shrink-0 font-heading tracking-tight text-[12px] text-muted-foreground tabular-nums">
                 {formatDuration(project.total)}
               </p>
             </div>
@@ -530,7 +530,7 @@ function AgentContributionBars({ summary }: { summary: HistorySummary }) {
               }}
             />
             <span className="text-muted-foreground">{agent}</span>
-            <span className="font-mono tabular-nums">{formatDuration(total)}</span>
+            <span className="font-heading tracking-tight tabular-nums">{formatDuration(total)}</span>
           </div>
         ))}
       </div>
@@ -562,11 +562,11 @@ function TopProjectSignals({ summary }: { summary: HistorySummary }) {
           key={row.project}
         >
           <p className="truncate text-[13px] font-medium">{row.project}</p>
-          <p className="font-mono text-[12px] tabular-nums">{formatDuration(row.total)}</p>
-          <p className="font-mono text-[12px] text-muted-foreground tabular-nums">
+          <p className="font-heading tracking-tight text-[12px] tabular-nums">{formatDuration(row.total)}</p>
+          <p className="font-heading tracking-tight text-[12px] text-muted-foreground tabular-nums">
             {row.focusTurns} focus
           </p>
-          <p className="text-right font-mono text-[12px] text-muted-foreground tabular-nums">
+          <p className="text-right font-heading tracking-tight text-[12px] text-muted-foreground tabular-nums">
             med {formatDuration(row.median)}
           </p>
         </div>
@@ -972,10 +972,10 @@ export default function History() {
               {sortedRows.map((row: TopProjectRow) => (
                 <TableRow className="border-border/25" key={row.project}>
                   <TableCell className="px-3 py-3">{row.project}</TableCell>
-                  <TableCell className="px-3 py-3 font-mono tabular-nums">
+                  <TableCell className="px-3 py-3 font-heading tracking-tight tabular-nums">
                     {formatDuration(row.total)}
                   </TableCell>
-                  <TableCell className="px-3 py-3 font-mono tabular-nums">{row.turns}</TableCell>
+                  <TableCell className="px-3 py-3 font-heading tracking-tight tabular-nums">{row.turns}</TableCell>
                   <TableCell className="px-3 py-3">{formatLastActive(row.lastActive)}</TableCell>
                 </TableRow>
               ))}
