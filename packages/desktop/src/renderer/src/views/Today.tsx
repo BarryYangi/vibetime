@@ -1,8 +1,9 @@
 import NumberFlow, { NumberFlowGroup } from '@number-flow/react'
 import { useEffect, useState } from 'react'
 import { PageShell } from '@/components/PageShell'
-import { Progress } from '@/components/ui/progress'
+import { getAgentTheme, StackedProgress } from '@/components/StackedProgress'
 import { Spinner } from '@/components/ui/spinner'
+import { cn } from '@/lib/utils'
 import type { ActiveTurn } from '../../../shared/ipc-types'
 import { useDocumentVisible } from '../hooks/useDocumentVisible'
 import { useIpcQuery } from '../hooks/useIpcQuery'
@@ -60,42 +61,75 @@ function activeSeconds(turn: ActiveTurn, now: number, dayStart: number): number 
   return Math.max(0, now - Math.max(turn.started_at, dayStart))
 }
 
+function formatPercent(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return '0%'
+  if (value < 0.01) return '<1%'
+  return `${Math.round(value * 100)}%`
+}
+
 function ProjectBar({
   name,
   completed,
   active,
   agents,
-  maxTotal,
+  todayTotal,
 }: {
   name: string
   completed: number
   active: number
   agents: Array<{ agent: string; completed: number; active: number }>
-  maxTotal: number
+  todayTotal: number
 }) {
   const total = completed + active
-  const pct = maxTotal > 0 ? (total / maxTotal) * 100 : 0
+  const share = todayTotal > 0 ? total / todayTotal : 0
+
+  const segments = agents.map((a, i) => {
+    const theme = getAgentTheme(a.agent, i)
+    const agentTotal = a.completed + a.active
+    const agentPct = total > 0 ? (agentTotal / total) * 100 : 0
+    return {
+      id: a.agent,
+      label: a.agent,
+      value: agentTotal,
+      colorClass: theme.bg,
+      tooltip: `${a.agent}: ${formatDuration(agentTotal)} (${Math.round(agentPct)}% of project)`,
+    }
+  })
 
   return (
-    <div className="flex flex-col gap-2.5 border-border/45 border-b py-4 last:border-b-0">
-      <div className="flex items-baseline justify-between gap-6">
-        <span className="truncate text-[13px] font-medium leading-snug">{name}</span>
-        <span className="min-w-[6.75rem] shrink-0 text-right font-heading tracking-tight text-[13px] text-muted-foreground tabular-nums leading-snug">
-          {formatDuration(total)}
+    <div className="flex flex-col gap-3 border-border/40 border-b py-5 last:border-b-0">
+      <div className="flex items-baseline justify-between gap-6 px-1">
+        <span className="truncate text-[13px] font-semibold tracking-tight text-foreground/90">
+          {name}
         </span>
+        <div className="flex shrink-0 items-baseline gap-2 text-right">
+          <span className="font-heading text-[13px] font-medium text-foreground/80 tabular-nums tracking-tight">
+            {formatDuration(total)}
+          </span>
+          <span className="min-w-9 font-heading text-[11px] text-muted-foreground/50 tabular-nums tracking-tight">
+            {formatPercent(share)}
+          </span>
+        </div>
       </div>
-      <Progress value={Math.max(pct, 1)} />
+
+      <div className="px-1">
+        <StackedProgress segments={segments} total={todayTotal} />
+      </div>
+
       {agents.length > 0 && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          {agents.map(({ agent, completed: agentCompleted, active: agentActive }) => (
-            <span key={agent} className="min-w-0 text-[11px] text-muted-foreground leading-snug">
-              <span>{agent}</span>
-              <span className="mx-1.5 text-muted-foreground/60">·</span>
-              <span className="font-heading tracking-tight tabular-nums">
-                {formatDuration(agentCompleted + agentActive)}
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 px-1">
+          {agents.map(({ agent, completed: agentCompleted, active: agentActive }, index) => {
+            const theme = getAgentTheme(agent, index)
+            return (
+              <span key={agent} className="min-w-0 text-[11px] leading-snug">
+                <span className={cn('font-medium transition-colors', theme.text)}>{agent}</span>
+                <span className="mx-1.5 text-muted-foreground/75">·</span>
+                <span className="font-heading text-muted-foreground/70 tabular-nums tracking-tight">
+                  {formatDuration(agentCompleted + agentActive)}
+                </span>
               </span>
-            </span>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>
@@ -104,7 +138,7 @@ function ProjectBar({
 
 function StatTile({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex flex-col justify-between rounded-[18px] border border-border/40 bg-card/40 p-5 shadow-sm shadow-black/[0.01]">
+    <div className="flex flex-col justify-between rounded-[18px] border border-border/40 bg-card/40 pt-5 px-5 pb-3 shadow-sm shadow-black/[0.01]">
       <div className="space-y-1">
         <p className="text-[13px] font-medium text-muted-foreground">{label}</p>
         <div className="font-heading text-[26px] font-semibold tracking-tight text-foreground">
@@ -222,13 +256,18 @@ export default function Today() {
         active: project.active,
         agents: [...project.agents.entries()]
           .map(([agent, totals]) => ({ agent, ...totals }))
-          .filter((agent) => agent.completed + agent.active > 0),
+          .filter((agent) => agent.completed + agent.active > 0)
+          .sort(
+            (a, b) =>
+              b.completed + b.active - (a.completed + a.active) || a.agent.localeCompare(b.agent),
+          ),
       }))
       .sort((a, b) => {
+        const totalDiff = b.completed + b.active - (a.completed + a.active)
+        if (totalDiff !== 0) return totalDiff
         const aOrder = completedOrder.get(a.name) ?? Number.MAX_SAFE_INTEGER
         const bOrder = completedOrder.get(b.name) ?? Number.MAX_SAFE_INTEGER
-        if (aOrder !== bOrder) return aOrder - bOrder
-        return a.name.localeCompare(b.name)
+        return aOrder - bOrder || a.name.localeCompare(b.name)
       })
 
     return { activeTotal: nextActiveTotal, projects: nextProjects }
@@ -237,8 +276,6 @@ export default function Today() {
   const turnCount = completed.turnCount
   const activeProjectCount = projects.length
   const { date } = completed
-  const maxTotal =
-    projects.length > 0 ? Math.max(...projects.map((p) => p.completed + p.active)) : 0
 
   const displayDate = new Date(`${date}T00:00:00`).toLocaleDateString('en-US', {
     weekday: 'long',
@@ -292,7 +329,7 @@ export default function Today() {
                 completed={projectCompleted}
                 active={active}
                 agents={agents}
-                maxTotal={maxTotal}
+                todayTotal={liveTotal}
               />
             ))}
           </div>

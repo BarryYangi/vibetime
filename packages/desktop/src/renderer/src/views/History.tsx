@@ -2,6 +2,7 @@ import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { type EChartsCoreOption, echarts } from '@/charts/echarts'
 import { PageShell } from '@/components/PageShell'
+import { getAgentTheme, StackedProgress } from '@/components/StackedProgress'
 import {
   Table,
   TableBody,
@@ -471,13 +472,6 @@ function AgentContributionBars({ summary }: { summary: HistorySummary }) {
     }
     return [...totals.entries()].sort((a, b) => b[1] - a[1])
   }, [rows])
-  const agentColorByName = useMemo(
-    () =>
-      new Map(
-        agentTotals.map(([agent], index) => [agent, chartPalette[index % chartPalette.length]]),
-      ),
-    [agentTotals],
-  )
 
   if (rows.length === 0) {
     return (
@@ -498,44 +492,38 @@ function AgentContributionBars({ summary }: { summary: HistorySummary }) {
                 {formatDuration(project.total)}
               </p>
             </div>
-            <div className="flex h-3 overflow-hidden rounded-sm bg-muted">
-              {project.agents.map((agent, index) => {
-                const pct = project.total > 0 ? (agent.total / project.total) * 100 : 0
-                return (
-                  <div
-                    className="border-r border-background last:border-r-0"
-                    key={agent.agent}
-                    style={{
-                      width: `${pct}%`,
-                      backgroundColor:
-                        agentColorByName.get(agent.agent) ??
-                        chartPalette[index % chartPalette.length],
-                    }}
-                    title={`${agent.agent}: ${formatDuration(agent.total)} (${Math.round(pct)}%)`}
-                  />
-                )
-              })}
+            <div className="px-1">
+              <StackedProgress
+                segments={project.agents.map((agent, index) => {
+                  const theme = getAgentTheme(agent.agent, index)
+                  const agentPct = project.total > 0 ? (agent.total / project.total) * 100 : 0
+                  return {
+                    id: agent.agent,
+                    label: agent.agent,
+                    value: agent.total,
+                    colorClass: theme.bg,
+                    tooltip: `${agent.agent}: ${formatDuration(agent.total)} (${Math.round(agentPct)}%)`,
+                  }
+                })}
+                total={project.total}
+              />
             </div>
           </div>
         ))}
       </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-2 border-t border-border/40 pt-3">
-        {agentTotals.map(([agent, total], index) => (
-          <div className="flex items-center gap-2 text-[12px]" key={agent}>
-            <span
-              aria-hidden
-              className="size-2.5 rounded-sm"
-              style={{
-                backgroundColor:
-                  agentColorByName.get(agent) ?? chartPalette[index % chartPalette.length],
-              }}
-            />
-            <span className="text-muted-foreground">{agent}</span>
-            <span className="font-heading tracking-tight tabular-nums">
-              {formatDuration(total)}
-            </span>
-          </div>
-        ))}
+      <div className="flex flex-wrap gap-x-5 gap-y-2 border-t border-border/40 pt-4 px-1">
+        {agentTotals.map(([agent, total], index) => {
+          const theme = getAgentTheme(agent, index)
+          return (
+            <div className="flex items-center gap-2 text-[12px]" key={agent}>
+              <span className={cn('font-medium transition-colors', theme.text)}>{agent}</span>
+              <span className="mx-1 text-muted-foreground/40">·</span>
+              <span className="font-heading tracking-tight tabular-nums text-muted-foreground/70">
+                {formatDuration(total)}
+              </span>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
