@@ -771,12 +771,12 @@ export default function History() {
           <h1 className="font-heading text-2xl font-semibold">History</h1>
         </div>
         <Tabs value={periodDays.toString()} onValueChange={(v) => setPeriodDays(Number(v) as typeof PERIODS[number])}>
-          <TabsList>
+          <TabsList className="p-0.5 py-[1.5px]">
             {PERIODS.map((period) => (
               <TabsTab
                 key={period}
                 value={period.toString()}
-                className="h-6 px-2.5 font-heading text-[11.5px] tracking-tight tabular-nums"
+                className="h-[22px] px-2.5 font-heading text-[11.5px] tracking-tight tabular-nums"
               >
                 {period}d
               </TabsTab>
