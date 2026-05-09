@@ -32,13 +32,13 @@ export default function Sidebar({ className }: SidebarProps) {
             className={({ isActive }) =>
               cn(
                 buttonVariants({ variant: 'ghost', size: 'lg' }),
-                'h-8.5 w-full justify-start gap-2 rounded-lg px-2.5 text-[13.5px] sm:h-8.5 sm:text-[13.5px]',
+                'h-9 w-full justify-start gap-2 rounded-lg px-2.5 text-[14px] sm:h-9 sm:text-[14px]',
                 isActive && 'bg-accent text-foreground',
                 !isActive && 'text-muted-foreground',
               )
             }
           >
-            <Icon aria-hidden="true" className="size-[17px]" />
+            <Icon aria-hidden="true" className="size-[18px]" />
             <span className="leading-none">{label}</span>
           </NavLink>
         ))}
