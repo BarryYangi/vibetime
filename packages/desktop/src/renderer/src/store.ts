@@ -1,6 +1,8 @@
 import { atom, createStore } from 'jotai'
 import type {
+  AgentStatus,
   AppPreferences,
+  CliInstallStatus,
   HistorySummary,
   IpcPushEvent,
   MenubarState,
@@ -15,11 +17,15 @@ export const configAtom = atom<VibetimeConfig | null>(null)
 export const historySummaryAtom = atom<HistorySummary | null>(null)
 export const menubarStateAtom = atom<MenubarState | null>(null)
 export const appPreferencesAtom = atom<AppPreferences | null>(null)
+export const agentStatusAtom = atom<AgentStatus[] | null>(null)
+export const cliStatusAtom = atom<CliInstallStatus | null>(null)
 
 let refreshSeq = 0
 let historyRefreshSeq = 0
 let menubarRefreshSeq = 0
 let appPreferencesRefreshSeq = 0
+let agentStatusRefreshSeq = 0
+let cliStatusRefreshSeq = 0
 
 function activeTurnsEqual(
   a: TodayLiveState['activeTurns'],
@@ -108,6 +114,42 @@ export async function refreshAppPreferences(): Promise<void> {
   } catch {
     // Settings view surfaces explicit errors.
   }
+}
+
+export async function refreshAgentStatus(): Promise<void> {
+  const seq = ++agentStatusRefreshSeq
+  try {
+    const result = await window.api.invoke('getAgentStatus')
+    if (seq !== agentStatusRefreshSeq) return
+    if (result.ok) {
+      store.set(agentStatusAtom, result.data)
+    }
+  } catch {
+    // Best-effort prefetch.
+  }
+}
+
+export async function refreshCliStatus(): Promise<void> {
+  const seq = ++cliStatusRefreshSeq
+  try {
+    const result = await window.api.invoke('getCliInstallStatus')
+    if (seq !== cliStatusRefreshSeq) return
+    if (result.ok) {
+      store.set(cliStatusAtom, result.data)
+    }
+  } catch {
+    // Best-effort prefetch.
+  }
+}
+
+/**
+ * Eagerly load all data needed by the Settings page so switch states
+ * are resolved before the user navigates there.
+ */
+export function prefetchSettingsData(): void {
+  void refreshAppPreferences()
+  void refreshAgentStatus()
+  void refreshCliStatus()
 }
 
 export function handlePush(event: IpcPushEvent): void {

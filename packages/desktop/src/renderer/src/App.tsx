@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect } from 'react'
 import { HashRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import Sidebar from './components/Sidebar'
-import { handlePush } from './store'
+import { handlePush, prefetchSettingsData } from './store'
 import Live from './views/Live'
 import Settings from './views/Settings'
 import Today from './views/Today'
@@ -59,6 +59,7 @@ function AppRoutes() {
 
 export default function App() {
   useEffect(() => {
+    prefetchSettingsData()
     return window.api.onPush(handlePush)
   }, [])
 

@@ -3,7 +3,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { type EChartsCoreOption, echarts } from '@/charts/echarts'
 import { PageShell } from '@/components/PageShell'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Spinner } from '@/components/ui/spinner'
 import {
   Table,
   TableBody,
@@ -736,11 +735,7 @@ export default function History() {
   }, [stats, summary])
 
   if (!summary && !error) {
-    return (
-      <div className="flex h-full min-h-[50vh] items-center justify-center">
-        <Spinner className="text-muted-foreground" />
-      </div>
-    )
+    return <div className="h-full bg-background" />
   }
 
   if (!summary || summary.topProjects.length === 0) {

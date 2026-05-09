@@ -1,12 +1,21 @@
-import { useCallback, useEffect, useId, useState } from 'react'
+import { useAtomValue } from 'jotai'
+import { useEffect, useId, useState } from 'react'
 import { PageShell } from '@/components/PageShell'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
-import type { AppPreferences, CliInstallStatus } from '../../../shared/ipc-types'
-import { configAtom, store } from '../store'
+import type { AppPreferences } from '../../../shared/ipc-types'
+import {
+  agentStatusAtom,
+  appPreferencesAtom,
+  cliStatusAtom,
+  configAtom,
+  refreshAgentStatus,
+  refreshCliStatus,
+  store,
+} from '../store'
 
 const AGENTS = [
   { id: 'claude-code', name: 'Claude Code', description: 'Anthropic Claude Code CLI' },
@@ -15,25 +24,16 @@ const AGENTS = [
 ] as const
 
 function ConnectAgents() {
-  const [statuses, setStatuses] = useState<Array<{ agent: string; installed: boolean }>>([])
+  const statuses = useAtomValue(agentStatusAtom)
   const [activeAction, setActiveAction] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-
-  const refreshStatuses = useCallback(async () => {
-    const result = await window.api.invoke('getAgentStatus')
-    if (result.ok) setStatuses(result.data)
-  }, [])
-
-  useEffect(() => {
-    refreshStatuses()
-  }, [refreshStatuses])
 
   const handleInstall = async (agent: string) => {
     setActiveAction(`${agent}:install`)
     setError(null)
     const result = await window.api.invoke('installAgent', { agent })
     if (result.ok) {
-      await refreshStatuses()
+      await refreshAgentStatus()
     } else {
       setError(result.error)
     }
@@ -45,7 +45,7 @@ function ConnectAgents() {
     setError(null)
     const result = await window.api.invoke('uninstallAgent', { agent })
     if (result.ok) {
-      await refreshStatuses()
+      await refreshAgentStatus()
     } else {
       setError(result.error)
     }
@@ -74,7 +74,7 @@ function ConnectAgents() {
         </CardHeader>
         <CardContent className="flex flex-col gap-2">
           {AGENTS.map(({ id, name, description }) => {
-            const status = statuses.find((s) => s.agent === id)
+            const status = statuses?.find((s) => s.agent === id)
             const statusKnown = status !== undefined
             const isInstalled = status?.installed ?? false
             const isInstalling = activeAction === `${id}:install`
@@ -128,29 +128,16 @@ function ConnectAgents() {
 
 function AppPreferencesSection() {
   const openAtLoginLabelId = useId()
-  const [preferences, setPreferences] = useState<AppPreferences | null>(null)
+  const preferences = useAtomValue(appPreferencesAtom)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  const refreshPreferences = useCallback(async () => {
-    const result = await window.api.invoke('getAppPreferences')
-    if (result.ok) {
-      setPreferences(result.data)
-    } else {
-      setError(result.error)
-    }
-  }, [])
-
-  useEffect(() => {
-    refreshPreferences()
-  }, [refreshPreferences])
 
   const updatePreferences = async (patch: Partial<AppPreferences>) => {
     setSaving(true)
     setError(null)
     const result = await window.api.invoke('updateAppPreferences', patch)
     if (result.ok) {
-      setPreferences(result.data)
+      store.set(appPreferencesAtom, result.data)
     } else {
       setError(result.error)
     }
@@ -204,33 +191,19 @@ function displayHomePath(path: string): string {
 
 function CliSection() {
   const cliLabelId = useId()
-  const [status, setStatus] = useState<CliInstallStatus | null>(null)
+  const status = useAtomValue(cliStatusAtom)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  const refreshStatus = useCallback(async () => {
-    const result = await window.api.invoke('getCliInstallStatus')
-    if (result.ok) {
-      setStatus(result.data)
-      setError(null)
-    } else {
-      setError(result.error)
-    }
-  }, [])
-
-  useEffect(() => {
-    refreshStatus()
-  }, [refreshStatus])
 
   const updateCli = async (checked: boolean) => {
     setSaving(true)
     setError(null)
     const result = await window.api.invoke(checked ? 'installCli' : 'uninstallCli')
     if (result.ok) {
-      setStatus(result.data)
+      store.set(cliStatusAtom, result.data)
     } else {
       setError(result.error)
-      await refreshStatus()
+      await refreshCliStatus()
     }
     setSaving(false)
   }
@@ -442,6 +415,17 @@ function About() {
 }
 
 export default function Settings() {
+  const preferences = useAtomValue(appPreferencesAtom)
+  const agentStatus = useAtomValue(agentStatusAtom)
+  const cliStatus = useAtomValue(cliStatusAtom)
+
+  // Wait until prefetched data is ready so switches render with correct state
+  const ready = preferences !== null && agentStatus !== null && cliStatus !== null
+
+  if (!ready) {
+    return <div className="h-full bg-background" />
+  }
+
   return (
     <PageShell prose className="space-y-12 pb-12">
       <header>
