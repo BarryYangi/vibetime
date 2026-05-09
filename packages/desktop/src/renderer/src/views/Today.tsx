@@ -285,24 +285,22 @@ export default function Today() {
         </div>
       </div>
 
-      <section className="min-w-0 mt-4">
-        <div className="px-1">
+      <section className="min-w-0 mt-6">
+        <header className="mb-4 px-1">
           <h2 className="text-[14px] font-semibold tracking-tight text-foreground">By project</h2>
-          <p className="mt-1 text-[13px] text-muted-foreground leading-snug">Breakdown for today</p>
-        </div>
-        <div className="mt-3 overflow-hidden rounded-xl border border-border/55 bg-card shadow-sm shadow-black/[0.02]">
-          <div className="flex flex-col gap-0 px-5 pt-2 pb-5">
-            {projects.map(({ name, completed: projectCompleted, active, agents }) => (
-              <ProjectBar
-                key={name}
-                name={name}
-                completed={projectCompleted}
-                active={active}
-                agents={agents}
-                maxTotal={maxTotal}
-              />
-            ))}
-          </div>
+          <p className="mt-1.5 text-[13px] text-muted-foreground leading-snug">Breakdown for today</p>
+        </header>
+        <div className="flex flex-col gap-0">
+          {projects.map(({ name, completed: projectCompleted, active, agents }) => (
+            <ProjectBar
+              key={name}
+              name={name}
+              completed={projectCompleted}
+              active={active}
+              agents={agents}
+              maxTotal={maxTotal}
+            />
+          ))}
         </div>
       </section>
     </PageShell>

@@ -26,17 +26,15 @@ function DashboardPanel({
   className?: string
 }) {
   return (
-    <div className={cn('flex min-w-0 flex-col', className)}>
-      <div className="px-1">
+    <section className={cn('flex min-w-0 flex-col pt-2', className)}>
+      <header className="mb-4 px-1">
         <h2 className="text-[14px] font-semibold tracking-tight text-foreground">{title}</h2>
         {description && (
-          <p className="mt-1 text-[13px] text-muted-foreground leading-snug">{description}</p>
+          <p className="mt-1.5 text-[13px] text-muted-foreground leading-snug">{description}</p>
         )}
-      </div>
-      <div className="mt-3 flex-1 overflow-hidden rounded-xl border border-border/55 bg-card shadow-sm shadow-black/[0.02]">
-        <div className="flex h-full flex-col px-5 pt-3 pb-5">{children}</div>
-      </div>
-    </div>
+      </header>
+      <div className="flex min-w-0 flex-1 flex-col">{children}</div>
+    </section>
   )
 }
 
