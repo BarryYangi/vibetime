@@ -120,5 +120,3 @@ export function getChartThemeName(colorScheme: ResolvedColorScheme) {
 export function getChartTokens(colorScheme: ResolvedColorScheme) {
   return chartTokens[colorScheme]
 }
-
-export { cossNeutralDarkTheme, cossNeutralTheme }

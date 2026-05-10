@@ -1,6 +1,6 @@
 {
   "name": "@vibetime/core",
-  "version": "2026.5.9",
+  "version": "2026.5.10",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
