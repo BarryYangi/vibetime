@@ -1,14 +1,14 @@
 import { join } from 'node:path'
 import type { MenuItemConstructorOptions, NativeImage } from 'electron'
 import { Menu, nativeImage, Tray } from 'electron'
+import { formatDurationMinuteSummary } from '../shared/format.js'
 import type { MenubarState } from '../shared/ipc-types.js'
 import { formatMenubarTitle, formatMenubarTooltip, queryMenubarState } from './db.js'
 
 const MINUTE_SECONDS = 60
-const FALLBACK_TITLE = '●'
+const FALLBACK_TITLE = '0m'
 const FALLBACK_TOOLTIP = "VibeTime: unable to read today's activity"
 const MENU_ICON_SIZE = 13
-const WINDOWS_TRAY_ICON_SIZE = 16
 
 let tray: Tray | null = null
 let activeRefreshTimer: ReturnType<typeof setTimeout> | null = null
@@ -32,16 +32,6 @@ const MACOS_SYMBOLS: Record<IconName, string> = {
 
 const menuIcons = new Map<IconName, NativeImage>()
 
-function prepareTemplateImage(image: NativeImage, size: number): NativeImage {
-  const resized = image.resize({
-    width: size,
-    height: size,
-    quality: 'best',
-  })
-  resized.setTemplateImage(true)
-  return resized
-}
-
 function menuIcon(name: IconName): NativeImage | undefined {
   if (process.platform !== 'darwin') return undefined
 
@@ -49,29 +39,29 @@ function menuIcon(name: IconName): NativeImage | undefined {
   if (cached) return cached
 
   const systemImage = nativeImage.createFromNamedImage(MACOS_SYMBOLS[name])
-  const image = prepareTemplateImage(systemImage, MENU_ICON_SIZE)
+  if (systemImage.isEmpty()) return undefined
+
+  const image = systemImage.resize({
+    width: MENU_ICON_SIZE,
+    height: MENU_ICON_SIZE,
+    quality: 'best',
+  })
+  image.setTemplateImage(true)
   menuIcons.set(name, image)
   return image
 }
 
 function createTrayImage(): NativeImage {
-  if (process.platform === 'darwin') return nativeImage.createEmpty()
+  if (process.platform === 'darwin') {
+    const image = nativeImage.createFromPath(join(__dirname, '../../build/trayTemplate.png'))
+    const trayImage = image.isEmpty()
+      ? nativeImage.createFromNamedImage('NSImageNameStatusAvailable')
+      : image
+    trayImage.setTemplateImage(true)
+    return trayImage
+  }
 
-  return nativeImage.createFromPath(join(__dirname, '../../build/icon.ico')).resize({
-    width: WINDOWS_TRAY_ICON_SIZE,
-    height: WINDOWS_TRAY_ICON_SIZE,
-    quality: 'best',
-  })
-}
-
-function formatDuration(seconds: number): string {
-  const whole = Math.max(0, Math.floor(seconds))
-  if (whole < 60) return `${whole}s`
-  if (whole < 3600) return `${Math.floor(whole / 60)}m`
-
-  const hours = Math.floor(whole / 3600)
-  const minutes = Math.floor((whole % 3600) / 60)
-  return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`
+  return nativeImage.createFromPath(join(__dirname, '../../build/icon.ico'))
 }
 
 function activeElapsedSeconds(turn: MenubarState['activeTurns'][number]): number {
@@ -88,7 +78,7 @@ function openRoute(route?: string): void {
 }
 
 function labelWithDuration(label: string, seconds: number): string {
-  return `${label} · ${formatDuration(seconds)}`
+  return `${label} · ${formatDurationMinuteSummary(seconds)}`
 }
 
 function readMenubarState(): MenubarState | null {
@@ -126,7 +116,7 @@ function scheduleActiveRefresh(state: MenubarState): void {
 function setMenubarTrayStatus(title: string, tooltip: string): void {
   if (!tray || tray.isDestroyed()) return
   tray.setToolTip(tooltip)
-  if (process.platform === 'darwin') tray.setTitle(title)
+  if (process.platform === 'darwin') tray.setTitle(title, { fontType: 'monospacedDigit' })
 }
 
 function buildStatusMenu(): Menu {
@@ -192,9 +182,9 @@ function buildStatusMenu(): Menu {
   return Menu.buildFromTemplate(template)
 }
 
-function showStatusMenu(): void {
+function refreshTrayMenu(): void {
   if (!tray || tray.isDestroyed()) return
-  tray.popUpContextMenu(buildStatusMenu())
+  tray.setContextMenu(buildStatusMenu())
 }
 
 export function createMenubarTray(actions: {
@@ -206,9 +196,9 @@ export function createMenubarTray(actions: {
   if (!tray || tray.isDestroyed()) {
     tray = new Tray(createTrayImage())
     tray.setToolTip('VibeTime')
-    tray.setIgnoreDoubleClickEvents(true)
-    tray.on('click', showStatusMenu)
-    tray.on('right-click', showStatusMenu)
+    if (process.platform === 'win32') {
+      tray.on('click', () => openRoute())
+    }
   }
 
   refreshMenubarTray()
@@ -220,11 +210,13 @@ export function refreshMenubarTray(): void {
   const state = readMenubarState()
   if (!state) {
     setMenubarTrayStatus(FALLBACK_TITLE, FALLBACK_TOOLTIP)
+    refreshTrayMenu()
     stopActiveRefresh()
     return
   }
 
   setMenubarTrayStatus(formatMenubarTitle(state), formatMenubarTooltip(state))
+  refreshTrayMenu()
 
   if (state.active) {
     scheduleActiveRefresh(state)

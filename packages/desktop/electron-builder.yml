@@ -1,4 +1,4 @@
-appId: com.barryyangi.vibetime
+appId: ee.barry.vibetime.desktop
 productName: VibeTime
 copyright: Copyright © 2026 Barry
 
@@ -7,6 +7,8 @@ directories:
 
 files:
   - out/**/*
+  - build/trayTemplate.png
+  - build/trayTemplate@2x.png
   - build/icon.ico
   - package.json
   - "!node_modules/@vibetime/hook/vibetime"

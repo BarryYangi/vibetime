@@ -1,7 +1,9 @@
 <svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
   <rect width="200" height="200" rx="44" fill="#1A1F21"/>
+  <!-- logo-mark:start -->
   <polyline points="65,60 135,60 100,100 135,140 65,140 100,100 65,60" fill="none" stroke="#A4D45E" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
   <polyline points="50,85 35,100 50,115" fill="none" stroke="#E6FFB3" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
   <polyline points="150,85 165,100 150,115" fill="none" stroke="#E6FFB3" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
   <line x1="80" y1="160" x2="120" y2="160" stroke="#A4D45E" stroke-width="8" stroke-linecap="round" opacity="0.6"/>
+  <!-- logo-mark:end -->
 </svg>

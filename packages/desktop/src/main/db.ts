@@ -12,6 +12,7 @@ import {
 import { getManagedCliPath } from '@vibetime/hook/install'
 import Database from 'better-sqlite3'
 import { BrowserWindow } from 'electron'
+import { formatDurationMinuteSummary } from '../shared/format.js'
 import type {
   ActiveTurn,
   AgentStatus,
@@ -578,20 +579,12 @@ export function queryMenubarState(): MenubarState {
 
 export function formatMenubarTitle(state: MenubarState): string {
   const total = Math.max(0, Math.floor(state.todayTotal))
-  if (total <= 0) return state.active ? '● <1m' : '●'
-  if (total < 60) return '● <1m'
-
-  const minutes = Math.floor(total / 60)
-  if (minutes < 60) return `● ${minutes}m`
-
-  const hours = Math.floor(minutes / 60)
-  const remainingMinutes = minutes % 60
-  if (remainingMinutes <= 0) return `● ${hours}h`
-  return `● ${hours}h ${remainingMinutes}m`
+  if (total <= 0) return state.active ? '<1m' : '0m'
+  return formatDurationMinuteSummary(total)
 }
 
 export function formatMenubarTooltip(state: MenubarState): string {
-  const visibleDuration = formatMenubarTitle(state).replace(/^●\s*/, '') || '0m'
+  const visibleDuration = formatMenubarTitle(state)
   return `VibeTime: ${visibleDuration} today - ${state.active ? 'running' : 'idle'}`
 }
 

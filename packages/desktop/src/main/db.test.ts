@@ -94,16 +94,16 @@ describe('formatMenubarTitle', () => {
 
     expect(
       formatMenubarTitle({ todayTotal: 0, active: false, projects: [], activeTurns: [] }),
-    ).toBe('●')
+    ).toBe('0m')
     expect(formatMenubarTitle({ todayTotal: 0, active: true, projects: [], activeTurns: [] })).toBe(
-      '● <1m',
+      '<1m',
     )
     expect(
       formatMenubarTitle({ todayTotal: 42, active: true, projects: [], activeTurns: [] }),
-    ).toBe('● <1m')
+    ).toBe('<1m')
     expect(
       formatMenubarTitle({ todayTotal: 47 * 60, active: false, projects: [], activeTurns: [] }),
-    ).toBe('● 47m')
+    ).toBe('47m')
     expect(
       formatMenubarTitle({
         todayTotal: 5 * 3600 + 23 * 60,
@@ -111,10 +111,10 @@ describe('formatMenubarTitle', () => {
         projects: [],
         activeTurns: [],
       }),
-    ).toBe('● 5h 23m')
+    ).toBe('5h 23m')
     expect(
       formatMenubarTitle({ todayTotal: 5 * 3600, active: false, projects: [], activeTurns: [] }),
-    ).toBe('● 5h')
+    ).toBe('5h')
   })
 })
 

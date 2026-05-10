@@ -24,7 +24,7 @@ let isQuitting = false
 
 function configureAppIdentity() {
   app.setName(APP_NAME)
-  app.setAppUserModelId('com.barryyangi.vibetime')
+  app.setAppUserModelId('ee.barry.vibetime.desktop')
   app.setAboutPanelOptions({
     applicationName: APP_NAME,
   })

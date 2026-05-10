@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -9,6 +9,10 @@ const buildDir = join(root, 'build')
 const sourcePath = join(assetsDir, 'app-icon-source.svg')
 const renderedSourcePath = join(buildDir, 'app-icon-source.png')
 const previewPath = join(buildDir, 'icon.png')
+const trayTemplatePath = join(buildDir, 'trayTemplate.png')
+const trayTemplateRetinaPath = join(buildDir, 'trayTemplate@2x.png')
+const symbolSourcePath = join(buildDir, 'app-symbol-source.generated.svg')
+const trayTemplateSourcePath = join(buildDir, 'tray-template-source.generated.svg')
 const iconsetDir = join(buildDir, 'icon.iconset')
 const iconPath = join(buildDir, 'icon.icns')
 const icoPath = join(buildDir, 'icon.ico')
@@ -31,9 +35,36 @@ const sizes = [
 ]
 
 const windowsSizes = [16, 24, 32, 48, 64, 128, 256]
+const logoMarkStart = '<!-- logo-mark:start -->'
+const logoMarkEnd = '<!-- logo-mark:end -->'
+
+function renderSvg(source, output, size) {
+  execFileSync(
+    'sips',
+    ['-s', 'format', 'png', '-z', String(size), String(size), source, '--out', output],
+    { stdio: 'ignore' },
+  )
+}
+
+function svgDocument(markup) {
+  return `<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">\n${markup}\n</svg>\n`
+}
+
+function extractLogoMark(svg) {
+  const start = svg.indexOf(logoMarkStart)
+  const end = svg.indexOf(logoMarkEnd)
+  if (start === -1 || end === -1 || end <= start) {
+    throw new Error(`Missing logo mark markers in ${sourcePath}`)
+  }
+  return svg.slice(start + logoMarkStart.length, end).trim()
+}
+
+function monochrome(markup) {
+  return markup.replaceAll('#A4D45E', '#000000').replaceAll('#E6FFB3', '#000000')
+}
 
 if (!existsSync(sourcePath)) {
-  throw new Error(`Missing app icon source: ${sourcePath}`)
+  throw new Error(`Missing icon source: ${sourcePath}`)
 }
 
 mkdirSync(buildDir, { recursive: true })
@@ -44,98 +75,26 @@ mkdirSync(iconsetDir, { recursive: true })
 mkdirSync(icoDir, { recursive: true })
 mkdirSync(modernIconAssetsDir, { recursive: true })
 
-execFileSync(
-  'magick',
-  [
-    '-size',
-    '1024x1024',
-    'xc:none',
-    '-fill',
-    '#1A1F21',
-    '-draw',
-    'roundrectangle 0,0 1023,1023 225,225',
-    '-fill',
-    'none',
-    '-stroke',
-    '#A4D45E',
-    '-strokewidth',
-    '61',
-    '-draw',
-    'stroke-linecap round stroke-linejoin round polyline 333,307 691,307 512,512 691,717 333,717 512,512 333,307',
-    '-stroke',
-    '#E6FFB3',
-    '-strokewidth',
-    '51',
-    '-draw',
-    'stroke-linecap round stroke-linejoin round polyline 256,435 179,512 256,589',
-    '-draw',
-    'stroke-linecap round stroke-linejoin round polyline 768,435 845,512 768,589',
-    '-stroke',
-    'none',
-    '-fill',
-    'rgba(164,212,94,0.6)',
-    '-draw',
-    'roundrectangle 410,799 614,840 20,20',
-    renderedSourcePath,
-  ],
-  { stdio: 'ignore' },
+const logoMark = extractLogoMark(readFileSync(sourcePath, 'utf8'))
+writeFileSync(symbolSourcePath, svgDocument(logoMark))
+writeFileSync(
+  trayTemplateSourcePath,
+  svgDocument(
+    `<g transform="translate(100 100) scale(1.18) translate(-100 -100)">\n${monochrome(logoMark)}\n  </g>`,
+  ),
 )
-execFileSync(
-  'magick',
-  [
-    renderedSourcePath,
-    '(',
-    '-size',
-    '1024x1024',
-    'xc:none',
-    '-fill',
-    'white',
-    '-draw',
-    'roundrectangle 0,0 1023,1023 225,225',
-    ')',
-    '-alpha',
-    'set',
-    '-compose',
-    'CopyOpacity',
-    '-composite',
-    renderedSourcePath,
-  ],
-  { stdio: 'ignore' },
-)
+
+renderSvg(sourcePath, renderedSourcePath, 1024)
 copyFileSync(renderedSourcePath, previewPath)
 
-execFileSync(
-  'magick',
-  [
-    '-size',
-    '1024x1024',
-    'xc:none',
-    '-fill',
-    'none',
-    '-stroke',
-    '#A4D45E',
-    '-strokewidth',
-    '61',
-    '-draw',
-    'stroke-linecap round stroke-linejoin round polyline 333,307 691,307 512,512 691,717 333,717 512,512 333,307',
-    '-stroke',
-    '#E6FFB3',
-    '-strokewidth',
-    '51',
-    '-draw',
-    'stroke-linecap round stroke-linejoin round polyline 256,435 179,512 256,589',
-    '-draw',
-    'stroke-linecap round stroke-linejoin round polyline 768,435 845,512 768,589',
-    '-stroke',
-    'none',
-    '-fill',
-    'rgba(164,212,94,0.6)',
-    '-draw',
-    'roundrectangle 410,799 614,840 20,20',
-    `PNG32:${modernIconSymbolPath}`,
-  ],
-  { stdio: 'ignore' },
-)
+for (const [size, outputPath] of [
+  [20, trayTemplatePath],
+  [40, trayTemplateRetinaPath],
+]) {
+  renderSvg(trayTemplateSourcePath, outputPath, size)
+}
+
+renderSvg(symbolSourcePath, modernIconSymbolPath, 1024)
 writeFileSync(
   join(modernIconDir, 'icon.json'),
   `${JSON.stringify(
@@ -222,3 +181,5 @@ if (process.platform === 'darwin') {
 }
 rmSync(iconsetDir, { recursive: true, force: true })
 rmSync(icoDir, { recursive: true, force: true })
+rmSync(symbolSourcePath, { force: true })
+rmSync(trayTemplateSourcePath, { force: true })
