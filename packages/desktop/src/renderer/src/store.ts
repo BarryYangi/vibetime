@@ -2,6 +2,7 @@ import { atom, createStore } from 'jotai'
 import type {
   AgentStatus,
   AppPreferences,
+  AppUpdateState,
   CliInstallStatus,
   HistorySummary,
   IpcPushEvent,
@@ -17,6 +18,7 @@ export const menubarStateAtom = atom<MenubarState | null>(null)
 export const appPreferencesAtom = atom<AppPreferences | null>(null)
 export const agentStatusAtom = atom<AgentStatus[] | null>(null)
 export const cliStatusAtom = atom<CliInstallStatus | null>(null)
+export const updateStateAtom = atom<AppUpdateState | null>(null)
 
 let refreshSeq = 0
 let historyRefreshSeq = 0
@@ -24,6 +26,7 @@ let menubarRefreshSeq = 0
 let appPreferencesRefreshSeq = 0
 let agentStatusRefreshSeq = 0
 let cliStatusRefreshSeq = 0
+let updateStateRefreshSeq = 0
 
 function activeTurnsEqual(
   a: TodayLiveState['activeTurns'],
@@ -140,6 +143,31 @@ export async function refreshCliStatus(): Promise<void> {
   }
 }
 
+export async function refreshUpdateState(): Promise<void> {
+  const seq = ++updateStateRefreshSeq
+  try {
+    const result = await window.api.invoke('getUpdateState')
+    if (seq !== updateStateRefreshSeq) return
+    if (result.ok) {
+      store.set(updateStateAtom, result.data)
+    }
+  } catch {
+    // Update state is best-effort; explicit actions surface errors.
+  }
+}
+
+export async function runUpdateAction(): Promise<void> {
+  const result = await window.api.invoke('runUpdateAction')
+  if (!result.ok) throw new Error(result.error)
+  store.set(updateStateAtom, result.data)
+}
+
+export async function runUpdateCheck(): Promise<void> {
+  const result = await window.api.invoke('runUpdateCheck')
+  if (!result.ok) throw new Error(result.error)
+  store.set(updateStateAtom, result.data)
+}
+
 /**
  * Eagerly load all data needed by the Settings page so switch states
  * are resolved before the user navigates there.
@@ -148,11 +176,16 @@ export function prefetchSettingsData(): void {
   void refreshAppPreferences()
   void refreshAgentStatus()
   void refreshCliStatus()
+  void refreshUpdateState()
 }
 
 export function handlePush(event: IpcPushEvent): void {
   if (event.type === 'db-changed') {
     void refreshTodayLiveState()
     void refreshMenubarState()
+    return
+  }
+  if (event.type === 'update-state-changed') {
+    void refreshUpdateState()
   }
 }

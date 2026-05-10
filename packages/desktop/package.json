@@ -14,9 +14,9 @@
     "prebuild": "pnpm --filter @vibetime/hook build",
     "build": "electron-vite build",
     "pack:mac": "pnpm run generate:icons && pnpm run build && electron-builder --mac --arm64 --dir",
-    "dist:mac": "pnpm run generate:icons && pnpm run build && electron-builder --mac --arm64",
+    "dist:mac": "pnpm run generate:icons && pnpm run build && electron-builder --mac --arm64 --publish never",
     "pack:win": "pnpm run generate:icons && pnpm run build && electron-builder --win --x64 --dir",
-    "dist:win": "pnpm run generate:icons && pnpm run build && electron-builder --win --x64",
+    "dist:win": "pnpm run generate:icons && pnpm run build && electron-builder --win --x64 --publish never",
     "preview": "electron-vite preview",
     "rebuild:native": "electron-rebuild -f -w better-sqlite3",
     "test": "vitest run"

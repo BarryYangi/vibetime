@@ -96,7 +96,6 @@ jobs:
           name: vibetime-macos-arm64
           path: |
             packages/desktop/release/*.dmg
-            packages/desktop/release/*.blockmap
           if-no-files-found: error
 
   package-windows:
@@ -143,7 +142,6 @@ jobs:
           name: vibetime-windows-x64
           path: |
             packages/desktop/release/*.exe
-            packages/desktop/release/*.blockmap
           if-no-files-found: error
 
   release:

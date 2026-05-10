@@ -1,8 +1,16 @@
-import { BarChart3Icon, CalendarDaysIcon, RadioIcon, SettingsIcon } from 'lucide-react'
+import { useAtomValue } from 'jotai'
+import {
+  BarChart3Icon,
+  CalendarDaysIcon,
+  DownloadIcon,
+  RadioIcon,
+  SettingsIcon,
+} from 'lucide-react'
 import { NavLink } from 'react-router-dom'
-import { buttonVariants } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { useI18n } from '../i18n'
+import { runUpdateAction, updateStateAtom } from '../store'
 
 const navItems = [
   { to: '/', labelKey: 'nav.today', icon: BarChart3Icon },
@@ -17,10 +25,22 @@ type SidebarProps = {
 
 export default function Sidebar({ className }: SidebarProps) {
   const { t } = useI18n()
+  const updateState = useAtomValue(updateStateAtom)
+  const updateStatus = updateState?.status ?? 'idle'
+  const showUpdateAction = updateStatus === 'available'
+  const tooltip = t('settings.update.actionDownloadAvailable')
+
+  const handleUpdateAction = async () => {
+    try {
+      await runUpdateAction()
+    } catch (err) {
+      console.error(err)
+    }
+  }
 
   return (
     <aside
-      className={cn('flex w-[13rem] shrink-0 flex-col items-stretch py-3 text-left', className)}
+      className={cn('flex w-[13rem] shrink-0 flex-col items-stretch pt-3 text-left', className)}
     >
       <div className="mb-5 w-full pl-0 pr-1">
         <p className="w-full text-left font-logo text-[2rem] font-bold leading-[0.92] tracking-wide text-foreground">
@@ -46,6 +66,20 @@ export default function Sidebar({ className }: SidebarProps) {
           </NavLink>
         ))}
       </nav>
+      {showUpdateAction && (
+        <div className="electron-no-drag mt-auto pl-0 pr-1">
+          <Button
+            aria-label={tooltip}
+            className="cursor-default bg-foreground/6 text-foreground transition-colors hover:bg-foreground/12 dark:bg-foreground/8 dark:hover:bg-foreground/16"
+            onClick={handleUpdateAction}
+            size="icon-sm"
+            title={tooltip}
+            variant="secondary"
+          >
+            <DownloadIcon aria-hidden="true" />
+          </Button>
+        </div>
+      )}
     </aside>
   )
 }

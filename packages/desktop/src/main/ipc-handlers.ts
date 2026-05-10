@@ -10,6 +10,7 @@ import {
 } from '@vibetime/hook/install'
 import { app, ipcMain, nativeTheme } from 'electron'
 import type {
+  AppInfo,
   AppPreferences,
   HistoryPeriodDays,
   IpcResult,
@@ -23,12 +24,15 @@ import {
   queryTodayLiveState,
   writeAndNotify,
 } from './db.js'
+import { getUpdateState, runUpdateAction, runUpdateCheck } from './updater.js'
 import { normalizeAppRoute } from './window-security.js'
 
 const VALID_AGENTS = new Set(['claude-code', 'codex', 'cursor', 'gemini-cli'])
 const VALID_HISTORY_PERIODS = new Set<number>(HISTORY_PERIODS)
 const VALID_APP_LANGUAGES = new Set<string>(APP_LANGUAGES)
 const VALID_APP_THEMES = new Set<string>(APP_THEMES)
+
+declare const __VIBETIME_COMMIT_HASH__: string
 
 function assertValidAgent(agent: unknown): asserts agent is string {
   if (typeof agent !== 'string' || !VALID_AGENTS.has(agent)) {
@@ -222,17 +226,48 @@ export function registerIpcHandlers(
     },
   )
 
+  ipcMain.handle('getAppInfo', async (): Promise<IpcResult<AppInfo>> => {
+    try {
+      return {
+        ok: true,
+        data: {
+          version: app.getVersion(),
+          commitHash: __VIBETIME_COMMIT_HASH__,
+          dbPath: join(homedir(), '.vibetime', 'data.db'),
+        },
+      }
+    } catch (err) {
+      return { ok: false, error: String(err) }
+    }
+  })
+
   ipcMain.handle(
-    'getAppInfo',
-    async (): Promise<IpcResult<{ version: string; dbPath: string }>> => {
+    'getUpdateState',
+    async (): Promise<IpcResult<ReturnType<typeof getUpdateState>>> => {
       try {
-        return {
-          ok: true,
-          data: {
-            version: app.getVersion(),
-            dbPath: join(homedir(), '.vibetime', 'data.db'),
-          },
-        }
+        return { ok: true, data: getUpdateState() }
+      } catch (err) {
+        return { ok: false, error: String(err) }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'runUpdateCheck',
+    async (): Promise<IpcResult<ReturnType<typeof getUpdateState>>> => {
+      try {
+        return { ok: true, data: await runUpdateCheck() }
+      } catch (err) {
+        return { ok: false, error: String(err) }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    'runUpdateAction',
+    async (): Promise<IpcResult<ReturnType<typeof getUpdateState>>> => {
+      try {
+        return { ok: true, data: await runUpdateAction() }
       } catch (err) {
         return { ok: false, error: String(err) }
       }

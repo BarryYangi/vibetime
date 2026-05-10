@@ -4,6 +4,7 @@ import { Menu, nativeImage, Tray } from 'electron'
 import { formatDurationMinuteSummary } from '../shared/format.js'
 import type { MenubarState } from '../shared/ipc-types.js'
 import { formatMenubarTitle, formatMenubarTooltip, queryMenubarState } from './db.js'
+import { getUpdateState, runUpdateCheck } from './updater.js'
 
 const MINUTE_SECONDS = 60
 const FALLBACK_TITLE = '0m'
@@ -18,15 +19,12 @@ let trayActions: {
   quitApp: () => void
 } | null = null
 
-type IconName = 'activity' | 'clock' | 'folder' | 'open' | 'settings' | 'power' | 'warning'
+type IconName = 'activity' | 'clock' | 'folder' | 'warning'
 
 const MACOS_SYMBOLS: Record<IconName, string> = {
   activity: 'waveform.path.ecg',
   clock: 'clock',
   folder: 'folder',
-  open: 'macwindow',
-  settings: 'gearshape',
-  power: 'power',
   warning: 'exclamationmark.triangle',
 }
 
@@ -81,6 +79,18 @@ function labelWithDuration(label: string, seconds: number): string {
   return `${label} · ${formatDurationMinuteSummary(seconds)}`
 }
 
+function updateMenuItem(): MenuItemConstructorOptions {
+  const status = getUpdateState().status
+  return {
+    label: status === 'checking' ? 'Checking for Updates...' : 'Check for Updates...',
+    enabled: status !== 'checking',
+    click: () => {
+      trayActions?.openSettings()
+      void runUpdateCheck().finally(() => refreshMenubarTray())
+    },
+  }
+}
+
 function readMenubarState(): MenubarState | null {
   try {
     return queryMenubarState()
@@ -129,10 +139,11 @@ function buildStatusMenu(): Menu {
         icon: menuIcon('warning'),
       },
       { type: 'separator' },
-      { label: 'Open', icon: menuIcon('open'), click: () => openRoute() },
-      { label: 'Settings', icon: menuIcon('settings'), click: () => trayActions?.openSettings() },
+      { label: 'Open', click: () => openRoute() },
+      { label: 'Settings', click: () => trayActions?.openSettings() },
+      updateMenuItem(),
       { type: 'separator' },
-      { label: 'Quit', icon: menuIcon('power'), click: () => trayActions?.quitApp() },
+      { label: 'Quit', click: () => trayActions?.quitApp() },
     ])
   }
 
@@ -173,10 +184,11 @@ function buildStatusMenu(): Menu {
     },
     ...projectItems,
     { type: 'separator' },
-    { label: 'Open', icon: menuIcon('open'), click: () => openRoute() },
-    { label: 'Settings', icon: menuIcon('settings'), click: () => trayActions?.openSettings() },
+    { label: 'Open', click: () => openRoute() },
+    { label: 'Settings', click: () => trayActions?.openSettings() },
+    updateMenuItem(),
     { type: 'separator' },
-    { label: 'Quit', icon: menuIcon('power'), click: () => trayActions?.quitApp() },
+    { label: 'Quit', click: () => trayActions?.quitApp() },
   ]
 
   return Menu.buildFromTemplate(template)

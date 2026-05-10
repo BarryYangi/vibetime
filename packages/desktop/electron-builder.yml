@@ -10,6 +10,7 @@ files:
   - build/trayTemplate.png
   - build/trayTemplate@2x.png
   - build/icon.ico
+  - build/icon.png
   - package.json
   - "!node_modules/@vibetime/hook/vibetime"
   - "!node_modules/@vibetime/hook/vibetime-hook"

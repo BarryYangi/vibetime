@@ -135,7 +135,18 @@ export interface CliInstallStatus {
 
 export interface AppInfo {
   version: string
+  commitHash: string
   dbPath: string
+}
+
+export type UpdateStatus = 'idle' | 'checking' | 'available' | 'error'
+
+export interface AppUpdateState {
+  status: UpdateStatus
+  currentVersion: string
+  availableVersion: string | null
+  error: string | null
+  lastCheckedAt: number | null
 }
 
 export interface IpcMethods {
@@ -151,6 +162,9 @@ export interface IpcMethods {
   installCli: { args: undefined; result: CliInstallStatus }
   uninstallCli: { args: undefined; result: CliInstallStatus }
   getAppInfo: { args: undefined; result: AppInfo }
+  getUpdateState: { args: undefined; result: AppUpdateState }
+  runUpdateCheck: { args: undefined; result: AppUpdateState }
+  runUpdateAction: { args: undefined; result: AppUpdateState }
   showMainWindow: { args: { route?: string }; result: undefined }
   installAgent: { args: { agent: string }; result: undefined }
   uninstallAgent: { args: { agent: string }; result: undefined }
@@ -159,7 +173,7 @@ export interface IpcMethods {
 export type IpcChannel = keyof IpcMethods
 
 export type IpcPushEvent = {
-  type: 'db-changed'
+  type: 'db-changed' | 'update-state-changed'
   agent?: string
   event_type?: string
   session_id?: string

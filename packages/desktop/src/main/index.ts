@@ -8,6 +8,7 @@ import { setDbChangeListener, startDbChangeWatcher, stopDbChangeWatcher } from '
 import { registerIpcHandlers } from './ipc-handlers'
 import { startNotifyServer, stopNotifyServer } from './notify-server.js'
 import { createMenubarTray, destroyMenubarTray, refreshMenubarTray } from './tray.js'
+import { startAutomaticUpdateChecks, stopAutomaticUpdateChecks } from './updater.js'
 import {
   configureSessionSecurity,
   hardenWindow,
@@ -191,6 +192,14 @@ function quitApp(): void {
   app.quit()
 }
 
+function startUpdateChecksSafely(): void {
+  try {
+    startAutomaticUpdateChecks()
+  } catch (err) {
+    console.error(`Unable to start update checks: ${String(err)}`)
+  }
+}
+
 // CLI subcommands that should run headless.
 const CLI_COMMANDS = new Set([
   'today',
@@ -260,6 +269,7 @@ if (isCliMode) {
     registerIpcHandlers({ showMainWindow })
     startNotifyServer()
     startDbChangeWatcher()
+    startUpdateChecksSafely()
     createMenubarTray({
       openApp: (route) => showMainWindow(route),
       openSettings: () => showMainWindow('/settings'),
@@ -276,6 +286,7 @@ if (isCliMode) {
   app.on('before-quit', () => {
     isQuitting = true
     setDbChangeListener(null)
+    stopAutomaticUpdateChecks()
     destroyMenubarTray()
     stopNotifyServer()
     stopDbChangeWatcher()

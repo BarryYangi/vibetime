@@ -6,7 +6,13 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { cn } from '@/lib/utils'
-import type { AppLanguage, AppPreferences, AppTheme } from '../../../shared/ipc-types'
+import type {
+  AppInfo,
+  AppLanguage,
+  AppPreferences,
+  AppTheme,
+  AppUpdateState,
+} from '../../../shared/ipc-types'
 import { APP_LANGUAGES, type TranslationKey, useI18n } from '../i18n'
 import {
   agentStatusAtom,
@@ -14,7 +20,10 @@ import {
   cliStatusAtom,
   refreshAgentStatus,
   refreshCliStatus,
+  refreshUpdateState,
+  runUpdateCheck,
   store,
+  updateStateAtom,
 } from '../store'
 
 const AGENTS = [
@@ -311,6 +320,34 @@ function displayHomePath(path: string): string {
   return path.replace(/^\/Users\/[^/]+/, '~')
 }
 
+function updateStatusText(
+  status: AppUpdateState['status'],
+  availableVersion: string | null | undefined,
+  lastChecked: string | null,
+  locale: string,
+  t: (key: TranslationKey) => string,
+) {
+  if (status === 'available') {
+    const label = t('settings.update.statusAvailableNoVersion')
+    const versionText = availableVersion
+      ? locale.startsWith('zh')
+        ? `${label}：${availableVersion}`
+        : `${label}: ${availableVersion}`
+      : label
+    if (!lastChecked) return versionText
+    return `${versionText} · ${t('settings.update.lastChecked')}: ${lastChecked}`
+  }
+  return `${t('settings.update.lastChecked')}: ${lastChecked ?? t('settings.update.neverChecked')}`
+}
+
+function formatLastChecked(timestamp: number | null | undefined, locale: string): string | null {
+  if (!timestamp) return null
+  return new Intl.DateTimeFormat(locale, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(timestamp)
+}
+
 function CliSection() {
   const cliLabelId = useId()
   const { t } = useI18n()
@@ -494,18 +531,44 @@ function ProjectAliases() {
 }
 
 function About() {
-  const { t } = useI18n()
-  const [version, setVersion] = useState('...')
+  const { t, locale } = useI18n()
+  const updateState = useAtomValue(updateStateAtom)
+  const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
   const [dbPath, setDbPath] = useState('...')
+  const [running, setRunning] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     window.api.invoke('getAppInfo').then((result) => {
       if (result.ok) {
-        setVersion(result.data.version)
+        setAppInfo(result.data)
         setDbPath(displayHomePath(result.data.dbPath))
       }
     })
+    void refreshUpdateState()
   }, [])
+
+  const status = updateState?.status ?? 'idle'
+  const busy = running || status === 'checking'
+  const lastChecked = formatLastChecked(updateState?.lastCheckedAt, locale)
+  const versionText = appInfo
+    ? appInfo.commitHash
+      ? `${appInfo.version} (${appInfo.commitHash})`
+      : appInfo.version
+    : '...'
+
+  const handleUpdateAction = async () => {
+    setRunning(true)
+    setError(null)
+    try {
+      await runUpdateCheck()
+    } catch (err) {
+      setError(String(err))
+    } finally {
+      await refreshUpdateState()
+      setRunning(false)
+    }
+  }
 
   return (
     <section className="space-y-3 pt-6 border-t border-border/40">
@@ -516,9 +579,31 @@ function About() {
         </p>
       </div>
       <div className="px-1 mt-4">
-        <dl className="grid grid-cols-[8rem_1fr] gap-y-3 text-[13px]">
-          <dt className="text-muted-foreground">{t('settings.about.version')}</dt>
-          <dd className="font-mono text-foreground font-medium">{version}</dd>
+        <dl className="grid grid-cols-[8rem_minmax(0,1fr)] gap-y-3 text-[13px]">
+          <dt className="pt-1 text-muted-foreground">{t('settings.about.version')}</dt>
+          <dd className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <div className="break-all font-mono font-medium text-foreground">{versionText}</div>
+              <p className="mt-1 text-muted-foreground leading-snug">
+                {updateStatusText(status, updateState?.availableVersion, lastChecked, locale, t)}
+              </p>
+              {(error || updateState?.error) && (
+                <p className="mt-1 text-[12px] text-destructive-foreground leading-snug">
+                  {error ?? updateState?.error}
+                </p>
+              )}
+            </div>
+            <Button
+              className="shrink-0"
+              disabled={busy}
+              loading={running || status === 'checking'}
+              onClick={handleUpdateAction}
+              size="sm"
+              variant="secondary"
+            >
+              {t('settings.update.actionCheck')}
+            </Button>
+          </dd>
 
           <dt className="text-muted-foreground">{t('settings.about.database')}</dt>
           <dd className="break-all font-mono text-muted-foreground">{dbPath}</dd>

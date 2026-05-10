@@ -36,7 +36,7 @@ function AppRoutes() {
     >
       {isMac && <div className="electron-drag absolute inset-x-0 top-0 h-9" aria-hidden />}
       <div className="flex min-h-0 flex-1 gap-3 p-3">
-        <Sidebar className={isMac ? 'pb-3 pt-8' : undefined} />
+        <Sidebar className={isMac ? 'pt-8' : undefined} />
         <main
           className={cn(
             'relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-2xl',
