@@ -141,7 +141,10 @@ function renderHourlyHeatmapCell(
   api: CustomSeriesRenderItemAPI,
 ) {
   const point = api.coord([api.value(0), api.value(1)])
-  const size = api.size([1, 1])
+  const rawSize = api.size?.([1, 1])
+  const size: [number, number] = Array.isArray(rawSize)
+    ? [Number(rawSize[0] ?? 0), Number(rawSize[1] ?? 0)]
+    : [Number(rawSize ?? 0), Number(rawSize ?? 0)]
   const gap = 1
   const width = Math.max(0, Number(size[0]) - gap)
   const height = Math.max(0, Number(size[1]) - gap)
@@ -312,7 +315,7 @@ function TrendChart({
   const option = useMemo<EChartsCoreOption>(() => {
     const labels = axisLabelStyle(tokens)
     return {
-      color: tokens.seriesPalette,
+      color: [...tokens.seriesPalette],
       tooltip: {
         trigger: 'axis',
         borderWidth: 0,
