@@ -1,3 +1,4 @@
+import { buildHistorySummaryFromEvents } from '@vibetime/core'
 import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('electron', () => ({
@@ -48,7 +49,6 @@ function makeCompletedTurn(input: {
 
 describe('queryHistorySummary', () => {
   it('returns a dense 365-day calendar', async () => {
-    const { buildHistorySummaryFromEvents } = await loadDbModule()
     const now = new Date(2026, 4, 7, 12, 0, 0)
     const end = Math.floor(now.getTime() / 1000)
     const events = makeCompletedTurn({ project: 'alpha', turnId: 'turn-1', start: end - 120, end })
@@ -65,7 +65,6 @@ describe('queryHistorySummary', () => {
   })
 
   it('groups trend data into Top 5 plus Others', async () => {
-    const { buildHistorySummaryFromEvents } = await loadDbModule()
     const now = new Date(2026, 4, 7, 12, 0, 0)
     const end = Math.floor(now.getTime() / 1000)
     const events = []

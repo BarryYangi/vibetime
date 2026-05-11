@@ -91,6 +91,7 @@ CLI essentials:
 
 - Run `vibetime status` for a compact local health summary.
 - Run `vibetime agents` to inspect agent hook installation.
+- Run `vibetime history` for the same 30-day summary semantics as the app History tab.
 - Add `--json` to status/query commands when scripting or calling from another agent.
 
 ## Development

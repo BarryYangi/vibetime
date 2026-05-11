@@ -296,6 +296,37 @@ describe('runCli — today', () => {
   })
 })
 
+describe('runCli — history', () => {
+  it('shows the default 30-day History summary', async () => {
+    await runWithArgs('history')
+    expect(consoleOutput.some((line) => line.includes('History (last 30 days)'))).toBe(true)
+  })
+
+  it('prints the GUI History summary as JSON', async () => {
+    await runWithArgs('history', '--days=90', '--json')
+    const output = parseJsonOutput() as {
+      periodDays?: number
+      calendar?: unknown[]
+      trends?: unknown[]
+      topProjects?: unknown[]
+      projectAgentTotals?: unknown[]
+    }
+    expect(output.periodDays).toBe(90)
+    expect(output.calendar).toHaveLength(365)
+    expect(output.trends).toHaveLength(90)
+    expect(Array.isArray(output.topProjects)).toBe(true)
+    expect(Array.isArray(output.projectAgentTotals)).toBe(true)
+  })
+
+  it('rejects unsupported History periods', async () => {
+    await runWithArgs('history', '--days=14')
+    expect(exitCode).toBe(1)
+    expect(consoleError.some((line) => line.includes('--days must be one of 7, 30, 90, 365'))).toBe(
+      true,
+    )
+  })
+})
+
 describe('runCli — project', () => {
   it('errors on missing project name', async () => {
     await runWithArgs('project')

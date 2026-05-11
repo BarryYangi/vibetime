@@ -1,11 +1,17 @@
 // CLI mode: parse subcommands and dispatch to handlers.
 // Hand-rolled argv parsing — no CLI library (CONTEXT.md gray area 1).
-// Subcommands: status, agents, install, uninstall, today, project, export, health, version, help.
+// Subcommands: status, agents, install, uninstall, today, history, project, export, health, version, help.
 
 import { existsSync, readFileSync } from 'node:fs'
 import {
   allocateDurationByLocalDay,
+  buildHistorySummaryFromEvents,
   durationWithinWindow,
+  HISTORY_TURN_START_BUFFER_SEC,
+  type HistoryPeriodDays,
+  type HistorySummary,
+  historyLowerBound,
+  isHistoryPeriodDays,
   type NormalizedEvent,
 } from '@vibetime/core'
 import chalk from 'chalk'
@@ -19,6 +25,7 @@ import { closeDatabase, openDatabase, queryEvents, queryOpenTurns } from './stor
 
 const AGENTS = ['claude-code', 'codex', 'cursor', 'gemini-cli'] as const
 type AgentName = (typeof AGENTS)[number]
+const DEFAULT_HISTORY_DAYS = 30
 
 function hasFlag(args: string[], flag: string): boolean {
   return args.includes(flag)
@@ -39,6 +46,20 @@ function fmtDuration(sec: number): string {
   const h = Math.floor(sec / 3600)
   const m = Math.round((sec % 3600) / 60)
   return m > 0 ? `${h}h ${m}m` : `${h}h`
+}
+
+function fmtDate(ts: number | null): string {
+  return ts ? new Date(ts * 1000).toLocaleDateString('en-CA') : 'n/a'
+}
+
+function fmtHour(hour: number): string {
+  return `${String(hour).padStart(2, '0')}:00`
+}
+
+function fitLabel(value: string, width: number): string {
+  if (value.length <= width) return value.padEnd(width)
+  if (width <= 3) return value.slice(0, width)
+  return `${value.slice(0, width - 3)}...`
 }
 
 function statusLabel(ok: boolean): string {
@@ -183,6 +204,128 @@ function openReadDb() {
   return db
 }
 
+function startOfLocalDay(date: Date): number {
+  return Math.floor(new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime() / 1000)
+}
+
+function sumTrendDay(day: HistorySummary['trends'][number]): number {
+  return Object.values(day.projects).reduce((sum, total) => sum + total, 0)
+}
+
+function quantile(values: number[], q: number): number {
+  if (values.length === 0) return 0
+  const pos = (values.length - 1) * q
+  const base = Math.floor(pos)
+  const rest = pos - base
+  const current = values[base] ?? 0
+  const next = values[base + 1]
+  return next === undefined ? current : current + rest * (next - current)
+}
+
+function parseHistoryPeriod(args: string[]): HistoryPeriodDays | null {
+  const daysArg = optionValue(args, '--days')
+  const days = daysArg ? Number(daysArg) : DEFAULT_HISTORY_DAYS
+  if (!Number.isInteger(days) || !isHistoryPeriodDays(days)) {
+    console.error(chalk.red('Error: --days must be one of 7, 30, 90, 365'))
+    process.exit(1)
+    return null
+  }
+  return days
+}
+
+function formatPeriodCompare(compare: HistorySummary['periodCompare']): string {
+  if (compare.previousTotal <= 0 || compare.deltaRatio === null) return 'no prior period'
+  const pct = Math.round(compare.deltaRatio * 100)
+  return `${pct >= 0 ? '+' : ''}${pct}% vs previous`
+}
+
+function buildAgentMix(
+  summary: HistorySummary,
+): Array<{ agent: string; total: number; turns: number }> {
+  const totals = new Map<string, { total: number; turns: number }>()
+  for (const project of summary.projectAgentTotals) {
+    for (const agent of project.agents) {
+      const entry = totals.get(agent.agent) ?? { total: 0, turns: 0 }
+      entry.total += agent.total
+      entry.turns += agent.turns
+      totals.set(agent.agent, entry)
+    }
+  }
+  return [...totals.entries()]
+    .sort((a, b) => b[1].total - a[1].total || a[0].localeCompare(b[0]))
+    .map(([agent, data]) => ({ agent, total: data.total, turns: data.turns }))
+}
+
+function printHistorySummary(summary: HistorySummary): void {
+  const periodTotal = summary.periodCompare.currentTotal
+  console.log(chalk.bold(`History (last ${summary.periodDays} days)`))
+  console.log(chalk.dim('─'.repeat(40)))
+
+  if (periodTotal <= 0) {
+    console.log(chalk.dim(`No activity in the last ${summary.periodDays} days.`))
+    return
+  }
+
+  const activeDays = summary.trends.filter((day) => sumTrendDay(day) > 0).length
+  const bestDay = summary.trends.reduce(
+    (best, day) => {
+      const total = sumTrendDay(day)
+      return total > best.total ? { date: day.date, total } : best
+    },
+    { date: 'n/a', total: 0 },
+  )
+  const turnDurations = summary.turnDurations
+    .map((turn) => turn.duration)
+    .filter((duration) => duration > 0)
+    .sort((a, b) => a - b)
+  const medianTurn = quantile(turnDurations, 0.5)
+  const focusBlocks = turnDurations.filter((duration) => duration >= 25 * 60).length
+  const peak = summary.hourlyMatrix.reduce(
+    (best, cell) => (cell.total > best.total ? cell : best),
+    { weekday: 0, hour: 0, total: 0 },
+  )
+  const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+  console.log(
+    `  Total: ${chalk.cyan(fmtDuration(periodTotal))}  ${chalk.dim(formatPeriodCompare(summary.periodCompare))}`,
+  )
+  console.log(`  Active days: ${activeDays}/${summary.periodDays}`)
+  console.log(`  Best day: ${bestDay.date}  ${fmtDuration(bestDay.total)}`)
+  console.log()
+  console.log(chalk.bold('Rhythm'))
+  console.log(`  Median turn: ${fmtDuration(medianTurn)}`)
+  console.log(`  Focus blocks: ${focusBlocks}`)
+  console.log(`  Peak rhythm: ${weekdays[peak.weekday]} ${fmtHour(peak.hour)}`)
+
+  console.log()
+  console.log(chalk.bold('Top projects'))
+  const topProjects = summary.topProjects.slice(0, 5)
+  const projectNameWidth = Math.min(
+    28,
+    Math.max(12, ...topProjects.map((project) => project.project.length)),
+  )
+  for (const project of topProjects) {
+    console.log(
+      `  ${fitLabel(project.project, projectNameWidth)} ${chalk.cyan(fmtDuration(project.total).padStart(8))}  ${String(project.turns).padStart(3)} turns  last ${fmtDate(project.lastActive)}`,
+    )
+  }
+
+  const agentMix = buildAgentMix(summary)
+  if (agentMix.length > 0) {
+    console.log()
+    console.log(chalk.bold('Agent mix'))
+    const agentNameWidth = Math.min(
+      18,
+      Math.max(12, ...agentMix.map((agent) => agent.agent.length)),
+    )
+    for (const agent of agentMix) {
+      console.log(
+        `  ${fitLabel(agent.agent, agentNameWidth)} ${chalk.cyan(fmtDuration(agent.total).padStart(8))}  ${String(agent.turns).padStart(3)} turns`,
+      )
+    }
+  }
+}
+
 function parseEventMeta(meta: unknown): Record<string, unknown> | null {
   if (!meta) return null
   if (typeof meta !== 'string') {
@@ -221,6 +364,7 @@ Commands:
   install <agent>   Configure hooks for an agent (claude-code | codex | cursor | gemini-cli)
   uninstall <agent> Remove vibetime hooks for an agent (claude-code | codex | cursor | gemini-cli)
   today             Show today's agent time breakdown
+  history           Show History summary (default: --days=30)
   project <name>    Show project details (default: --days=7)
   export            Export events as JSON or CSV (--format=csv, --out=path)
   health            Show hook persist health (recent write failures)
@@ -238,6 +382,9 @@ Examples:
   vibetime install gemini-cli
   vibetime today
   vibetime today --json
+  vibetime history
+  vibetime history --days=90
+  vibetime history --json
   vibetime project my-project --days=30
   vibetime export --format=json --out=events.json
   vibetime health
@@ -448,6 +595,31 @@ export async function runCli(args = process.argv.slice(2)): Promise<void> {
             `  ${summary.turnCount} turns across ${summary.projectCount} project${summary.projectCount !== 1 ? 's' : ''}`,
           ),
         )
+        break
+      }
+
+      case 'history': {
+        const periodDays = parseHistoryPeriod(args)
+        if (periodDays === null) return
+
+        const now = new Date()
+        const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+        const rangeEnd = startOfLocalDay(tomorrow)
+        const lowerBound = historyLowerBound(rangeEnd, periodDays)
+        const db = openReadDb()
+        const events = queryEvents(db, {
+          from: lowerBound - HISTORY_TURN_START_BUFFER_SEC,
+          to: rangeEnd,
+        })
+        closeDatabase(db)
+
+        const summary = buildHistorySummaryFromEvents(events, { periodDays, now })
+        if (json) {
+          printJson(summary)
+          break
+        }
+
+        printHistorySummary(summary)
         break
       }
 
