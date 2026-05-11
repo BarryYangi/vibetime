@@ -38,7 +38,15 @@ const windowsSizes = [16, 24, 32, 48, 64, 128, 256]
 const logoMarkStart = '<!-- logo-mark:start -->'
 const logoMarkEnd = '<!-- logo-mark:end -->'
 
-function renderSvg(source, output, size) {
+function renderSvgWithSips(source, output, size) {
+  execFileSync(
+    'sips',
+    ['-s', 'format', 'png', '-z', String(size), String(size), source, '--out', output],
+    { stdio: 'ignore' },
+  )
+}
+
+function renderSvgWithMagick(source, output, size) {
   execFileSync(
     'magick',
     [
@@ -56,6 +64,14 @@ function renderSvg(source, output, size) {
     ],
     { stdio: 'ignore' },
   )
+}
+
+function renderSvg(source, output, size) {
+  if (process.platform === 'darwin') {
+    renderSvgWithSips(source, output, size)
+    return
+  }
+  renderSvgWithMagick(source, output, size)
 }
 
 function svgDocument(markup) {
