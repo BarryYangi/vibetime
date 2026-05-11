@@ -234,6 +234,8 @@ Examples:
   vibetime install claude-code
   vibetime uninstall claude-code
   vibetime install codex
+  vibetime install cursor
+  vibetime install gemini-cli
   vibetime today
   vibetime today --json
   vibetime project my-project --days=30
