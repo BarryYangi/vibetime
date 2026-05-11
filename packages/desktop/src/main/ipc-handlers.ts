@@ -8,7 +8,7 @@ import {
   uninstallAgent,
   uninstallUserCli,
 } from '@vibetime/hook/install'
-import { app, ipcMain, nativeTheme } from 'electron'
+import { app, ipcMain, nativeTheme, shell } from 'electron'
 import type {
   AppInfo,
   AppPreferences,
@@ -31,6 +31,7 @@ const VALID_AGENTS = new Set(['claude-code', 'codex', 'cursor', 'gemini-cli'])
 const VALID_HISTORY_PERIODS = new Set<number>(HISTORY_PERIODS)
 const VALID_APP_LANGUAGES = new Set<string>(APP_LANGUAGES)
 const VALID_APP_THEMES = new Set<string>(APP_THEMES)
+const GITHUB_REPOSITORY_URL = 'https://github.com/BarryYangi/vibetime'
 
 declare const __VIBETIME_COMMIT_HASH__: string
 
@@ -273,6 +274,15 @@ export function registerIpcHandlers(
       }
     },
   )
+
+  ipcMain.handle('openGitHubRepository', async (): Promise<IpcResult<undefined>> => {
+    try {
+      await shell.openExternal(GITHUB_REPOSITORY_URL)
+      return { ok: true, data: undefined }
+    } catch (err) {
+      return { ok: false, error: String(err) }
+    }
+  })
 
   ipcMain.handle('showMainWindow', async (_event, args): Promise<IpcResult<void>> => {
     try {

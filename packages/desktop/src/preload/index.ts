@@ -17,6 +17,7 @@ const IPC_CHANNELS = new Set<IpcChannel>([
   'getUpdateState',
   'runUpdateCheck',
   'runUpdateAction',
+  'openGitHubRepository',
   'showMainWindow',
   'installAgent',
   'uninstallAgent',

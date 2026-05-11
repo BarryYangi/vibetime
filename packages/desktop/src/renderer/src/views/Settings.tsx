@@ -33,6 +33,8 @@ const AGENTS = [
   { id: 'gemini-cli', name: 'Gemini CLI', descriptionKey: 'settings.agents.geminiDescription' },
 ] as const
 
+const GITHUB_REPOSITORY_LABEL = 'github.com/BarryYangi/vibetime'
+
 const THEME_OPTIONS: Array<{ labelKey: TranslationKey; value: AppTheme }> = [
   { labelKey: 'settings.theme.system', value: 'system' },
   { labelKey: 'settings.theme.light', value: 'light' },
@@ -570,6 +572,11 @@ function About() {
     }
   }
 
+  const handleGitHubOpen = async () => {
+    const result = await window.api.invoke('openGitHubRepository')
+    if (!result.ok) console.error(result.error)
+  }
+
   return (
     <section className="space-y-3 pt-6 border-t border-border/40">
       <div className="px-1">
@@ -607,6 +614,17 @@ function About() {
 
           <dt className="text-muted-foreground">{t('settings.about.database')}</dt>
           <dd className="break-all font-mono text-muted-foreground">{dbPath}</dd>
+
+          <dt className="text-muted-foreground">GitHub</dt>
+          <dd>
+            <button
+              className="external-link break-all font-mono text-muted-foreground transition-colors hover:text-foreground"
+              onClick={handleGitHubOpen}
+              type="button"
+            >
+              {GITHUB_REPOSITORY_LABEL}
+            </button>
+          </dd>
 
           <dt className="text-muted-foreground">{t('settings.about.license')}</dt>
           <dd className="text-foreground">MIT</dd>

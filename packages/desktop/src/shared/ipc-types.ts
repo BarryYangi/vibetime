@@ -165,6 +165,7 @@ export interface IpcMethods {
   getUpdateState: { args: undefined; result: AppUpdateState }
   runUpdateCheck: { args: undefined; result: AppUpdateState }
   runUpdateAction: { args: undefined; result: AppUpdateState }
+  openGitHubRepository: { args: undefined; result: undefined }
   showMainWindow: { args: { route?: string }; result: undefined }
   installAgent: { args: { agent: string }; result: undefined }
   uninstallAgent: { args: { agent: string }; result: undefined }

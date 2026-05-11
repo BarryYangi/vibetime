@@ -127,6 +127,11 @@ summary,
   cursor: default !important;
 }
 
+.external-link {
+  /* biome-ignore lint/complexity/noImportantStyles: External links should signal that they leave the app. */
+  cursor: pointer !important;
+}
+
 ::selection {
   background: color-mix(in srgb, var(--color-primary) 16%, transparent);
 }
