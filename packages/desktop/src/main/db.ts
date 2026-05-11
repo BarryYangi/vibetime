@@ -8,6 +8,7 @@ import {
   DDL_INDICES,
   DDL_OPEN_TURNS,
   durationWithinWindow,
+  resolveTurnInterval,
 } from '@vibetime/core'
 import { getManagedCliPath } from '@vibetime/hook/install'
 import Database from 'better-sqlite3'
@@ -324,10 +325,11 @@ function allocateDurationByLocalHour(input: {
   rangeStart: number
   rangeEnd: number
 }): Array<{ hourStart: number; duration: number }> {
-  const rawStart =
-    input.startTs ?? (input.durationSec === null ? input.endTs : input.endTs - input.durationSec)
-  const start = Math.max(rawStart, input.rangeStart)
-  const end = Math.min(input.endTs, input.rangeEnd)
+  const interval = resolveTurnInterval(input)
+  if (!interval) return []
+
+  const start = Math.max(interval.start, input.rangeStart)
+  const end = Math.min(interval.end, input.rangeEnd)
   if (end <= start) return []
 
   const allocations: Array<{ hourStart: number; duration: number }> = []
@@ -507,7 +509,7 @@ export function buildHistorySummaryFromEvents(
         total: hourlyTotals.get(`${weekday}:${hour}`) ?? 0,
       })),
     ).flat(),
-    turnDurations: turnDurations.sort((a, b) => a.endedAt - b.endedAt).slice(-500),
+    turnDurations: turnDurations.sort((a, b) => a.endedAt - b.endedAt),
     projectAgentTotals: [...projectAgentTotals.values()]
       .sort((a, b) => b.total - a.total || a.project.localeCompare(b.project))
       .map((project) => ({
