@@ -3,7 +3,7 @@
 // REC-02: stale sweep on CLI invocation.
 
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { existsSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 
 let testHome: string
 let originalHome: string
@@ -118,6 +118,53 @@ describe('runCli — version', () => {
     await runWithExplicitArgs('version')
     expect(consoleOutput.some((line) => line.includes('vibetime'))).toBe(true)
     expect(consoleOutput.some((line) => line.includes('Database:'))).toBe(true)
+  })
+})
+
+describe('runCli — health', () => {
+  it('shows an empty health summary when no file exists', async () => {
+    await runWithArgs('health')
+    expect(consoleOutput.some((line) => line.includes('Hook persist health'))).toBe(true)
+    expect(consoleOutput.some((line) => line.includes('Consecutive failures: 0'))).toBe(true)
+    expect(consoleOutput.some((line) => line.includes('Failures in last 24h: 0'))).toBe(true)
+  })
+
+  it('shows failure details from hook-health.json', async () => {
+    const healthPath = `${testHome}/.vibetime/hook-health.json`
+    mkdirSync(`${testHome}/.vibetime`, { recursive: true })
+    writeFileSync(
+      healthPath,
+      `${JSON.stringify(
+        {
+          lastError: {
+            ts: 1_700_000_000,
+            message: 'database is locked',
+            agent: 'codex',
+            event_type: 'turn_end',
+          },
+          consecutiveFailures: 3,
+          recentFailures: [
+            {
+              ts: 1_700_000_000,
+              message: 'database is locked',
+              agent: 'codex',
+              event_type: 'turn_end',
+            },
+          ],
+        },
+        null,
+        2,
+      )}\n`,
+      'utf-8',
+    )
+
+    consoleOutput = []
+    await runWithArgs('health')
+
+    expect(consoleOutput.some((line) => line.includes('Consecutive failures: 3'))).toBe(true)
+    expect(consoleOutput.some((line) => line.includes('Failures in last 24h: 1'))).toBe(true)
+    expect(consoleOutput.some((line) => line.includes('database is locked'))).toBe(true)
+    expect(consoleOutput.some((line) => line.includes('codex/turn_end'))).toBe(true)
   })
 })
 

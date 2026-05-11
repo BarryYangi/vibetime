@@ -4,6 +4,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { IpcPushEvent } from '../shared/ipc-types.js'
 import { notifyRenderer } from './db.js'
+import { logger } from './logger.js'
 
 const SOCKET_DIR = join(homedir(), '.vibetime')
 const SOCKET_PATH =
@@ -41,22 +42,27 @@ export function startNotifyServer(): void {
       buffer = lines.pop() ?? ''
 
       for (const line of lines) {
+        if (!line) continue
         try {
           const payload = JSON.parse(line) as IpcPushEvent
-          if (payload.type === 'db-changed') {
+          if (payload && payload.type === 'db-changed') {
             scheduleNotify(payload)
           }
         } catch {
-          scheduleNotify({ type: 'db-changed' })
+          // Malformed payloads are ignored — do NOT fall back to refreshing the
+          // renderer, otherwise any local process writing garbage to the socket
+          // could trigger arbitrary UI/db churn.
         }
       }
     })
-    socket.on('error', () => {
+    socket.on('error', (err) => {
+      logger.warn('notify socket client error', { message: String(err) })
       socket.destroy()
     })
   })
 
-  server.on('error', () => {
+  server.on('error', (err) => {
+    logger.error('notify server crashed', err, { socketPath: SOCKET_PATH })
     stopNotifyServer()
   })
 

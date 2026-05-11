@@ -4,6 +4,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { ensureVibetimeDir } from './fs.js'
+import { appendLog } from './log.js'
 
 // Compute at call time so tests can override process.env.HOME
 function getConfigPath(): string {
@@ -75,7 +76,10 @@ export function readConfig(): VibetimeConfig {
         last_view: readString(config.app?.last_view, DEFAULT_CONFIG.app.last_view),
       },
     }
-  } catch {
+  } catch (err) {
+    // Fall back to defaults but leave a breadcrumb so the user can diagnose
+    // "my config disappeared" instead of failing silently.
+    appendLog(`readConfig fell back to defaults: ${err}`)
     return DEFAULT_CONFIG
   }
 }

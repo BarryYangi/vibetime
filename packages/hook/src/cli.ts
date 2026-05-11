@@ -5,6 +5,7 @@
 import { allocateDurationByLocalDay, durationWithinWindow } from '@vibetime/core'
 import chalk from 'chalk'
 import { DB_PATH, VERSION } from './constants.js'
+import { readHookHealth } from './health.js'
 import { installAgent, uninstallAgent } from './install.js'
 import { appendLog } from './log.js'
 import { reconcileCodexCompletedTurns, sweepStale } from './recovery.js'
@@ -48,6 +49,7 @@ Commands:
   today             Show today's agent time breakdown
   project <name>    Show project details (default: --days=7)
   export            Export events as JSON or CSV (--format=csv, --out=path)
+  health            Show hook persist health (recent write failures)
   version           Show version and database path
   help              Show this help message
 
@@ -60,6 +62,7 @@ Examples:
   vibetime today
   vibetime project my-project --days=30
   vibetime export --format=json --out=events.json
+  vibetime health
   vibetime version`)
 }
 
@@ -394,6 +397,25 @@ export async function runCli(args = process.argv.slice(2)): Promise<void> {
       case 'version': {
         console.log(chalk.bold(`vibetime ${VERSION}`))
         console.log(chalk.dim(`Database: ${DB_PATH}`))
+        break
+      }
+
+      case 'health': {
+        const health = readHookHealth()
+        console.log(chalk.bold('Hook persist health'))
+        console.log(chalk.dim('─'.repeat(40)))
+        console.log(`  Consecutive failures: ${health.consecutiveFailures}`)
+        console.log(`  Failures in last 24h: ${health.recentFailures.length}`)
+        if (health.lastError) {
+          const when = new Date(health.lastError.ts * 1000).toLocaleString('en-US')
+          console.log(`  Last error: ${health.lastError.message}`)
+          console.log(
+            chalk.dim(`  Agent/Event: ${health.lastError.agent}/${health.lastError.event_type}`),
+          )
+          console.log(chalk.dim(`  Time: ${when}`))
+        } else {
+          console.log(chalk.dim('  Last error: none'))
+        }
         break
       }
 

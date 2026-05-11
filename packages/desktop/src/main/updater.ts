@@ -2,6 +2,7 @@ import { readConfig } from '@vibetime/hook/config'
 import { app, BrowserWindow, dialog, shell } from 'electron'
 import type { AppUpdateState } from '../shared/ipc-types.js'
 import { notifyRenderer } from './db.js'
+import { logger } from './logger.js'
 
 const STARTUP_CHECK_DELAY_MS = 30_000
 const PERIODIC_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000
@@ -160,15 +161,17 @@ function showUpdateAvailableDialogLater(version: string | null): void {
       if (shouldOpenRelease) return openReleasePage()
       return undefined
     })
-    .catch((error) => console.error(errorMessage(error)))
+    .catch((error) => logger.error('update-available dialog failed', error))
 }
 
 function showNoUpdateDialogLater(): void {
-  void showNoUpdateDialog().catch((error) => console.error(errorMessage(error)))
+  void showNoUpdateDialog().catch((error) => logger.error('no-update dialog failed', error))
 }
 
 function showUpdateErrorDialogLater(message: string): void {
-  void showUpdateErrorDialog(message).catch((error) => console.error(errorMessage(error)))
+  void showUpdateErrorDialog(message).catch((error) =>
+    logger.error('update-error dialog failed', error, { dialogMessage: message }),
+  )
 }
 
 async function fetchLatestReleaseVersion(): Promise<string> {

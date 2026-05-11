@@ -1,6 +1,9 @@
 import { useAtomValue } from 'jotai'
-import { OverlayScrollbarsComponent } from 'overlayscrollbars-react'
-import { lazy, Suspense, useEffect } from 'react'
+import {
+  OverlayScrollbarsComponent,
+  type OverlayScrollbarsComponentRef,
+} from 'overlayscrollbars-react'
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef } from 'react'
 import { HashRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { useResolvedColorScheme } from './appearance'
@@ -21,10 +24,20 @@ function RouteFallback() {
 
 function AppRoutes() {
   const location = useLocation()
+  const scrollerRef = useRef<OverlayScrollbarsComponentRef>(null)
 
   useEffect(() => {
     if (!LAST_VIEW_ROUTES.has(location.pathname)) return
     void window.api.invoke('updateAppPreferences', { lastView: location.pathname })
+  }, [location.pathname])
+
+  // The OverlayScrollbars viewport is stable across route transitions, so a leftover
+  // scrollTop from the previous route would land you mid-page on the new one. Reset
+  // to the top on every navigation — paint-blocking so the user never sees the stale frame.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: pathname is the trigger, not read inside
+  useLayoutEffect(() => {
+    const viewport = scrollerRef.current?.osInstance()?.elements().viewport
+    if (viewport) viewport.scrollTop = 0
   }, [location.pathname])
 
   return (
@@ -46,6 +59,7 @@ function AppRoutes() {
           )}
         >
           <OverlayScrollbarsComponent
+            ref={scrollerRef}
             className="scrollbar-shell h-full scroll-smooth"
             defer
             options={{ scrollbars: { autoHide: 'leave', autoHideDelay: 100 } }}

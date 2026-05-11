@@ -4,8 +4,15 @@ import { join } from 'node:path'
 import { readConfig } from '@vibetime/hook/config'
 import type { MenuItemConstructorOptions } from 'electron'
 import { app, BrowserWindow, Menu, nativeTheme } from 'electron'
-import { setDbChangeListener, startDbChangeWatcher, stopDbChangeWatcher } from './db.js'
+import {
+  setDbChangeListener,
+  startDbChangeWatcher,
+  startReconcileLoop,
+  stopDbChangeWatcher,
+  stopReconcileLoop,
+} from './db.js'
 import { registerIpcHandlers } from './ipc-handlers'
+import { logger } from './logger.js'
 import { startNotifyServer, stopNotifyServer } from './notify-server.js'
 import { createMenubarTray, destroyMenubarTray, refreshMenubarTray } from './tray.js'
 import { startAutomaticUpdateChecks, stopAutomaticUpdateChecks } from './updater.js'
@@ -66,10 +73,15 @@ function configureApplicationMenu() {
     {
       label: 'View',
       submenu: [
-        { role: 'reload' },
-        { role: 'forceReload' },
-        { role: 'toggleDevTools' },
-        { type: 'separator' },
+        // Reload / DevTools are dev-only; hide in packaged builds.
+        ...(app.isPackaged
+          ? ([] satisfies MenuItemConstructorOptions[])
+          : ([
+              { role: 'reload' },
+              { role: 'forceReload' },
+              { role: 'toggleDevTools' },
+              { type: 'separator' },
+            ] satisfies MenuItemConstructorOptions[])),
         { role: 'resetZoom' },
         { role: 'zoomIn' },
         { role: 'zoomOut' },
@@ -141,10 +153,8 @@ function createMainWindow(route = lastViewRoute()): BrowserWindow {
     minHeight: MIN_WINDOW_HEIGHT,
     ...(process.platform === 'darwin'
       ? {
-          backgroundColor: '#00000000',
           titleBarStyle: 'hiddenInset' as const,
           trafficLightPosition: { x: 14, y: 12 },
-          transparent: true,
           vibrancy: 'under-window' as const,
           visualEffectState: 'active' as const,
         }
@@ -152,8 +162,14 @@ function createMainWindow(route = lastViewRoute()): BrowserWindow {
     webPreferences: {
       preload: join(__dirname, '../preload/index.mjs'),
       contextIsolation: true,
+      // NOTE: sandbox stays false until preload is shipped as CJS. Electron
+      // forbids ESM preload (.mjs) under sandbox: true and silently fails to
+      // expose the contextBridge API, producing a blank renderer.
       sandbox: false,
       nodeIntegration: false,
+      // Keep web contents transparent so macOS vibrancy remains visible without
+      // making the whole NSWindow transparent during Dock restore animations.
+      transparent: process.platform === 'darwin',
     },
   })
 
@@ -196,7 +212,7 @@ function startUpdateChecksSafely(): void {
   try {
     startAutomaticUpdateChecks()
   } catch (err) {
-    console.error(`Unable to start update checks: ${String(err)}`)
+    logger.error('Unable to start update checks', err)
   }
 }
 
@@ -269,6 +285,7 @@ if (isCliMode) {
     registerIpcHandlers({ showMainWindow })
     startNotifyServer()
     startDbChangeWatcher()
+    startReconcileLoop()
     startUpdateChecksSafely()
     createMenubarTray({
       openApp: (route) => showMainWindow(route),
@@ -290,6 +307,7 @@ if (isCliMode) {
     destroyMenubarTray()
     stopNotifyServer()
     stopDbChangeWatcher()
+    stopReconcileLoop()
   })
 
   app.on('activate', () => {

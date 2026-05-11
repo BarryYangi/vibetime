@@ -8,6 +8,7 @@ import type { NormalizedEvent } from '@vibetime/core'
 import { DDL_EVENTS, DDL_INDICES, DDL_OPEN_TURNS } from '@vibetime/core'
 import { DB_PATH } from './constants.js'
 import { ensureVibetimeDir } from './fs.js'
+import { recordPersistFailure, recordPersistSuccess } from './health.js'
 import { appendLog } from './log.js'
 
 export interface StoredOpenTurn {
@@ -234,8 +235,16 @@ export function persistEvent(db: Database, event: PersistableEvent): void {
         db.query('DELETE FROM open_turns WHERE turn_id = ?').run(effectiveTurnId)
       }
     })()
+    // Clear any pending failure streak so `vibetime health` stops surfacing
+    // a stale warning once writes are healthy again.
+    recordPersistSuccess()
   } catch (err) {
     appendLog(`Error persisting event: ${err}`)
+    recordPersistFailure({
+      message: err instanceof Error ? err.message : String(err),
+      agent: event.agent,
+      event_type: event.event_type,
+    })
     // Never throw — hook must exit 0
   }
 }

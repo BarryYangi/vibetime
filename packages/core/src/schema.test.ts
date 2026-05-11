@@ -51,13 +51,14 @@ describe('DDL_OPEN_TURNS (byte-exact PRD §6 — no IF NOT EXISTS)', () => {
 })
 
 describe('DDL_INDICES', () => {
-  it('contains the four required indices', () => {
-    expect(DDL_INDICES).toHaveLength(4)
+  it('contains the required indices for hot query paths', () => {
+    expect(DDL_INDICES).toHaveLength(5)
     const joined = DDL_INDICES.join('\n')
     expect(joined).toMatch(/idx_events_ts\b.*\bts\b/)
     expect(joined).toMatch(/idx_events_project\b.*\bproject\b/)
     expect(joined).toMatch(/idx_events_agent_project\b.*\bagent,\s*project\b/)
     expect(joined).toMatch(/idx_events_session_id\b.*\bsession_id\b/)
+    expect(joined).toMatch(/idx_events_turn_id\b.*\bturn_id\b/)
   })
 })
 

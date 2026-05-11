@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { CodexTurnCompletion } from '@vibetime/core'
@@ -9,6 +9,44 @@ export interface FindCodexTurnCompletionInput {
   turnId: string
   startedAt: number
   homeDir?: string
+}
+
+// Cache transcript contents keyed by absolute path. mtime AND size are both
+// checked because mtime can lag (cp -p, clock skew, network FS), and size can
+// stay constant for in-place rewrites. Together they're a robust freshness
+// signal for append-only jsonl transcripts.
+type TranscriptCacheEntry = {
+  mtimeMs: number
+  size: number
+  content: string
+}
+const transcriptCache = new Map<string, TranscriptCacheEntry>()
+const TRANSCRIPT_CACHE_MAX = 32
+
+function readTranscriptCached(transcriptPath: string): string | null {
+  try {
+    const stat = statSync(transcriptPath)
+    const cached = transcriptCache.get(transcriptPath)
+    if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+      return cached.content
+    }
+    const content = readFileSync(transcriptPath, 'utf8')
+    transcriptCache.set(transcriptPath, {
+      mtimeMs: stat.mtimeMs,
+      size: stat.size,
+      content,
+    })
+    if (transcriptCache.size > TRANSCRIPT_CACHE_MAX) {
+      const oldest = transcriptCache.keys().next().value
+      if (oldest !== undefined) transcriptCache.delete(oldest)
+    }
+    return content
+  } catch {
+    // File was deleted, moved, or otherwise inaccessible. Drop the stale cache
+    // entry and bail. The caller already tolerates null transcripts.
+    transcriptCache.delete(transcriptPath)
+    return null
+  }
 }
 
 function pad2(value: number): string {
@@ -53,12 +91,16 @@ export function findCodexTurnCompletion(
   const homeDir = input.homeDir ?? homedir()
   if (!homeDir) return null
 
-  const transcripts = candidateTranscriptPaths(homeDir, input.sessionId, input.startedAt).map(
-    (transcriptPath) => ({
-      transcriptPath,
-      content: readFileSync(transcriptPath, 'utf8'),
-    }),
-  )
+  const transcripts: Array<{ transcriptPath: string; content: string }> = []
+  for (const transcriptPath of candidateTranscriptPaths(
+    homeDir,
+    input.sessionId,
+    input.startedAt,
+  )) {
+    const content = readTranscriptCached(transcriptPath)
+    if (content === null) continue
+    transcripts.push({ transcriptPath, content })
+  }
 
   return findCodexTurnCompletionInTranscripts({
     turnId: input.turnId,

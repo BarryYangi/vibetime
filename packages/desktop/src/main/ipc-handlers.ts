@@ -41,12 +41,36 @@ function assertValidAgent(agent: unknown): asserts agent is string {
   }
 }
 
+function extractAgentArg(args: unknown): unknown {
+  return isPlainObject(args) ? (args as { agent?: unknown }).agent : undefined
+}
+
 function mergeConfig(current: VibetimeConfig, patch: Partial<VibetimeConfig>): VibetimeConfig {
   return {
     projects: patch.projects ?? current.projects,
     display: { ...current.display, ...patch.display },
     app: { ...current.app, ...patch.app },
   }
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isProjectsRecord(value: unknown): value is Record<string, string> {
+  if (!isPlainObject(value)) return false
+  for (const v of Object.values(value)) {
+    if (typeof v !== 'string') return false
+  }
+  return true
+}
+
+function isPartialVibetimeConfig(value: unknown): value is Partial<VibetimeConfig> {
+  if (!isPlainObject(value)) return false
+  if (value.projects !== undefined && !isProjectsRecord(value.projects)) return false
+  if (value.display !== undefined && !isPlainObject(value.display)) return false
+  if (value.app !== undefined && !isPlainObject(value.app)) return false
+  return true
 }
 
 function appPreferencesFromConfig(config: VibetimeConfig): AppPreferences {
@@ -139,6 +163,9 @@ export function registerIpcHandlers(
 
   ipcMain.handle('updateConfig', async (_event, config): Promise<IpcResult<void>> => {
     try {
+      if (!isPartialVibetimeConfig(config)) {
+        return { ok: false, error: 'Invalid config payload' }
+      }
       const current = readConfig()
       writeConfig(mergeConfig(current, config))
       return { ok: true, data: undefined }
@@ -165,26 +192,30 @@ export function registerIpcHandlers(
 
   ipcMain.handle(
     'updateAppPreferences',
-    async (_event, preferences: Partial<AppPreferences>): Promise<IpcResult<AppPreferences>> => {
+    async (_event, preferences: unknown): Promise<IpcResult<AppPreferences>> => {
       try {
+        if (!isPlainObject(preferences)) {
+          return { ok: false, error: 'Invalid preferences payload' }
+        }
+        const prefs = preferences as Partial<AppPreferences>
         const current = readConfig()
-        if (preferences.openAtLogin !== undefined) {
-          app.setLoginItemSettings({ openAtLogin: preferences.openAtLogin })
+        if (typeof prefs.openAtLogin === 'boolean') {
+          app.setLoginItemSettings({ openAtLogin: prefs.openAtLogin })
         }
         const openAtLogin = app.getLoginItemSettings().openAtLogin
         const next = mergeConfig(current, {
           app: {
-            language: normalizeAppLanguage(preferences.language, current.app.language),
+            language: normalizeAppLanguage(prefs.language, current.app.language),
             open_at_login: openAtLogin,
-            theme: normalizeAppTheme(preferences.theme, current.app.theme),
+            theme: normalizeAppTheme(prefs.theme, current.app.theme),
             last_view:
-              preferences.lastView === undefined
+              prefs.lastView === undefined
                 ? current.app.last_view
-                : normalizeAppRoute(preferences.lastView),
+                : normalizeAppRoute(prefs.lastView),
           },
         })
         writeConfig(next)
-        if (preferences.theme !== undefined) {
+        if (prefs.theme !== undefined) {
           applyNativeTheme(next.app.theme)
         }
         return { ok: true, data: appPreferencesFromConfig(next) }
@@ -284,19 +315,20 @@ export function registerIpcHandlers(
     }
   })
 
-  ipcMain.handle('showMainWindow', async (_event, args): Promise<IpcResult<void>> => {
+  ipcMain.handle('showMainWindow', async (_event, args: unknown): Promise<IpcResult<void>> => {
     try {
-      actions.showMainWindow?.(
-        args?.route === undefined ? undefined : normalizeAppRoute(args.route),
-      )
+      const rawRoute = isPlainObject(args) ? (args as { route?: unknown }).route : undefined
+      const route = typeof rawRoute === 'string' ? normalizeAppRoute(rawRoute) : undefined
+      actions.showMainWindow?.(route)
       return { ok: true, data: undefined }
     } catch (err) {
       return { ok: false, error: String(err) }
     }
   })
 
-  ipcMain.handle('installAgent', async (_event, { agent }): Promise<IpcResult<void>> => {
+  ipcMain.handle('installAgent', async (_event, args: unknown): Promise<IpcResult<void>> => {
     try {
+      const agent = extractAgentArg(args)
       assertValidAgent(agent)
       writeAndNotify(() => installAgent(agent))
       return { ok: true, data: undefined }
@@ -305,8 +337,9 @@ export function registerIpcHandlers(
     }
   })
 
-  ipcMain.handle('uninstallAgent', async (_event, { agent }): Promise<IpcResult<void>> => {
+  ipcMain.handle('uninstallAgent', async (_event, args: unknown): Promise<IpcResult<void>> => {
     try {
+      const agent = extractAgentArg(args)
       assertValidAgent(agent)
       writeAndNotify(() => uninstallAgent(agent))
       return { ok: true, data: undefined }

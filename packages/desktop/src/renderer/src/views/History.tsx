@@ -2,6 +2,7 @@ import type {
   CustomSeriesRenderItemAPI,
   CustomSeriesRenderItemParams,
 } from 'echarts/types/dist/echarts'
+import { useAtomValue } from 'jotai'
 import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useResolvedColorScheme } from '@/appearance'
@@ -32,6 +33,7 @@ import type { HistorySummary, TopProjectRow } from '../../../shared/ipc-types'
 import { HISTORY_PERIODS } from '../../../shared/ipc-types'
 import { getChartThemeName, getChartTokens } from '../charts/theme'
 import { useI18n } from '../i18n'
+import { clearActiveHistoryPeriod, historySummaryAtom, refreshHistorySummary } from '../store'
 
 function DashboardPanel({
   title,
@@ -916,7 +918,8 @@ export default function History() {
   const colorScheme = useResolvedColorScheme()
   const { locale, t } = useI18n()
   const [periodDays, setPeriodDays] = useState<HistorySummary['periodDays']>(30)
-  const [summary, setSummary] = useState<HistorySummary | null>(null)
+  const loadedSummary = useAtomValue(historySummaryAtom)
+  const summary = loadedSummary?.periodDays === periodDays ? loadedSummary : null
   const [error, setError] = useState<string | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>('total')
   const [sortAsc, setSortAsc] = useState(false)
@@ -926,18 +929,17 @@ export default function History() {
   useEffect(() => {
     let alive = true
     setError(null)
-    window.api
-      .invoke('getHistorySummary', { periodDays })
+    refreshHistorySummary(periodDays)
       .then((result) => {
         if (!alive) return
-        if (result.ok) setSummary(result.data)
-        else setError(result.error)
+        if (result && !result.ok) setError(result.error)
       })
       .catch((err) => {
         if (alive) setError(String(err))
       })
     return () => {
       alive = false
+      clearActiveHistoryPeriod()
     }
   }, [periodDays])
 

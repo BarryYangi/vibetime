@@ -6,6 +6,7 @@ import type {
   CliInstallStatus,
   HistorySummary,
   IpcPushEvent,
+  IpcResult,
   MenubarState,
   TodayLiveState,
 } from '../../shared/ipc-types'
@@ -22,6 +23,7 @@ export const updateStateAtom = atom<AppUpdateState | null>(null)
 
 let refreshSeq = 0
 let historyRefreshSeq = 0
+let activeHistoryPeriod: HistorySummary['periodDays'] | null = null
 let menubarRefreshSeq = 0
 let appPreferencesRefreshSeq = 0
 let agentStatusRefreshSeq = 0
@@ -76,18 +78,25 @@ export async function refreshTodayLiveState(): Promise<void> {
   }
 }
 
+export function clearActiveHistoryPeriod(): void {
+  activeHistoryPeriod = null
+}
+
 export async function refreshHistorySummary(
   periodDays: HistorySummary['periodDays'],
-): Promise<void> {
+): Promise<IpcResult<HistorySummary> | null> {
+  activeHistoryPeriod = periodDays
   const seq = ++historyRefreshSeq
   try {
     const result = await window.api.invoke('getHistorySummary', { periodDays })
-    if (seq !== historyRefreshSeq) return
+    if (seq !== historyRefreshSeq) return null
     if (result.ok) {
       store.set(historySummaryAtom, result.data)
     }
+    return result
   } catch {
     // Page-level queries surface initial load errors; push refresh is best-effort.
+    return null
   }
 }
 
@@ -183,6 +192,11 @@ export function handlePush(event: IpcPushEvent): void {
   if (event.type === 'db-changed') {
     void refreshTodayLiveState()
     void refreshMenubarState()
+    // Incremental history refresh only after the History view has loaded once.
+    // This avoids extra IPC work for users who never open History.
+    if (activeHistoryPeriod !== null && store.get(historySummaryAtom)) {
+      void refreshHistorySummary(activeHistoryPeriod)
+    }
     return
   }
   if (event.type === 'update-state-changed') {

@@ -1,6 +1,6 @@
 import { existsSync, type FSWatcher, mkdirSync, readFileSync, watch } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import type { NormalizedEvent } from '@vibetime/core'
 import {
   allocateDurationByLocalDay,
@@ -24,6 +24,7 @@ import type {
   TodaySummary,
 } from '../shared/ipc-types.js'
 import { findCodexTurnCompletion } from './codex-transcript.js'
+import { logger } from './logger.js'
 
 type DbEvent = Omit<NormalizedEvent, 'duration_sec' | 'meta'> & {
   duration_sec: number | null
@@ -36,10 +37,20 @@ const DB_PATH = join(homedir(), '.vibetime', 'data.db')
 const DB_DIR = join(homedir(), '.vibetime')
 const DB_FILES = new Set(['data.db', 'data.db-wal', 'data.db-shm'])
 
+// `buildTurnStarts` may need a turn_start that lies before the History window
+// to anchor a turn_end whose duration_sec is missing or unreliable. STALE_TURN_MAX_AGE
+// is 6h, so 1 day is a generous safety margin.
+const HISTORY_TURN_START_BUFFER_SEC = 86400
+
+// Background reconciliation cadence. Codex transcript fallbacks are best-effort;
+// 30s is fresh enough for UI without thrashing disk I/O.
+const RECONCILE_INTERVAL_MS = 30_000
+
 let db: Database.Database | null = null
 let dbWatcher: FSWatcher | null = null
 let notifyTimer: ReturnType<typeof setTimeout> | null = null
 let dbChangeListener: ((event: IpcPushEvent) => void) | null = null
+let reconcileTimer: ReturnType<typeof setInterval> | null = null
 
 export function setDbChangeListener(listener: ((event: IpcPushEvent) => void) | null): void {
   dbChangeListener = listener
@@ -115,6 +126,32 @@ export function writeAndNotify(fn: () => void): void {
   notifyRenderer()
 }
 
+function runReconcileOnce(): void {
+  try {
+    const handle = getDb()
+    reconcileCodexCompletedTurns(handle)
+    discardInactiveOpenTurns(handle)
+  } catch (err) {
+    // Reconcile is best-effort. A failure must not affect read paths or crash
+    // the main process — log and move on.
+    logger.error('reconcile loop failed', err)
+  }
+}
+
+export function startReconcileLoop(): void {
+  if (reconcileTimer) return
+  // Immediate kickoff so the first UI read after launch sees fresh data.
+  runReconcileOnce()
+  reconcileTimer = setInterval(runReconcileOnce, RECONCILE_INTERVAL_MS)
+}
+
+export function stopReconcileLoop(): void {
+  if (reconcileTimer) {
+    clearInterval(reconcileTimer)
+    reconcileTimer = null
+  }
+}
+
 function reconcileCodexCompletedTurns(db: Database.Database): void {
   const openTurns = db.prepare("SELECT * FROM open_turns WHERE agent = 'codex'").all() as Array<{
     turn_id: string
@@ -149,9 +186,12 @@ function reconcileCodexCompletedTurns(db: Database.Database): void {
         ts: completedAt,
         timezone: turn.timezone,
         duration_sec: Math.max(0, completedAt - turn.started_at),
+        // Store only the file basename so the local home path doesn't end up
+        // in db exports / shared diagnostics. The session_id + basename is
+        // enough to relocate the transcript under ~/.codex/sessions/.
         meta: JSON.stringify({
           reason: 'codex_task_complete_fallback',
-          transcript_path: transcriptPath,
+          transcript_file: basename(transcriptPath),
         }),
       })
       deleteOpenTurn.run(turn.turn_id)
@@ -297,8 +337,33 @@ function denseDateKeys(days: number, endDate: Date): string[] {
   return Array.from({ length: days }, (_, index) => toDateKey(firstDay + index * 86400))
 }
 
-function queryEventsBefore(db: Database.Database, to: number): DbEvent[] {
-  return db.prepare('SELECT * FROM events WHERE ts < ? ORDER BY ts ASC').all(to) as DbEvent[]
+function historyLowerBound(rangeEnd: number, periodDays: PeriodDays): number {
+  const calendarStart = rangeEnd - 365 * 86400
+  const previousPeriodStart = rangeEnd - 2 * periodDays * 86400
+  return Math.min(calendarStart, previousPeriodStart)
+}
+
+// Single-pass scan of all events the History summary needs. Pulls everything
+// inside [lowerBound, rangeEnd) plus turn_start events from the buffer zone so
+// that turn_ends straddling the window edge can still be anchored by their
+// originating turn_start (see HISTORY_TURN_START_BUFFER_SEC).
+function queryEventsForHistory(
+  db: Database.Database,
+  rangeEnd: number,
+  periodDays: PeriodDays,
+): DbEvent[] {
+  const lowerBound = historyLowerBound(rangeEnd, periodDays)
+  return db
+    .prepare(`
+      SELECT * FROM events
+      WHERE ts < ?
+        AND (
+          ts >= ?
+          OR (event_type = 'turn_start' AND ts >= ?)
+        )
+      ORDER BY ts ASC
+    `)
+    .all(rangeEnd, lowerBound, lowerBound - HISTORY_TURN_START_BUFFER_SEC) as DbEvent[]
 }
 
 function buildTurnStarts(events: DbEvent[]): Map<string, { ts: number }> {
@@ -537,13 +602,15 @@ export function buildHistorySummaryFromEvents(
 
 export function queryHistorySummary(options: { periodDays: PeriodDays }): HistorySummary {
   const db = getDb()
-  reconcileCodexCompletedTurns(db)
-  discardInactiveOpenTurns(db)
+  // Reconcile runs on a background tick (see startReconcileLoop). Read paths
+  // stay pure — no file I/O, no writes — so opening History never blocks on
+  // transcript scanning.
 
   return db.transaction(() => {
     const now = new Date()
     const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
-    const events = queryEventsBefore(db, startOfLocalDay(tomorrow))
+    const rangeEnd = startOfLocalDay(tomorrow)
+    const events = queryEventsForHistory(db, rangeEnd, options.periodDays)
     return buildHistorySummaryFromEvents(events, { periodDays: options.periodDays, now })
   })()
 }
@@ -649,8 +716,8 @@ function queryActiveTurns(db: Database.Database): ActiveTurn[] {
 
 export function queryTodayLiveState(): TodayLiveState {
   const db = getDb()
-  reconcileCodexCompletedTurns(db)
-  discardInactiveOpenTurns(db)
+  // Reconcile runs on a background tick (see startReconcileLoop). Read paths
+  // stay pure so the menubar / today view never block on file I/O.
 
   return db.transaction(() => {
     const serverNow = Date.now() / 1000

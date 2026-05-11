@@ -41,4 +41,6 @@ export const DDL_INDICES = [
   'CREATE INDEX idx_events_project ON events(project);',
   'CREATE INDEX idx_events_agent_project ON events(agent, project);',
   'CREATE INDEX idx_events_session_id ON events(session_id);',
+  // Speed up turn reconciliation / `hasTurnEnd` lookups by turn_id.
+  'CREATE INDEX idx_events_turn_id ON events(turn_id) WHERE turn_id IS NOT NULL;',
 ] as const
