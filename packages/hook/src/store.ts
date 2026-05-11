@@ -4,9 +4,9 @@
 // All operations wrapped in try/catch — never throws (PRD §7).
 
 import { Database } from 'bun:sqlite'
+import { join } from 'node:path'
 import type { NormalizedEvent } from '@vibetime/core'
 import { DDL_EVENTS, DDL_INDICES, DDL_OPEN_TURNS } from '@vibetime/core'
-import { DB_PATH } from './constants.js'
 import { ensureVibetimeDir } from './fs.js'
 import { recordPersistFailure, recordPersistSuccess } from './health.js'
 import { appendLog } from './log.js'
@@ -40,13 +40,15 @@ function mergeMetaJson(existing: string | null, patch: Record<string, unknown>):
   return JSON.stringify(patch)
 }
 
+function getDefaultDbPath(): string {
+  return join(ensureVibetimeDir(), 'data.db')
+}
+
 /**
  * Open (or create) the SQLite database with required PRAGMAs and tables.
  * Idempotent — safe to call on every hook invocation.
  */
-export function openDatabase(path: string = DB_PATH): Database {
-  ensureVibetimeDir()
-
+export function openDatabase(path: string = getDefaultDbPath()): Database {
   const db = new Database(path, { create: true })
 
   // PRAGMA setup per STORE-01
