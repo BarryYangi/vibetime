@@ -60,7 +60,9 @@ function DashboardPanel({
 }
 
 const PERIODS = HISTORY_PERIODS
-type SortKey = 'project' | 'total' | 'turns' | 'lastActive'
+type SortKey = 'project' | 'total' | 'turns' | 'lastActive' | 'focusTurns' | 'median'
+
+type EnrichedProjectRow = TopProjectRow & { focusTurns: number; median: number }
 type ChartTokens = ReturnType<typeof getChartTokens>
 type TFunction = ReturnType<typeof useI18n>['t']
 type ChartAppearance = {
@@ -677,57 +679,14 @@ function AgentContributionBars({
   )
 }
 
-function TopProjectSignals({
-  locale,
-  summary,
-  t,
-}: {
-  locale: string
-  summary: HistorySummary
-  t: TFunction
-}) {
-  const rows = useMemo(() => {
-    const durationsByProject = new Map<string, number[]>()
-    for (const turn of summary.turnDurations) {
-      const values = durationsByProject.get(turn.project) ?? []
-      values.push(turn.duration)
-      durationsByProject.set(turn.project, values)
-    }
-    return summary.topProjects.slice(0, 5).map((project) => {
-      const values = (durationsByProject.get(project.project) ?? []).sort((a, b) => a - b)
-      const median = quantile(values, 0.5)
-      const focusTurns = values.filter((value) => value >= 25 * 60).length
-      return { ...project, focusTurns, median }
-    })
-  }, [summary.turnDurations, summary.topProjects])
-
-  return (
-    <div className="space-y-2 pt-1">
-      {rows.map((row) => (
-        <div
-          className="grid grid-cols-[minmax(0,1fr)_76px_64px_76px] items-center gap-3 border-b border-border/30 py-2.5 last:border-b-0"
-          key={row.project}
-        >
-          <p className="truncate text-[13px] font-medium">{row.project}</p>
-          <p className="font-heading tracking-tight text-[12px] tabular-nums">
-            {formatDurationSummary(row.total, locale)}
-          </p>
-          <p className="font-heading tracking-tight text-[12px] text-muted-foreground tabular-nums">
-            {row.focusTurns} {t('history.focus')}
-          </p>
-          <p className="text-right font-heading tracking-tight text-[12px] text-muted-foreground tabular-nums">
-            {t('history.med')} {formatDurationSummary(row.median, locale)}
-          </p>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 function SortIcon({ active, asc }: { active: boolean; asc: boolean }) {
-  if (!active) return null
   const Icon = asc ? ArrowUpIcon : ArrowDownIcon
-  return <Icon aria-hidden className="ml-1 inline size-3" />
+  return (
+    <Icon
+      aria-hidden
+      className={cn('ml-1 inline size-3 transition-opacity', active ? 'opacity-100' : 'opacity-0')}
+    />
+  )
 }
 
 function StatTile({ label, value, detail }: { label: string; value: string; detail: string }) {
@@ -787,7 +746,21 @@ export default function History() {
   }, [periodDays])
 
   const sortedRows = useMemo(() => {
-    const rows = [...(summary?.topProjects ?? [])]
+    if (!summary) return []
+    const durationsByProject = new Map<string, number[]>()
+    for (const turn of summary.turnDurations) {
+      if (turn.duration > 0) {
+        const values = durationsByProject.get(turn.project) ?? []
+        values.push(turn.duration)
+        durationsByProject.set(turn.project, values)
+      }
+    }
+    const rows: EnrichedProjectRow[] = summary.topProjects.map((project) => {
+      const turnValues = (durationsByProject.get(project.project) ?? []).sort((a, b) => a - b)
+      const focusTurns = turnValues.filter((d) => d >= 25 * 60).length
+      const median = quantile(turnValues, 0.5)
+      return { ...project, focusTurns, median }
+    })
     return rows.sort((a, b) => {
       const dir = sortAsc ? 1 : -1
       if (sortKey === 'project') return a.project.localeCompare(b.project) * dir
@@ -795,7 +768,7 @@ export default function History() {
       const bValue = b[sortKey] ?? 0
       return (Number(aValue) - Number(bValue)) * dir
     })
-  }, [sortAsc, sortKey, summary?.topProjects])
+  }, [sortAsc, sortKey, summary])
 
   const changeSort = (key: SortKey) => {
     if (sortKey === key) setSortAsc((value) => !value)
@@ -1131,18 +1104,11 @@ export default function History() {
         </DashboardPanel>
       </section>
 
-      <DashboardPanel
-        title={t('history.projectSignals')}
-        description={t('history.projectSignalsDescription')}
-      >
-        <TopProjectSignals locale={locale} summary={summary} t={t} />
-      </DashboardPanel>
-
       <DashboardPanel title={t('history.topProjects')}>
         <Table className="text-[13px]">
           <TableHeader className="[&_tr]:border-border/35">
             <TableRow className="border-border/35">
-              {(['project', 'total', 'turns', 'lastActive'] as const).map((key) => (
+              {(['project', 'total', 'turns', 'lastActive', 'focusTurns', 'median'] as const).map((key) => (
                 <TableHead className="h-8 px-3 text-[11px]" key={key}>
                   <button
                     className="inline-flex items-center"
@@ -1155,7 +1121,11 @@ export default function History() {
                         ? t('history.lastActive')
                         : key === 'total'
                           ? t('history.total')
-                          : t('history.turns')}
+                          : key === 'turns'
+                            ? t('history.turns')
+                            : key === 'focusTurns'
+                              ? t('history.focusCount')
+                              : t('history.median')}
                     <SortIcon active={sortKey === key} asc={sortAsc} />
                   </button>
                 </TableHead>
@@ -1163,7 +1133,7 @@ export default function History() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sortedRows.map((row: TopProjectRow) => (
+            {sortedRows.map((row) => (
               <TableRow className="border-border/25" key={row.project}>
                 <TableCell className="px-3 py-3">{row.project}</TableCell>
                 <TableCell className="px-3 py-3 font-heading tracking-tight tabular-nums">
@@ -1174,6 +1144,12 @@ export default function History() {
                 </TableCell>
                 <TableCell className="px-3 py-3">
                   {formatShortDate(row.lastActive, locale)}
+                </TableCell>
+                <TableCell className="px-3 py-3 font-heading tracking-tight text-muted-foreground tabular-nums">
+                  {row.focusTurns}
+                </TableCell>
+                <TableCell className="px-3 py-3 font-heading tracking-tight text-muted-foreground tabular-nums">
+                  {formatDurationSummary(row.median, locale)}
                 </TableCell>
               </TableRow>
             ))}
