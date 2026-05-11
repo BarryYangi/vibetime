@@ -40,8 +40,20 @@ const logoMarkEnd = '<!-- logo-mark:end -->'
 
 function renderSvg(source, output, size) {
   execFileSync(
-    'sips',
-    ['-s', 'format', 'png', '-z', String(size), String(size), source, '--out', output],
+    'magick',
+    [
+      '-background',
+      'none',
+      source,
+      '-filter',
+      'Lanczos',
+      '-define',
+      'filter:blur=0.92',
+      '-resize',
+      `${size}x${size}!`,
+      '-strip',
+      `PNG32:${output}`,
+    ],
     { stdio: 'ignore' },
   )
 }
