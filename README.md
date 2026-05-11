@@ -87,6 +87,12 @@ Hook health diagnostics:
 - Run `vibetime health` to inspect recent hook persist failures.
 - Use this when data appears missing to quickly confirm whether writes are failing (for example, DB lock or disk issues).
 
+CLI essentials:
+
+- Run `vibetime status` for a compact local health summary.
+- Run `vibetime agents` to inspect agent hook installation.
+- Add `--json` to status/query commands when scripting or calling from another agent.
+
 ## Development
 
 VibeTime is a pnpm workspace:

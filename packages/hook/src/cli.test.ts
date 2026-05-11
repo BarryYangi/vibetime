@@ -69,6 +69,10 @@ async function runWithExplicitArgs(...args: string[]): Promise<void> {
   await runCli(args)
 }
 
+function parseJsonOutput(): unknown {
+  return JSON.parse(consoleOutput.join('\n'))
+}
+
 describe('runCli — help', () => {
   it('shows help on no arguments', async () => {
     await runWithArgs()
@@ -113,6 +117,13 @@ describe('runCli — version', () => {
     expect(consoleOutput.some((line) => line.includes('0.0.0-dev'))).toBe(true)
   })
 
+  it('prints machine-readable JSON with --json', async () => {
+    await runWithArgs('version', '--json')
+    const output = parseJsonOutput() as { version?: string; database?: string }
+    expect(output.version).toBe('0.0.0-dev')
+    expect(output.database).toContain('data.db')
+  })
+
   it('accepts explicit args from packaged Electron argv parsing', async () => {
     process.argv = ['/Applications/VibeTime.app/Contents/MacOS/VibeTime', 'version']
     await runWithExplicitArgs('version')
@@ -127,6 +138,16 @@ describe('runCli — health', () => {
     expect(consoleOutput.some((line) => line.includes('Hook persist health'))).toBe(true)
     expect(consoleOutput.some((line) => line.includes('Consecutive failures: 0'))).toBe(true)
     expect(consoleOutput.some((line) => line.includes('Failures in last 24h: 0'))).toBe(true)
+  })
+
+  it('prints machine-readable JSON with --json', async () => {
+    await runWithArgs('health', '--json')
+    const output = parseJsonOutput() as {
+      consecutiveFailures?: number
+      recentFailures?: unknown[]
+    }
+    expect(output.consecutiveFailures).toBe(0)
+    expect(output.recentFailures).toEqual([])
   })
 
   it('shows failure details from hook-health.json', async () => {
@@ -165,6 +186,48 @@ describe('runCli — health', () => {
     expect(consoleOutput.some((line) => line.includes('Failures in last 24h: 1'))).toBe(true)
     expect(consoleOutput.some((line) => line.includes('database is locked'))).toBe(true)
     expect(consoleOutput.some((line) => line.includes('codex/turn_end'))).toBe(true)
+  })
+})
+
+describe('runCli — status', () => {
+  it('shows a compact status summary', async () => {
+    await runWithArgs('status')
+    expect(consoleOutput.some((line) => line.includes('VibeTime status'))).toBe(true)
+    expect(consoleOutput.some((line) => line.includes('Overall:'))).toBe(true)
+    expect(consoleOutput.some((line) => line.includes('Agents installed:'))).toBe(true)
+  })
+
+  it('prints machine-readable JSON with --json', async () => {
+    await runWithArgs('status', '--json')
+    const output = parseJsonOutput() as {
+      ok?: boolean
+      database?: { path?: string; events?: number }
+      health?: { consecutiveFailures?: number }
+      agents?: unknown[]
+    }
+    expect(typeof output.ok).toBe('boolean')
+    expect(output.database?.path).toContain('data.db')
+    expect(typeof output.database?.events).toBe('number')
+    expect(output.health?.consecutiveFailures).toBe(0)
+    expect(output.agents).toHaveLength(4)
+  })
+})
+
+describe('runCli — agents', () => {
+  it('shows agent hook installation status', async () => {
+    await runWithArgs('agents')
+    expect(consoleOutput.some((line) => line.includes('Agent hooks'))).toBe(true)
+    expect(consoleOutput.some((line) => line.includes('claude-code'))).toBe(true)
+    expect(consoleOutput.some((line) => line.includes('codex'))).toBe(true)
+  })
+
+  it('prints machine-readable JSON with --json', async () => {
+    await runWithArgs('agents', '--json')
+    const output = parseJsonOutput() as {
+      agents?: Array<{ agent: string; installed: boolean }>
+    }
+    expect(output.agents).toHaveLength(4)
+    expect(output.agents?.map((agent) => agent.agent)).toContain('gemini-cli')
   })
 })
 
@@ -219,6 +282,18 @@ describe('runCli — today', () => {
     const hasError = consoleError.some((line) => line.includes('Error:'))
     expect(hasNoActivity || hasSummaryHeader || hasError).toBe(true)
   })
+
+  it('prints machine-readable JSON with --json', async () => {
+    await runWithArgs('today', '--json')
+    const output = parseJsonOutput() as {
+      total?: number
+      projects?: unknown[]
+      turnCount?: number
+    }
+    expect(typeof output.total).toBe('number')
+    expect(Array.isArray(output.projects)).toBe(true)
+    expect(typeof output.turnCount).toBe('number')
+  })
 })
 
 describe('runCli — project', () => {
@@ -233,6 +308,18 @@ describe('runCli — project', () => {
     const hasNoActivity = consoleOutput.some((line) => line.includes('No activity for project'))
     const hasError = consoleError.some((line) => line.includes('Error:'))
     expect(hasNoActivity || hasError).toBe(true)
+  })
+
+  it('prints machine-readable JSON with --json', async () => {
+    await runWithArgs('project', 'my-project', '--json')
+    const output = parseJsonOutput() as {
+      project?: string
+      total?: number
+      days?: unknown[]
+    }
+    expect(output.project).toBe('my-project')
+    expect(output.total).toBe(0)
+    expect(output.days).toEqual([])
   })
 })
 
@@ -257,5 +344,11 @@ describe('runCli — export', () => {
     const hasError = consoleError.some((line) => line.includes('Error:'))
     // Either exported successfully or hit an error (both acceptable in test env)
     expect(hasExportMsg || hasError).toBe(true)
+  })
+
+  it('errors on unsupported format', async () => {
+    await runWithArgs('export', '--format=xml')
+    expect(exitCode).toBe(1)
+    expect(consoleError.some((line) => line.includes('--format must be json or csv'))).toBe(true)
   })
 })
