@@ -14,10 +14,14 @@ let consoleOutput: string[]
 let consoleError: string[]
 let logSpy: typeof console.log
 let errorSpy: typeof console.error
+const stableTestHome = `${process.env.HOME ?? ''}/.vibetime-test-cli-${process.pid}`
 
 beforeEach(() => {
   originalHome = process.env.HOME ?? ''
-  testHome = `${originalHome}/.vibetime-test-cli-${Date.now()}`
+  testHome = stableTestHome
+  if (existsSync(testHome)) {
+    rmSync(testHome, { recursive: true, force: true })
+  }
   process.env.HOME = testHome
   originalArgv = [...process.argv]
   originalExit = process.exit
