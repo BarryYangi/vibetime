@@ -1,6 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { TodayLiveState, TodaySummary } from '../../shared/ipc-types'
-import { handlePush, setTodayLiveState, store, todayLiveStateAtom } from './store'
+import type {
+  HistoryPeriodDays,
+  HistorySummary,
+  TodayLiveState,
+  TodaySummary,
+} from '../../shared/ipc-types'
+import {
+  clearActiveHistoryPeriod,
+  handlePush,
+  historySummariesAtom,
+  refreshHistorySummary,
+  setTodayLiveState,
+  store,
+  todayLiveStateAtom,
+} from './store'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -50,9 +63,33 @@ function makeActiveLiveState(revision: number, turnId: string): TodayLiveState {
   }
 }
 
+function makeHistorySummary(
+  periodDays: HistoryPeriodDays,
+  currentTotal: number = periodDays,
+): HistorySummary {
+  return {
+    periodDays,
+    calendar: [],
+    trendProjects: [],
+    trends: [],
+    topProjects: [],
+    hourlyMatrix: [],
+    turnDurations: [],
+    projectAgentTotals: [],
+    periodCompare: {
+      currentTotal,
+      previousTotal: 0,
+      delta: currentTotal,
+      deltaRatio: null,
+    },
+  }
+}
+
 describe('handlePush', () => {
   beforeEach(() => {
     vi.unstubAllGlobals()
+    clearActiveHistoryPeriod()
+    store.set(historySummariesAtom, {})
     store.set(todayLiveStateAtom, null)
   })
 
@@ -109,6 +146,36 @@ describe('handlePush', () => {
     await flushPromises()
 
     expect(store.get(todayLiveStateAtom)?.completed.grandTotal).toBe(42)
+  })
+
+  it('refreshes the active history period after History has loaded once', async () => {
+    const calls: Array<{ channel: string; args: unknown }> = []
+    const invoke = vi.fn(async (channel: string, args: unknown) => {
+      calls.push({ channel, args })
+      if (channel === 'getTodayLiveState') return { ok: true, data: makeLiveState(1, 30) }
+      if (channel === 'getMenubarState') {
+        return { ok: true, data: { todayTotal: 30, active: false, projects: [], activeTurns: [] } }
+      }
+      if (channel === 'getHistorySummary') {
+        const periodDays = (args as { periodDays: HistoryPeriodDays }).periodDays
+        return { ok: true, data: makeHistorySummary(periodDays, 100 + periodDays) }
+      }
+      return { ok: false, error: 'unexpected channel' }
+    })
+    vi.stubGlobal('window', { api: { invoke } })
+
+    await refreshHistorySummary(30)
+    handlePush({ type: 'db-changed' })
+    await flushPromises()
+
+    expect(calls.map((call) => call.channel)).toEqual([
+      'getHistorySummary',
+      'getTodayLiveState',
+      'getMenubarState',
+      'getHistorySummary',
+    ])
+    expect(calls[3]?.args).toEqual({ periodDays: 30 })
+    expect(store.get(historySummariesAtom)[30]?.periodCompare.currentTotal).toBe(130)
   })
 
   it('does not let an older revision overwrite newer live state', () => {

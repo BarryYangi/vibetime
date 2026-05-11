@@ -1,3 +1,4 @@
+import NumberFlow, { NumberFlowGroup } from '@number-flow/react'
 import type {
   CustomSeriesRenderItemAPI,
   CustomSeriesRenderItemParams,
@@ -9,6 +10,7 @@ import { useResolvedColorScheme } from '@/appearance'
 import { type EChartsCoreOption, echarts } from '@/charts/echarts'
 import { PageShell } from '@/components/PageShell'
 import { getAgentTheme, StackedProgress } from '@/components/StackedProgress'
+import { Spinner } from '@/components/ui/spinner'
 import {
   Table,
   TableBody,
@@ -21,6 +23,7 @@ import { Tabs, TabsList, TabsTab } from '@/components/ui/tabs'
 import {
   calendarDayLabels,
   calendarMonthLabels,
+  durationUnit,
   formatDurationFull,
   formatDurationSummary,
   formatPeriodLabel,
@@ -33,7 +36,7 @@ import type { HistorySummary, TopProjectRow } from '../../../shared/ipc-types'
 import { HISTORY_PERIODS } from '../../../shared/ipc-types'
 import { getChartThemeName, getChartTokens } from '../charts/theme'
 import { useI18n } from '../i18n'
-import { clearActiveHistoryPeriod, historySummaryAtom, refreshHistorySummary } from '../store'
+import { clearActiveHistoryPeriod, historySummariesAtom, refreshHistorySummary } from '../store'
 
 function DashboardPanel({
   title,
@@ -192,6 +195,38 @@ function sumTrendDay(day: HistorySummary['trends'][number]): number {
 function formatHourWindow(weekday: number, hour: number, locale: string): string {
   const labels = weekdayLabels(locale)
   return `${labels[weekday] ?? '-'} ${String(hour).padStart(2, '0')}:00`
+}
+
+function durationSummaryParts(seconds: number): Array<{ value: number; unit: 'h' | 'm' | 's' }> {
+  const whole = Math.max(0, Math.floor(seconds))
+  if (whole < 60) return [{ value: whole, unit: 's' }]
+
+  const totalMinutes = Math.round(whole / 60)
+  if (totalMinutes < 60) return [{ value: totalMinutes, unit: 'm' }]
+
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  return minutes > 0
+    ? [
+        { value: hours, unit: 'h' },
+        { value: minutes, unit: 'm' },
+      ]
+    : [{ value: hours, unit: 'h' }]
+}
+
+function DurationSummaryFlow({ seconds, locale }: { seconds: number; locale: string }) {
+  return (
+    <NumberFlowGroup>
+      <span className="inline-flex max-w-full items-baseline overflow-hidden tabular-nums">
+        {durationSummaryParts(seconds).map((part) => (
+          <span className="inline-flex items-baseline" key={part.unit}>
+            <NumberFlow locales={locale} value={part.value} />
+            <span>{durationUnit(part.unit, locale)}</span>
+          </span>
+        ))}
+      </span>
+    </NumberFlowGroup>
+  )
 }
 
 function quantile(values: number[], q: number): number {
@@ -887,16 +922,24 @@ function SortIcon({ active, asc }: { active: boolean; asc: boolean }) {
   )
 }
 
-function StatTile({ label, value, detail }: { label: string; value: string; detail: string }) {
+function StatTile({
+  label,
+  value,
+  detail,
+}: {
+  label: string
+  value: React.ReactNode
+  detail: React.ReactNode
+}) {
   return (
     <div className="flex flex-col justify-between rounded-[18px] border border-border/40 bg-card/40 p-5 shadow-sm shadow-black/[0.01]">
       <div className="space-y-1">
         <p className="text-[13px] font-medium text-muted-foreground">{label}</p>
-        <p className="font-heading text-[26px] font-semibold tracking-tight text-foreground">
+        <div className="font-heading text-[26px] font-semibold tracking-tight text-foreground">
           {value}
-        </p>
+        </div>
       </div>
-      <p className="mt-4 truncate text-[12px] text-muted-foreground">{detail}</p>
+      <div className="mt-4 truncate text-[12px] text-muted-foreground">{detail}</div>
     </div>
   )
 }
@@ -918,13 +961,20 @@ export default function History() {
   const colorScheme = useResolvedColorScheme()
   const { locale, t } = useI18n()
   const [periodDays, setPeriodDays] = useState<HistorySummary['periodDays']>(30)
-  const loadedSummary = useAtomValue(historySummaryAtom)
-  const summary = loadedSummary?.periodDays === periodDays ? loadedSummary : null
+  const summaries = useAtomValue(historySummariesAtom)
+  const exactSummary = summaries[periodDays] ?? null
+  const [visibleSummary, setVisibleSummary] = useState<HistorySummary | null>(null)
+  const summary = exactSummary ?? visibleSummary
+  const isLoadingPeriod = summary !== null && exactSummary === null
   const [error, setError] = useState<string | null>(null)
   const [sortKey, setSortKey] = useState<SortKey>('total')
   const [sortAsc, setSortAsc] = useState(false)
   const chartThemeName = getChartThemeName(colorScheme)
   const tokens = getChartTokens(colorScheme)
+
+  useEffect(() => {
+    if (exactSummary) setVisibleSummary(exactSummary)
+  }, [exactSummary])
 
   useEffect(() => {
     let alive = true
@@ -1081,22 +1131,31 @@ export default function History() {
           <p className="text-[13px] text-muted-foreground">{t('history.retrospective')}</p>
           <h1 className="font-heading text-2xl font-semibold">{t('history.title')}</h1>
         </div>
-        <Tabs
-          value={periodDays.toString()}
-          onValueChange={(v) => setPeriodDays(Number(v) as (typeof PERIODS)[number])}
-        >
-          <TabsList>
-            {PERIODS.map((period) => (
-              <TabsTab
-                key={period}
-                value={period.toString()}
-                className="h-6 px-2.5 font-heading text-[11.5px] tracking-tight tabular-nums"
-              >
-                {formatPeriodLabel(period, locale)}
-              </TabsTab>
-            ))}
-          </TabsList>
-        </Tabs>
+        <div className="flex items-center gap-2">
+          <Spinner
+            aria-hidden={!isLoadingPeriod}
+            className={cn(
+              'h-3.5 w-3.5 text-muted-foreground transition-opacity',
+              isLoadingPeriod ? 'opacity-100' : 'opacity-0',
+            )}
+          />
+          <Tabs
+            value={periodDays.toString()}
+            onValueChange={(v) => setPeriodDays(Number(v) as (typeof PERIODS)[number])}
+          >
+            <TabsList>
+              {PERIODS.map((period) => (
+                <TabsTab
+                  key={period}
+                  value={period.toString()}
+                  className="h-6 px-2.5 font-heading text-[11.5px] tracking-tight tabular-nums"
+                >
+                  {formatPeriodLabel(period, locale)}
+                </TabsTab>
+              ))}
+            </TabsList>
+          </Tabs>
+        </div>
       </header>
 
       {stats && (
@@ -1104,17 +1163,17 @@ export default function History() {
           <StatTile
             detail={formatDelta(summary.periodCompare.deltaRatio, t)}
             label={formatPeriodTotalLabel(summary.periodDays, locale, t)}
-            value={formatDurationSummary(stats.periodTotal, locale)}
+            value={<DurationSummaryFlow locale={locale} seconds={stats.periodTotal} />}
           />
           <StatTile
             detail={`${stats.turnCount} ${t('history.turns')} · p75 ${formatDurationSummary(stats.p75Turn, locale)}`}
             label={t('history.medianTurn')}
-            value={formatDurationSummary(stats.medianTurn, locale)}
+            value={<DurationSummaryFlow locale={locale} seconds={stats.medianTurn} />}
           />
           <StatTile
             detail={`${Math.round(stats.shortTurnRate * 100)}% ${t('history.underFive')}`}
             label={t('history.focusBlocks')}
-            value={`${stats.focusTurns}`}
+            value={<NumberFlow locales={locale} value={stats.focusTurns} />}
           />
           <StatTile
             detail={`${formatDurationSummary(stats.peakHour.total, locale)} · ${stats.topProject?.project ?? t('common.noProject')} ${Math.round(stats.topProjectShare * 100)}%`}
