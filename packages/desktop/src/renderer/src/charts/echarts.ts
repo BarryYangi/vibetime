@@ -1,4 +1,4 @@
-import { BarChart, CustomChart, HeatmapChart } from 'echarts/charts'
+import { BarChart, CustomChart, HeatmapChart, LineChart, ScatterChart } from 'echarts/charts'
 import {
   CalendarComponent,
   GridComponent,
@@ -14,6 +14,8 @@ echarts.use([
   BarChart,
   CustomChart,
   HeatmapChart,
+  LineChart,
+  ScatterChart,
   CalendarComponent,
   GridComponent,
   LegendComponent,

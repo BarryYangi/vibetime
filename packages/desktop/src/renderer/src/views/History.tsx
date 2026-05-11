@@ -508,7 +508,7 @@ function HourlyActivityHeatmap({
   return <div ref={ref} className="h-[220px] w-full" />
 }
 
-function TurnLengthBuckets({
+function FocusDurationChart({
   chartThemeName,
   locale,
   summary,
@@ -677,6 +677,202 @@ function AgentContributionBars({
       </div>
     </div>
   )
+}
+
+function ContextSwitchChart({
+  chartThemeName,
+  summary,
+  tokens,
+  t,
+}: Omit<ChartAppearance, 'locale'> & { summary: HistorySummary; t: TFunction }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const option = useMemo<EChartsCoreOption>(() => {
+    const labels = axisLabelStyle(tokens)
+    const data = summary.trends.map((day) => {
+      const activeProjects = Object.entries(day.projects)
+        .filter(([, duration]) => duration > 0)
+        .sort((a, b) => b[1] - a[1])
+        .map(([name]) => name)
+      return {
+        value: activeProjects.length,
+        date: day.date.slice(5),
+        projects: activeProjects,
+      }
+    })
+
+    return {
+      color: [tokens.seriesPalette[0]],
+      tooltip: {
+        trigger: 'axis',
+        borderWidth: 0,
+        confine: true,
+        extraCssText: tooltipExtraCss(tokens),
+        backgroundColor: tokens.tooltipBg,
+        axisPointer: { type: 'shadow', z: 0, shadowStyle: { color: tokens.axisPointer } },
+        formatter: (
+          params: Array<{ name: string; data: { value: number; projects: string[] } }>,
+        ) => {
+          const item = params[0]
+          if (!item) return ''
+          const projectCount = item.data.value
+          const projects: string[] = item.data.projects || []
+          const limit = 6
+          const projectList = projects
+            .slice(0, limit)
+            .map(
+              (p) =>
+                `<div style="color:${tokens.text};opacity:0.85;font-size:12px;margin-top:3px;">${p}</div>`,
+            )
+            .join('')
+          const more =
+            projects.length > limit
+              ? `<div style="color:${tokens.tooltipMuted};font-size:11px;margin-top:3px;">+ ${projects.length - limit} more</div>`
+              : ''
+          return `<div style="font-size:12px;color:${tokens.tooltipMuted}">${item.name}</div><div style="margin-top:2px;margin-bottom:6px;font-size:13px;font-weight:600;color:${tokens.text}">${projectCount} ${t('history.project')}</div>${projectList}${more}`
+        },
+      },
+      grid: { left: 34, right: 10, top: 20, bottom: 26 },
+      xAxis: {
+        type: 'category',
+        data: data.map((d) => d.date),
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { ...labels, interval: Math.max(0, Math.floor(data.length / 8)) },
+      },
+      yAxis: {
+        type: 'value',
+        minInterval: 1,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: labels,
+        splitLine: { lineStyle: splitLineStyle(tokens) },
+      },
+      series: [
+        {
+          type: 'line',
+          step: 'middle',
+          symbol: 'circle',
+          symbolSize: 6,
+          itemStyle: { color: tokens.seriesPalette[0] },
+          lineStyle: { width: 3 },
+          areaStyle: {
+            color: {
+              type: 'linear',
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
+              colorStops: [
+                { offset: 0, color: `${tokens.seriesPalette[0]}40` },
+                { offset: 1, color: `${tokens.seriesPalette[0]}00` },
+              ],
+            },
+          },
+          data: data.map((d) => ({
+            value: d.value,
+            projects: d.projects,
+          })),
+        },
+      ],
+    }
+  }, [summary.trends, t, tokens])
+  useChart(ref, option, chartThemeName)
+  return <div ref={ref} className="h-[220px] w-full" />
+}
+
+function ProjectEngagementChart({
+  chartThemeName,
+  locale,
+  summary,
+  tokens,
+  t,
+}: ChartAppearance & { summary: HistorySummary; t: TFunction }) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  const option = useMemo<EChartsCoreOption>(() => {
+    const labels = axisLabelStyle(tokens)
+    const rawBuckets = ['< 2m', '2-15m', '15-30m', '30-60m', '1-2h', '> 2h']
+    const buckets = rawBuckets.map((b) => localizeDurationRangeLabel(b, locale))
+    const topProjects = summary.topProjects
+      .slice(0, 6)
+      .map((p) => p.project)
+      .reverse()
+
+    const data: { value: [number, number, number] }[] = []
+
+    topProjects.forEach((project, yIndex) => {
+      const turns = summary.turnDurations.filter((t) => t.project === project && t.duration > 0)
+      const counts = [0, 0, 0, 0, 0, 0]
+      turns.forEach((turn) => {
+        const min = turn.duration / 60
+        if (min < 2) counts[0]++
+        else if (min < 15) counts[1]++
+        else if (min < 30) counts[2]++
+        else if (min < 60) counts[3]++
+        else if (min < 120) counts[4]++
+        else counts[5]++
+      })
+
+      counts.forEach((count, xIndex) => {
+        if (count > 0) {
+          data.push({ value: [xIndex, yIndex, count] })
+        }
+      })
+    })
+
+    const maxCount = Math.max(...data.map((d) => d.value[2]), 1)
+
+    return {
+      color: [tokens.seriesPalette[1]],
+      tooltip: {
+        trigger: 'item',
+        borderWidth: 0,
+        confine: true,
+        extraCssText: tooltipExtraCss(tokens),
+        backgroundColor: tokens.tooltipBg,
+        formatter: (params: { value: [number, number, number] }) => {
+          const count = params.value[2]
+          const bucket = buckets[params.value[0]]
+          const project = topProjects[params.value[1]]
+          return `<div style="font-size:12px;color:${tokens.tooltipMuted}">${project}</div>
+            <div style="margin-top:2px;font-size:13px;font-weight:600;color:${tokens.text}">${bucket}: ${count} ${t('history.turns')}</div>`
+        },
+      },
+      grid: { left: 80, right: 20, top: 20, bottom: 26 },
+      xAxis: {
+        type: 'category',
+        data: buckets,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: labels,
+        splitLine: { show: true, lineStyle: splitLineStyle(tokens) },
+      },
+      yAxis: {
+        type: 'category',
+        data: topProjects,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: { ...labels, width: 70, overflow: 'truncate' },
+        splitLine: { show: true, lineStyle: splitLineStyle(tokens) },
+      },
+      series: [
+        {
+          type: 'scatter',
+          data: data,
+          symbolSize: (val: [number, number, number]) => {
+            return 8 + (val[2] / maxCount) * 22
+          },
+          itemStyle: {
+            color: tokens.seriesPalette[1],
+            opacity: 0.8,
+          },
+        },
+      ],
+    }
+  }, [summary.turnDurations, summary.topProjects, t, tokens, locale])
+
+  useChart(ref, option, chartThemeName)
+  return <div ref={ref} className="h-[220px] w-full" />
 }
 
 function SortIcon({ active, asc }: { active: boolean; asc: boolean }) {
@@ -954,6 +1150,36 @@ export default function History() {
       </DashboardPanel>
 
       <DashboardPanel
+        title={t('history.hourlyRhythm')}
+        description={t('history.hourlyRhythmDescription')}
+      >
+        {stats && (
+          <InsightBar
+            items={[
+              {
+                label: t('history.peakWindow'),
+                value: formatHourWindow(stats.peakHour.weekday, stats.peakHour.hour, locale),
+              },
+              {
+                label: t('history.peakTotal'),
+                value: formatDurationSummary(stats.peakHour.total, locale),
+              },
+              {
+                label: t('history.bestDay'),
+                value: stats.bestDay.date.slice(5) || '-',
+              },
+            ]}
+          />
+        )}
+        <HourlyActivityHeatmap
+          chartThemeName={chartThemeName}
+          locale={locale}
+          summary={summary}
+          tokens={tokens}
+        />
+      </DashboardPanel>
+
+      <DashboardPanel
         title={t('history.projectTrends')}
         description={t('history.projectTrendsDescription')}
       >
@@ -1016,69 +1242,6 @@ export default function History() {
         </DashboardPanel>
 
         <DashboardPanel
-          title={t('history.hourlyRhythm')}
-          description={t('history.hourlyRhythmDescription')}
-        >
-          {stats && (
-            <InsightBar
-              items={[
-                {
-                  label: t('history.peakWindow'),
-                  value: formatHourWindow(stats.peakHour.weekday, stats.peakHour.hour, locale),
-                },
-                {
-                  label: t('history.peakTotal'),
-                  value: formatDurationSummary(stats.peakHour.total, locale),
-                },
-                {
-                  label: t('history.bestDay'),
-                  value: stats.bestDay.date.slice(5) || '-',
-                },
-              ]}
-            />
-          )}
-          <HourlyActivityHeatmap
-            chartThemeName={chartThemeName}
-            locale={locale}
-            summary={summary}
-            tokens={tokens}
-          />
-        </DashboardPanel>
-      </section>
-
-      <section className="grid gap-5 xl:grid-cols-2">
-        <DashboardPanel
-          title={t('history.turnLengthBuckets')}
-          description={t('history.turnLengthBucketsDescription')}
-        >
-          {stats && insights && (
-            <InsightBar
-              items={[
-                {
-                  label: t('history.focusShare'),
-                  value: formatPercent(insights.focusShare),
-                },
-                {
-                  label: t('history.fragmented'),
-                  value: formatPercent(stats.shortTurnRate),
-                },
-                {
-                  label: t('history.median'),
-                  value: formatDurationSummary(stats.medianTurn, locale),
-                },
-              ]}
-            />
-          )}
-          <TurnLengthBuckets
-            chartThemeName={chartThemeName}
-            locale={locale}
-            summary={summary}
-            t={t}
-            tokens={tokens}
-          />
-        </DashboardPanel>
-
-        <DashboardPanel
           title={t('history.agentContribution')}
           description={t('history.agentContributionDescription')}
         >
@@ -1104,32 +1267,92 @@ export default function History() {
         </DashboardPanel>
       </section>
 
+      <section className="grid gap-5 xl:grid-cols-2">
+        <DashboardPanel
+          title={t('history.focusDuration')}
+          description={t('history.focusDurationDescription')}
+        >
+          {stats && insights && (
+            <InsightBar
+              items={[
+                {
+                  label: t('history.focusShare'),
+                  value: formatPercent(insights.focusShare),
+                },
+                {
+                  label: t('history.fragmented'),
+                  value: formatPercent(stats.shortTurnRate),
+                },
+                {
+                  label: t('history.median'),
+                  value: formatDurationSummary(stats.medianTurn, locale),
+                },
+              ]}
+            />
+          )}
+          <FocusDurationChart
+            chartThemeName={chartThemeName}
+            locale={locale}
+            summary={summary}
+            t={t}
+            tokens={tokens}
+          />
+        </DashboardPanel>
+
+        <DashboardPanel
+          title={t('history.projectEngagement')}
+          description={t('history.projectEngagementDescription')}
+        >
+          <ProjectEngagementChart
+            chartThemeName={chartThemeName}
+            locale={locale}
+            summary={summary}
+            t={t}
+            tokens={tokens}
+          />
+        </DashboardPanel>
+      </section>
+
+      <DashboardPanel
+        title={t('history.contextSwitches')}
+        description={t('history.contextSwitchesDescription')}
+      >
+        <ContextSwitchChart
+          chartThemeName={chartThemeName}
+          summary={summary}
+          t={t}
+          tokens={tokens}
+        />
+      </DashboardPanel>
+
       <DashboardPanel title={t('history.topProjects')}>
         <Table className="text-[13px]">
           <TableHeader className="[&_tr]:border-border/35">
             <TableRow className="border-border/35">
-              {(['project', 'total', 'turns', 'lastActive', 'focusTurns', 'median'] as const).map((key) => (
-                <TableHead className="h-8 px-3 text-[11px]" key={key}>
-                  <button
-                    className="inline-flex items-center"
-                    onClick={() => changeSort(key)}
-                    type="button"
-                  >
-                    {key === 'project'
-                      ? t('history.project')
-                      : key === 'lastActive'
-                        ? t('history.lastActive')
-                        : key === 'total'
-                          ? t('history.total')
-                          : key === 'turns'
-                            ? t('history.turns')
-                            : key === 'focusTurns'
-                              ? t('history.focusCount')
-                              : t('history.median')}
-                    <SortIcon active={sortKey === key} asc={sortAsc} />
-                  </button>
-                </TableHead>
-              ))}
+              {(['project', 'total', 'turns', 'lastActive', 'focusTurns', 'median'] as const).map(
+                (key) => (
+                  <TableHead className="h-8 px-3 text-[11px]" key={key}>
+                    <button
+                      className="inline-flex items-center"
+                      onClick={() => changeSort(key)}
+                      type="button"
+                    >
+                      {key === 'project'
+                        ? t('history.project')
+                        : key === 'lastActive'
+                          ? t('history.lastActive')
+                          : key === 'total'
+                            ? t('history.total')
+                            : key === 'turns'
+                              ? t('history.turns')
+                              : key === 'focusTurns'
+                                ? t('history.focusCount')
+                                : t('history.median')}
+                      <SortIcon active={sortKey === key} asc={sortAsc} />
+                    </button>
+                  </TableHead>
+                ),
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
