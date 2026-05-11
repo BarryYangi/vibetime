@@ -211,7 +211,11 @@ async function checkForUpdates(interactive: boolean): Promise<AppUpdateState> {
   if (updateState.status === 'checking') return getUpdateState()
 
   const previousState = getUpdateState()
-  setUpdateState({ status: 'checking', error: null })
+  if (previousState.status === 'available' && previousState.availableVersion) {
+    setUpdateState({ error: null })
+  } else {
+    setUpdateState({ status: 'checking', error: null })
+  }
 
   try {
     const latestVersion = await resolveLatestVersion()
