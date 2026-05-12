@@ -571,9 +571,12 @@ export async function runCli(args = process.argv.slice(2)): Promise<void> {
 
         // Print per-project breakdown
         const maxNameLen = Math.max(...summary.projects.map((project) => project.name.length), 8)
+        const barWidth = 20
+        const agentIndent = 2 + maxNameLen + 2 + 8 + 2
         for (const project of summary.projects) {
           const pct = summary.total > 0 ? Math.round((project.total / summary.total) * 100) : 0
-          const bar = '█'.repeat(Math.round(pct / 5)) + '░'.repeat(20 - Math.round(pct / 5))
+          const barUnits = Math.round(pct / 5)
+          const bar = '█'.repeat(barUnits) + '░'.repeat(barWidth - barUnits)
           console.log(
             `  ${chalk.bold(project.name.padEnd(maxNameLen))}  ${chalk.cyan(fmtDuration(project.total).padStart(8))}  ${chalk.dim(bar)} ${chalk.dim(`${pct}%`)}`,
           )
@@ -582,7 +585,7 @@ export async function runCli(args = process.argv.slice(2)): Promise<void> {
           for (const agent of project.agents) {
             if (agent.total > 0) {
               console.log(
-                `  ${' '.repeat(maxNameLen)}  ${chalk.dim(agent.agent)}: ${chalk.dim(fmtDuration(agent.total))}`,
+                `${' '.repeat(agentIndent)}${chalk.dim(agent.agent)}: ${chalk.dim(fmtDuration(agent.total))}`,
               )
             }
           }
