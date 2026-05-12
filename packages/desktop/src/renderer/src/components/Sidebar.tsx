@@ -43,7 +43,7 @@ export default function Sidebar({ className }: SidebarProps) {
       className={cn('flex w-[13rem] shrink-0 flex-col items-stretch pt-3 text-left', className)}
     >
       <div className="mb-5 w-full pl-0 pr-1">
-        <p className="w-full text-left font-logo text-[2rem] font-bold leading-[0.92] tracking-wide text-foreground">
+        <p className="w-full select-none cursor-default text-left font-logo text-[2rem] font-bold leading-[0.92] tracking-wide text-foreground">
           VibeTime
         </p>
       </div>
