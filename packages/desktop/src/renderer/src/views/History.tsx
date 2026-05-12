@@ -1,4 +1,5 @@
 import NumberFlow, { NumberFlowGroup } from '@number-flow/react'
+import { getAgentColorHex } from '@vibetime/core'
 import type {
   CustomSeriesRenderItemAPI,
   CustomSeriesRenderItemParams,
@@ -682,13 +683,12 @@ function AgentContributionBars({
             <div className="px-1">
               <StackedProgress
                 segments={project.agents.map((agent, index) => {
-                  const theme = getAgentTheme(agent.agent, index)
                   const agentPct = project.total > 0 ? (agent.total / project.total) * 100 : 0
                   return {
                     id: agent.agent,
                     label: agent.agent,
                     value: agent.total,
-                    colorClass: theme.bg,
+                    colorHex: getAgentColorHex(agent.agent, index),
                     tooltip: `${agent.agent}: ${formatDurationSummary(agent.total, locale)} (${Math.round(agentPct)}%)`,
                   }
                 })}

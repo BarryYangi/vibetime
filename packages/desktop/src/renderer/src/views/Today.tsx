@@ -1,4 +1,5 @@
 import NumberFlow, { NumberFlowGroup } from '@number-flow/react'
+import { getAgentColorHex } from '@vibetime/core'
 import { useEffect, useState } from 'react'
 import { PageShell } from '@/components/PageShell'
 import { getAgentTheme, StackedProgress } from '@/components/StackedProgress'
@@ -82,14 +83,13 @@ function ProjectBar({
   const share = todayTotal > 0 ? total / todayTotal : 0
 
   const segments = agents.map((a, i) => {
-    const theme = getAgentTheme(a.agent, i)
     const agentTotal = a.completed + a.active
     const agentPct = total > 0 ? (agentTotal / total) * 100 : 0
     return {
       id: a.agent,
       label: a.agent,
       value: agentTotal,
-      colorClass: theme.bg,
+      colorHex: getAgentColorHex(a.agent, i),
       tooltip: `${a.agent}: ${formatDurationFull(agentTotal, locale)} (${Math.round(agentPct)}% ${t('today.ofProject')})`,
     }
   })

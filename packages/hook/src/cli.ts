@@ -7,6 +7,7 @@ import {
   allocateDurationByLocalDay,
   buildHistorySummaryFromEvents,
   durationWithinWindow,
+  getAgentColorHex,
   HISTORY_TURN_START_BUFFER_SEC,
   type HistoryPeriodDays,
   type HistorySummary,
@@ -60,6 +61,35 @@ function fitLabel(value: string, width: number): string {
   if (value.length <= width) return value.padEnd(width)
   if (width <= 3) return value.slice(0, width)
   return `${value.slice(0, width - 3)}...`
+}
+
+function colorAgentBarSegment(agent: string, index: number, value: string): string {
+  return chalk.hex(getAgentColorHex(agent, index))(value)
+}
+
+function renderAgentBar(
+  agents: Array<{ agent: string; total: number }>,
+  projectTotal: number,
+  width: number,
+  filledUnits: number,
+): string {
+  if (filledUnits <= 0 || projectTotal <= 0) return chalk.dim('░'.repeat(width))
+
+  const activeAgents = agents.filter((agent) => agent.total > 0)
+  let usedUnits = 0
+  let usedTotal = 0
+  const segments = activeAgents.map((agent, index) => {
+    usedTotal += agent.total
+    const nextUnits =
+      index === activeAgents.length - 1
+        ? filledUnits
+        : Math.round((usedTotal / projectTotal) * filledUnits)
+    const units = Math.max(0, nextUnits - usedUnits)
+    usedUnits = nextUnits
+    return colorAgentBarSegment(agent.agent, index, '█'.repeat(units))
+  })
+
+  return `${segments.join('')}${chalk.dim('░'.repeat(width - filledUnits))}`
 }
 
 function statusLabel(ok: boolean): string {
@@ -576,9 +606,9 @@ export async function runCli(args = process.argv.slice(2)): Promise<void> {
         for (const project of summary.projects) {
           const pct = summary.total > 0 ? Math.round((project.total / summary.total) * 100) : 0
           const barUnits = Math.round(pct / 5)
-          const bar = '█'.repeat(barUnits) + '░'.repeat(barWidth - barUnits)
+          const bar = renderAgentBar(project.agents, project.total, barWidth, barUnits)
           console.log(
-            `  ${chalk.bold(project.name.padEnd(maxNameLen))}  ${chalk.cyan(fmtDuration(project.total).padStart(8))}  ${chalk.dim(bar)} ${chalk.dim(`${pct}%`)}`,
+            `  ${chalk.bold(project.name.padEnd(maxNameLen))}  ${chalk.cyan(fmtDuration(project.total).padStart(8))}  ${bar} ${chalk.dim(`${pct}%`)}`,
           )
 
           // Agent breakdown

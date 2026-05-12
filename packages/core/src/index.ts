@@ -1,6 +1,7 @@
 // Public API of @vibetime/core. Imported by `hook` and `desktop` (Phase 3+).
 
 export { adaptClaudeCode, adaptCodex, adaptCursor, adaptGeminiCli } from './adapters/index.js'
+export { getAgentColorHex } from './agent-theme.js'
 export type {
   CodexTranscriptCandidate,
   CodexTurnCompletion,
