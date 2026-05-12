@@ -432,35 +432,40 @@ function ProjectAliases() {
     })
   }, [])
 
-  const handleSave = async () => {
+  const persistAliases = async (next: Record<string, string>) => {
     setSaving(true)
     setError(null)
     try {
-      const result = await window.api.invoke('updateConfig', { projects: aliases })
+      const result = await window.api.invoke('updateConfig', { projects: next })
       if (!result.ok) {
         setError(result.error)
+        return false
       }
+      setAliases(next)
+      return true
     } catch (err) {
       setError(String(err))
+      return false
     } finally {
       setSaving(false)
     }
   }
 
-  const handleAdd = () => {
-    if (newKey.trim() && newValue.trim()) {
-      setAliases((prev) => ({ ...prev, [newKey.trim()]: newValue.trim() }))
+  const handleAdd = async () => {
+    const key = newKey.trim()
+    const value = newValue.trim()
+    if (key && value) {
+      const saved = await persistAliases({ ...aliases, [key]: value })
+      if (!saved) return
       setNewKey('')
       setNewValue('')
     }
   }
 
-  const handleRemove = (key: string) => {
-    setAliases((prev) => {
-      const next = { ...prev }
-      delete next[key]
-      return next
-    })
+  const handleRemove = async (key: string) => {
+    const next = { ...aliases }
+    delete next[key]
+    await persistAliases(next)
   }
 
   return (
@@ -482,6 +487,7 @@ function ProjectAliases() {
               <span className="min-w-0 truncate text-[13px] font-medium">{value}</span>
             </div>
             <Button
+              disabled={saving}
               onClick={() => handleRemove(key)}
               size="xs"
               variant="ghost"
@@ -514,7 +520,7 @@ function ProjectAliases() {
           />
           <Button
             onClick={handleAdd}
-            disabled={!newKey.trim() || !newValue.trim()}
+            disabled={saving || !newKey.trim() || !newValue.trim()}
             variant="secondary"
             className="shrink-0"
           >
@@ -522,11 +528,6 @@ function ProjectAliases() {
           </Button>
         </div>
         {error && <p className="text-[13px] text-destructive-foreground">{error}</p>}
-      </div>
-      <div className="bg-muted/20 px-4 py-3">
-        <Button onClick={handleSave} disabled={saving} loading={saving}>
-          {t('common.saveChanges')}
-        </Button>
       </div>
     </SettingsSection>
   )
