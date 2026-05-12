@@ -10,6 +10,10 @@ VibeTime runs quietly in the menu bar and records coding sessions from Claude Co
 Codex, Cursor, and Gemini CLI. It is built for answering a simple question well:
 where did my agent-assisted work time go today?
 
+<p align="center">
+  <img src=".github/assets/demo.gif" alt="VibeTime demo" />
+</p>
+
 ## What It Does
 
 - Tracks agent sessions and turns locally with SQLite.
