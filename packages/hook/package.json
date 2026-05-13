@@ -1,6 +1,6 @@
 {
   "name": "@vibetime/hook",
-  "version": "2026.5.12",
+  "version": "2026.5.13",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
