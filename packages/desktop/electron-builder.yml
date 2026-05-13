@@ -12,6 +12,22 @@ files:
   - build/icon.ico
   - build/icon.png
   - package.json
+  - "!out/**/*.test.*"
+  - "!out/**/*.map"
+  - "!node_modules/**/*.map"
+  - "!node_modules/@babel/runtime/**/*"
+  - "!node_modules/@vibetime/core/src/**/*"
+  - "!node_modules/@vibetime/core/*.tsbuildinfo"
+  - "!node_modules/@vibetime/core/tsconfig.json"
+  - "!node_modules/@vibetime/core/vitest.config.ts"
+  - "!node_modules/html-parse-stringify/**/*"
+  - "!node_modules/i18next/**/*"
+  - "!node_modules/overlayscrollbars/**/*"
+  - "!node_modules/overlayscrollbars-react/**/*"
+  - "!node_modules/react/**/*"
+  - "!node_modules/react-i18next/**/*"
+  - "!node_modules/use-sync-external-store/**/*"
+  - "!node_modules/void-elements/**/*"
   - "!node_modules/@vibetime/hook/vibetime"
   - "!node_modules/@vibetime/hook/vibetime-hook"
   - "!node_modules/@vibetime/hook/build/**/*"
@@ -24,10 +40,13 @@ files:
   - "!node_modules/@vibetime/hook/vitest.config.ts"
   - "!node_modules/@vibetime/core/dist/**/*.map"
   - "!node_modules/@vibetime/core/dist/**/*.test.*"
+  - "!node_modules/better-sqlite3/deps/**/*"
+  - "!node_modules/better-sqlite3/src/**/*"
 
 asar: true
 asarUnpack:
-  - node_modules/better-sqlite3/**/*
+  - node_modules/better-sqlite3/build/Release/*.node
+compression: maximum
 
 electronLanguages:
   - en-US
