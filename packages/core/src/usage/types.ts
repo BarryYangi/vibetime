@@ -102,5 +102,31 @@ export interface UsageRefreshResult {
   pricingStatus: UsagePricingStatus
 }
 
+export function isUsageAgent(value: unknown): value is UsageAgent {
+  return typeof value === 'string' && (USAGE_AGENTS as readonly string[]).includes(value)
+}
+
+export function isUsageRefreshFrequency(value: unknown): value is UsageRefreshFrequency {
+  return (
+    typeof value === 'string' && (USAGE_REFRESH_FREQUENCIES as readonly string[]).includes(value)
+  )
+}
+
+export function sanitizeUsageMeta(meta: unknown): UsagePersistableMeta {
+  if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return {}
+
+  const input = meta as Record<string, unknown>
+  const sanitized: UsagePersistableMeta = {}
+
+  if (typeof input.isSidechain === 'boolean') sanitized.isSidechain = input.isSidechain
+  if (typeof input.subagentType === 'string') sanitized.subagentType = input.subagentType
+  if (typeof input.attributionReason === 'string') {
+    sanitized.attributionReason = input.attributionReason
+  }
+  if (typeof input.sourceKind === 'string') sanitized.sourceKind = input.sourceKind
+
+  return sanitized
+}
+
 // Derived usage summaries are computed on read from token facts and pricing cache.
 // Phase 07 does not persist summary rows.
