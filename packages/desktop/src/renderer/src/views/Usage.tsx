@@ -1,3 +1,4 @@
+import type { UsageSummaryBreakdownRow, UsageTokenBreakdown } from '@vibetime/core'
 import { useAtomValue } from 'jotai'
 import {
   ArrowDownIcon,
@@ -24,13 +25,7 @@ import {
 import { Tabs, TabsList, TabsTab } from '@/components/ui/tabs'
 import { formatPeriodLabel } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import type {
-  UsageAgentFilter,
-  UsageSummary,
-  UsageSummaryArgs,
-  UsageSummaryBreakdownRow,
-  UsageTokenBreakdown,
-} from '../../../shared/ipc-types'
+import type { UsageAgentFilter, UsageSummary, UsageSummaryArgs } from '../../../shared/ipc-types'
 import { HISTORY_PERIODS } from '../../../shared/ipc-types'
 import { getChartThemeName, getChartTokens } from '../charts/theme'
 import { type TranslationKey, useI18n } from '../i18n'
