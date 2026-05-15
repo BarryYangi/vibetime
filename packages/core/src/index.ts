@@ -50,6 +50,12 @@ export type {
 export { allocateDurationByLocalDay, durationWithinWindow, resolveTurnInterval } from './time.js'
 export { scanClaudeUsageTranscript, scanClaudeUsageTranscripts } from './usage/claude-scanner.js'
 export { scanCodexUsageTranscript, scanCodexUsageTranscripts } from './usage/codex-scanner.js'
+export {
+  estimateUsageCostUsd,
+  lookupUsagePrice,
+  normalizeLiteLlmPricingPayload,
+  pricingStatusFromCache,
+} from './usage/pricing.js'
 export type {
   UsageAgent,
   UsageAttributionMethod,
