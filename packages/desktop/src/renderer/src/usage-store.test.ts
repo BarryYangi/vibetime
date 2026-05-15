@@ -9,8 +9,8 @@ import {
   activeUsageQueryAtom,
   clearActiveUsageQuery,
   handlePush,
-  runUsageRefresh,
   refreshUsageSummary,
+  runUsageRefresh,
   store,
   usageRefreshStateAtom,
   usageSummariesAtom,
@@ -113,10 +113,7 @@ describe('usage renderer store', () => {
   it('ignores stale Usage summary refreshes when a newer refresh wins', async () => {
     const first = deferred<IpcResult<UsageSummary>>()
     const second = deferred<IpcResult<UsageSummary>>()
-    const invoke = vi
-      .fn()
-      .mockReturnValueOnce(first.promise)
-      .mockReturnValueOnce(second.promise)
+    const invoke = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise)
     vi.stubGlobal('window', { api: { invoke } })
 
     const firstRefresh = refreshUsageSummary(baseArgs)
@@ -137,7 +134,8 @@ describe('usage renderer store', () => {
     const calls: Array<{ channel: string; args: unknown }> = []
     const invoke = vi.fn(async (channel: string, args: unknown) => {
       calls.push({ channel, args })
-      if (channel === 'getUsageSummary') return { ok: true, data: calls.length === 1 ? cached : refreshed }
+      if (channel === 'getUsageSummary')
+        return { ok: true, data: calls.length === 1 ? cached : refreshed }
       if (channel === 'refreshUsage') return { ok: false, error: 'network unavailable' }
       return { ok: false, error: 'unexpected channel' }
     })
