@@ -480,17 +480,19 @@ rtk rg -n "prompt|response|tool_args|arguments|content|rawTranscript|transcript_
 
 All planning-critical implementation claims in this research were verified from project files, npm/Context7, or cited external docs; only the validity window estimate is assumed. [VERIFIED: source list below]
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Exact usage table names and pricing cache columns**
    - What we know: `usage_records`, `usage_scan_state`, and a pricing cache are required concepts. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md]
    - What's unclear: Whether cost should be materialized per row or computed on read with a cache snapshot. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md]
    - Recommendation: Plan an early storage task that chooses one design and updates tests before scanner/UI work. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md]
+   - RESOLVED: Phase 07 stores raw token facts in `usage_records`, incremental scan facts in `usage_scan_state`, and validated public price rates in `usage_pricing_cache`. Estimated cost is computed on read from token facts plus the current pricing cache; no per-row immutable cost, `usage_summaries`, or derived summary table is materialized. This matches `07-01-PLAN.md` storage contracts and `07-04-PLAN.md` cache-first `queryUsageSummary` behavior. Historical estimates update naturally after pricing refresh because summaries recompute from the refreshed cache.
 
 2. **Exact sidechain/subagent default UI**
    - What we know: UI-SPEC says sidechain/subagent usage is included by default and filterable only if scanner data exposes it. [VERIFIED: .planning/phases/07-usage-analytics/07-UI-SPEC.md]
    - What's unclear: Claude fixture coverage may reveal provider flags that need clearer naming. [VERIFIED: baseline 07-RESEARCH.md]
    - Recommendation: Preserve provider flags in sanitized `meta`, add toggle only when scanner proves stable fields. [VERIFIED: .planning/phases/07-usage-analytics/07-UI-SPEC.md]
+   - RESOLVED: Phase 07 uses fixture-first validation. Claude fixtures must include sidechain/subagent examples, scanners preserve only sanitized `meta.isSidechain` and `meta.subagentType` when those stable fields are present, and Usage totals include them by default. The UI renders the coss Switch only when `summary.availableFilters.hasSidechain === true`; otherwise no sidechain/subagent control is shown in MVP. No prompt, response, stop payload, or tool argument content is persisted for these rows.
 
 ## Sources
 
