@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 status: executing
 stopped_at: Completed 07-03-PLAN.md
-last_updated: "2026-05-15T10:29:19.901Z"
+last_updated: "2026-05-15T10:57:54.334Z"
 last_activity: 2026-05-15
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 25
-  completed_plans: 22
-  percent: 88
+  completed_plans: 24
+  percent: 96
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-07)
 ## Current Position
 
 Phase: 07 (usage-analytics) — EXECUTING
-Plan: 4 of 6
+Plan: 5 of 6
 Status: Ready to execute
 Last activity: 2026-05-15
 
-Progress: [█████████░] 88%
+Progress: [██████████] 96%
 
 ## Performance Metrics
 
@@ -64,6 +64,7 @@ Progress: [█████████░] 88%
 | Phase 05 P04 | 20min | 4 tasks | 4 files |
 | Phase 07 P01 | 7min | 3 tasks | 11 files |
 | Phase 07 P03 | 9min | 3 tasks | 9 files |
+| Phase 07 P05 | 14min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -114,6 +115,9 @@ Recent decisions affecting current work:
 - [Phase 07]: Usage attribution order is turn_id -> session_time_window -> project_time_window -> unmatched.
 - [Phase 07]: MVP Usage visuals are limited to metric tiles, daily trend, token breakdown, project ranking, model efficiency table, unavailable cost/time panel, and audit table.
 - [Phase 07]: Project spend charts are allowed only for hook-linked rows; unassigned usage remains in the audit surface.
+- [Phase 07]: Usage IPC summary filters are limited to period, agent, project, model, and includeSidechain.
+- [Phase 07]: Unsupported app.usage_refresh_frequency TOML values fall back to 30m; invalid IPC preference writes are rejected.
+- [Phase 07]: Background Usage refresh starts from Electron desktop lifecycle and is never wired into hook invocation paths.
 
 ### Pending Todos
 
@@ -139,6 +143,6 @@ None yet. (Phase 1 must produce DECISIONS.md before Phase 1 implementation can a
 
 ## Session Continuity
 
-Last session: 2026-05-15T10:29:19.896Z
+Last session: 2026-05-15T10:57:30.668Z
 Stopped at: Completed 07-03-PLAN.md
 Resume file: None

@@ -134,7 +134,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] 07-02-PLAN.md — Claude Code and Codex transcript scanners for sanitized token facts
 - [x] 07-03-PLAN.md — Pricing, hook attribution, Usage aggregation, and `07-USAGE-MAPPING.md`
 - [x] 07-04-PLAN.md — Desktop main usage storage, background scanning, pricing cache, and cache-first summaries
-- [ ] 07-05-PLAN.md — Typed Usage IPC, refresh-frequency config, and app lifecycle background wiring
+- [x] 07-05-PLAN.md — Typed Usage IPC, refresh-frequency config, and app lifecycle background wiring
 - [ ] 07-06-PLAN.md — Dedicated Usage route, ECharts dashboard, Settings control, and localized copy
 
 ## Progress
