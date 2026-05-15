@@ -131,7 +131,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   5. No `vibetime usage` CLI or usage export is added in this phase
 **Plans**: 6 plans in 6 waves
 - [x] 07-01-PLAN.md — Usage validation fixtures, core usage contracts, storage DDL, and privacy canary tests
-- [ ] 07-02-PLAN.md — Claude Code and Codex transcript scanners for sanitized token facts
+- [x] 07-02-PLAN.md — Claude Code and Codex transcript scanners for sanitized token facts
 - [ ] 07-03-PLAN.md — Pricing, hook attribution, Usage aggregation, and `07-USAGE-MAPPING.md`
 - [ ] 07-04-PLAN.md — Desktop main usage storage, background scanning, pricing cache, and cache-first summaries
 - [ ] 07-05-PLAN.md — Typed Usage IPC, refresh-frequency config, and app lifecycle background wiring
