@@ -30,7 +30,16 @@ export {
 } from './history.js'
 export type { ResolveProjectInput } from './project.js'
 export { parseGitRemoteUrl, resolveProject } from './project.js'
-export { DDL_EVENTS, DDL_INDICES, DDL_OPEN_TURNS, SCHEMA_VERSION } from './schema.js'
+export {
+  DDL_EVENTS,
+  DDL_INDICES,
+  DDL_OPEN_TURNS,
+  DDL_USAGE_INDICES,
+  DDL_USAGE_PRICING_CACHE,
+  DDL_USAGE_RECORDS,
+  DDL_USAGE_SCAN_STATE,
+  SCHEMA_VERSION,
+} from './schema.js'
 export type {
   DayAllocation,
   DayAllocationInput,
@@ -39,3 +48,19 @@ export type {
   TurnIntervalInput,
 } from './time.js'
 export { allocateDurationByLocalDay, durationWithinWindow, resolveTurnInterval } from './time.js'
+export type {
+  UsageAgent,
+  UsageAttributionMethod,
+  UsagePersistableMeta,
+  UsagePricingEntry,
+  UsagePricingStatus,
+  UsageRecordFact,
+  UsageRefreshFrequency,
+  UsageRefreshResult,
+  UsageScanState,
+  UsageSummary,
+  UsageSummaryArgs,
+  UsageSummaryBreakdownRow,
+  UsageTokenBreakdown,
+} from './usage/types.js'
+export { USAGE_AGENTS, USAGE_REFRESH_FREQUENCIES } from './usage/types.js'
