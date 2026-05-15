@@ -1,15 +1,11 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { DDL_USAGE_PRICING_CACHE, DDL_USAGE_RECORDS, DDL_USAGE_SCAN_STATE } from '../schema.js'
 import {
-  DDL_USAGE_PRICING_CACHE,
-  DDL_USAGE_RECORDS,
-  DDL_USAGE_SCAN_STATE,
-} from '../schema.js'
-import {
-  USAGE_AGENTS,
   isUsageAgent,
   isUsageRefreshFrequency,
   sanitizeUsageMeta,
+  USAGE_AGENTS,
   type UsagePricingEntry,
   type UsageRecordFact,
   type UsageScanState,
@@ -32,7 +28,10 @@ const PRIVACY_CANARIES = [
 ] as const
 
 function privacyCanaryFixture(): string {
-  return readFileSync(new URL('./__fixtures__/claude-privacy-canary.jsonl', import.meta.url), 'utf8')
+  return readFileSync(
+    new URL('./__fixtures__/claude-privacy-canary.jsonl', import.meta.url),
+    'utf8',
+  )
 }
 
 describe('usage persistence privacy', () => {
