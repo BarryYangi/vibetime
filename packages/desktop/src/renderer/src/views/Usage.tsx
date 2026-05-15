@@ -33,7 +33,7 @@ import type {
 } from '../../../shared/ipc-types'
 import { HISTORY_PERIODS } from '../../../shared/ipc-types'
 import { getChartThemeName, getChartTokens } from '../charts/theme'
-import { useI18n } from '../i18n'
+import { type TranslationKey, useI18n } from '../i18n'
 import {
   clearActiveUsageQuery,
   refreshUsageSummary,
@@ -43,14 +43,16 @@ import {
 } from '../store'
 
 type ChartTokens = ReturnType<typeof getChartTokens>
+type TFunction = ReturnType<typeof useI18n>['t']
 type SortKey = 'label' | 'totalTokens' | 'estimatedCostUsd' | 'unknownCostTokens' | 'recordCount'
 type TableRowKind = 'agent' | 'model' | 'project'
 
-const AGENT_FILTERS: Array<{ value: UsageAgentFilter; label: string }> = [
-  { value: 'all', label: 'All' },
-  { value: 'claude-code', label: 'Claude Code' },
-  { value: 'codex', label: 'Codex' },
-]
+const AGENT_FILTERS: Array<{ value: UsageAgentFilter; labelKey?: TranslationKey; label?: string }> =
+  [
+    { value: 'all', labelKey: 'usage.all' },
+    { value: 'claude-code', label: 'Claude Code' },
+    { value: 'codex', label: 'Codex' },
+  ]
 
 function normalizeUsageSummaryArgs(args: UsageSummaryArgs): UsageSummaryArgs {
   return {
@@ -117,8 +119,8 @@ function useChart(
   }, [options])
 }
 
-function formatUsd(value: number | null, locale: string): string {
-  if (value === null) return 'Unknown'
+function formatUsd(value: number | null, locale: string, unknownLabel: string): string {
+  if (value === null) return unknownLabel
   return new Intl.NumberFormat(locale, {
     currency: 'USD',
     maximumFractionDigits: 2,
@@ -148,11 +150,13 @@ function agentLabel(agent: string): string {
   return agent
 }
 
-function pricingStatusText(status: UsageSummary['pricingStatus']): string {
-  if (status === 'fresh') return 'Pricing refresh in progress'
-  if (status === 'cached' || status === 'refresh_failed_with_cache') return 'Using cached pricing.'
-  if (status === 'unknown_model') return 'Cost unknown for this model.'
-  return 'Pricing unavailable. Token totals are still shown.'
+function pricingStatusText(status: UsageSummary['pricingStatus'], t: TFunction): string {
+  if (status === 'fresh') return t('usage.pricingRefreshing')
+  if (status === 'cached' || status === 'refresh_failed_with_cache') {
+    return t('usage.pricingCached')
+  }
+  if (status === 'unknown_model') return t('usage.unknownModelPrice')
+  return t('usage.pricingUnavailable')
 }
 
 function DashboardPanel({
@@ -207,18 +211,20 @@ function DailyUsageTrend({
   chartThemeName,
   locale,
   summary,
+  t,
   tokens,
 }: {
   chartThemeName: string
   locale: string
   summary: UsageSummary
+  t: TFunction
   tokens: ChartTokens
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const option = useMemo<EChartsCoreOption>(() => {
     const labels = axisLabelStyle(tokens)
     const hasAnyCost = summary.daily.some((day) => day.estimatedCostUsd !== null)
-    const metricName = hasAnyCost ? 'Estimated cost' : 'Tokens'
+    const metricName = hasAnyCost ? t('usage.estimatedCost') : t('usage.tokens')
     return {
       color: [tokens.seriesPalette[0]],
       tooltip: {
@@ -229,12 +235,15 @@ function DailyUsageTrend({
         backgroundColor: tokens.tooltipBg,
         axisPointer: { type: 'shadow', z: 0, shadowStyle: { color: tokens.axisPointer } },
         formatter: (
-          params: Array<{ data: { value: number; tokens: number; cost: number | null }; name: string }>,
+          params: Array<{
+            data: { value: number; tokens: number; cost: number | null }
+            name: string
+          }>,
         ) => {
           const item = params[0]
           if (!item) return ''
           const cost = item.data.cost
-          return `<div style="font-size:12px;color:${tokens.tooltipMuted}">${item.name}</div><div style="margin-top:2px;font-size:13px;font-weight:600;color:${tokens.text}">${hasAnyCost ? formatUsd(cost, locale) : formatTokens(item.data.tokens, locale)}</div><div style="margin-top:2px;color:${tokens.tooltipMuted}">Estimated from local token records and cached public pricing.</div>`
+          return `<div style="font-size:12px;color:${tokens.tooltipMuted}">${item.name}</div><div style="margin-top:2px;font-size:13px;font-weight:600;color:${tokens.text}">${hasAnyCost ? formatUsd(cost, locale, t('usage.unknown')) : formatTokens(item.data.tokens, locale)}</div><div style="margin-top:2px;color:${tokens.tooltipMuted}">${t('usage.disclaimer')}</div>`
         },
       },
       grid: { left: 44, right: 12, top: 18, bottom: 28 },
@@ -255,7 +264,7 @@ function DailyUsageTrend({
         axisLabel: {
           ...labels,
           formatter: (value: number) =>
-            hasAnyCost ? formatUsd(value, locale) : formatTokens(value, locale),
+            hasAnyCost ? formatUsd(value, locale, t('usage.unknown')) : formatTokens(value, locale),
         },
         splitLine: { lineStyle: splitLineStyle(tokens) },
       },
@@ -273,7 +282,7 @@ function DailyUsageTrend({
         },
       ],
     }
-  }, [locale, summary.daily, tokens])
+  }, [locale, summary.daily, t, tokens])
   useChart(ref, option, chartThemeName)
   return <div ref={ref} className="h-[260px] w-full" />
 }
@@ -282,31 +291,37 @@ function TokenBreakdownChart({
   chartThemeName,
   locale,
   summary,
+  t,
   tokens,
 }: {
   chartThemeName: string
   locale: string
   summary: UsageSummary
+  t: TFunction
   tokens: ChartTokens
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const rows = useMemo(
     () => [
-      { key: 'input', label: 'Input', value: summary.tokenBreakdown.inputTokens },
-      { key: 'cached', label: 'Cached input', value: summary.tokenBreakdown.cachedInputTokens },
+      { key: 'input', label: t('usage.inputTokens'), value: summary.tokenBreakdown.inputTokens },
+      {
+        key: 'cached',
+        label: t('usage.cachedInputTokens'),
+        value: summary.tokenBreakdown.cachedInputTokens,
+      },
       {
         key: 'cache-create',
-        label: 'Cache creation',
+        label: t('usage.cacheCreationTokens'),
         value: summary.tokenBreakdown.cacheCreationInputTokens,
       },
-      { key: 'output', label: 'Output', value: summary.tokenBreakdown.outputTokens },
+      { key: 'output', label: t('usage.outputTokens'), value: summary.tokenBreakdown.outputTokens },
       {
         key: 'reasoning',
-        label: 'Reasoning',
+        label: t('usage.reasoningTokens'),
         value: summary.tokenBreakdown.reasoningOutputTokens,
       },
     ],
-    [summary.tokenBreakdown],
+    [summary.tokenBreakdown, t],
   )
   const option = useMemo<EChartsCoreOption>(() => {
     const labels = axisLabelStyle(tokens)
@@ -327,7 +342,9 @@ function TokenBreakdownChart({
                 `<div style="display:flex;align-items:center;justify-content:space-between;gap:24px;margin-top:4px">${item.marker}<span style="color:${tokens.tooltipRow}">${item.seriesName}</span><span style="font-weight:600;color:${tokens.text}">${formatTokens(item.value, locale)}</span></div>`,
             )
             .join('')
-          return rowsHtml || `<div style="color:${tokens.tooltipMuted}">No usage data yet</div>`
+          return (
+            rowsHtml || `<div style="color:${tokens.tooltipMuted}">${t('usage.emptyTitle')}</div>`
+          )
         },
       },
       legend: {
@@ -348,7 +365,7 @@ function TokenBreakdownChart({
       },
       yAxis: {
         type: 'category',
-        data: ['Tokens'],
+        data: [t('usage.tokens')],
         axisLine: { show: false },
         axisTick: { show: false },
         axisLabel: labels,
@@ -364,7 +381,7 @@ function TokenBreakdownChart({
         },
       })),
     }
-  }, [locale, rows, tokens])
+  }, [locale, rows, t, tokens])
   useChart(ref, option, chartThemeName)
   return <div ref={ref} className="h-[220px] w-full" />
 }
@@ -382,9 +399,11 @@ function SortIcon({ active, asc }: { active: boolean; asc: boolean }) {
 function UsageBreakdownTable({
   locale,
   summary,
+  t,
 }: {
   locale: string
   summary: UsageSummary
+  t: TFunction
 }) {
   const [sortKey, setSortKey] = useState<SortKey>('totalTokens')
   const [sortAsc, setSortAsc] = useState(false)
@@ -426,23 +445,23 @@ function UsageBreakdownTable({
           <TableRow>
             <TableHead className="w-[36%]">
               <button onClick={() => changeSort('label')} type="button">
-                Project / model / agent <SortIcon active={sortKey === 'label'} asc={sortAsc} />
+                {t('usage.entityColumn')} <SortIcon active={sortKey === 'label'} asc={sortAsc} />
               </button>
             </TableHead>
-            <TableHead className="w-[14%]">Type</TableHead>
+            <TableHead className="w-[14%]">{t('usage.type')}</TableHead>
             <TableHead className="w-[18%] text-right">
               <button onClick={() => changeSort('totalTokens')} type="button">
-                Tokens <SortIcon active={sortKey === 'totalTokens'} asc={sortAsc} />
+                {t('usage.tokens')} <SortIcon active={sortKey === 'totalTokens'} asc={sortAsc} />
               </button>
             </TableHead>
             <TableHead className="w-[18%] text-right">
               <button onClick={() => changeSort('estimatedCostUsd')} type="button">
-                Cost <SortIcon active={sortKey === 'estimatedCostUsd'} asc={sortAsc} />
+                {t('usage.cost')} <SortIcon active={sortKey === 'estimatedCostUsd'} asc={sortAsc} />
               </button>
             </TableHead>
             <TableHead className="w-[14%] text-right">
               <button onClick={() => changeSort('recordCount')} type="button">
-                Rows <SortIcon active={sortKey === 'recordCount'} asc={sortAsc} />
+                {t('usage.rows')} <SortIcon active={sortKey === 'recordCount'} asc={sortAsc} />
               </button>
             </TableHead>
           </TableRow>
@@ -451,7 +470,7 @@ function UsageBreakdownTable({
           {rows.length === 0 ? (
             <TableRow>
               <TableCell className="py-8 text-center text-muted-foreground" colSpan={5}>
-                No usage data yet
+                {t('usage.noTableData')}
               </TableCell>
             </TableRow>
           ) : (
@@ -460,12 +479,14 @@ function UsageBreakdownTable({
                 <TableCell className="truncate font-medium" title={row.label}>
                   {row.label}
                 </TableCell>
-                <TableCell className="capitalize text-muted-foreground">{row.kind}</TableCell>
+                <TableCell className="text-muted-foreground">
+                  {t(`usage.${row.kind}` as TranslationKey)}
+                </TableCell>
                 <TableCell className="text-right font-mono tabular-nums">
                   {formatTokens(row.totalTokens, locale)}
                 </TableCell>
                 <TableCell className="text-right font-mono tabular-nums">
-                  {formatUsd(row.estimatedCostUsd, locale)}
+                  {formatUsd(row.estimatedCostUsd, locale, t('usage.unknown'))}
                 </TableCell>
                 <TableCell className="text-right font-mono tabular-nums">
                   {row.recordCount}
@@ -479,41 +500,51 @@ function UsageBreakdownTable({
   )
 }
 
-function AuditPanel({ locale, summary }: { locale: string; summary: UsageSummary }) {
+function AuditPanel({
+  locale,
+  summary,
+  t,
+}: {
+  locale: string
+  summary: UsageSummary
+  t: TFunction
+}) {
   return (
     <div className="flex min-h-[260px] flex-col gap-4">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-border/40 pb-4 text-[13px]">
         <div className="inline-flex items-center gap-2">
           <span className="size-2 rounded-full bg-emerald-500" aria-hidden="true" />
-          <span className="text-muted-foreground">{pricingStatusText(summary.pricingStatus)}</span>
+          <span className="text-muted-foreground">
+            {pricingStatusText(summary.pricingStatus, t)}
+          </span>
         </div>
         <div className="inline-flex items-center gap-2 text-muted-foreground">
           <DatabaseIcon aria-hidden="true" className="size-4" />
-          Usage totals include Claude Code and Codex only.
+          {t('usage.claudeCodexOnly')}
         </div>
       </div>
       <Table className="table-fixed">
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[34%]">Audit table</TableHead>
-            <TableHead className="w-[18%]">Model</TableHead>
-            <TableHead className="w-[18%]">Attribution</TableHead>
-            <TableHead className="w-[15%] text-right">Tokens</TableHead>
-            <TableHead className="w-[15%] text-right">Cost</TableHead>
+            <TableHead className="w-[34%]">{t('usage.auditTable')}</TableHead>
+            <TableHead className="w-[18%]">{t('usage.model')}</TableHead>
+            <TableHead className="w-[18%]">{t('usage.attribution')}</TableHead>
+            <TableHead className="w-[15%] text-right">{t('usage.tokens')}</TableHead>
+            <TableHead className="w-[15%] text-right">{t('usage.cost')}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {summary.auditRows.length === 0 ? (
             <TableRow>
               <TableCell className="py-8 text-center text-muted-foreground" colSpan={5}>
-                No pricing or attribution issues in this period.
+                {t('usage.noAuditIssues')}
               </TableCell>
             </TableRow>
           ) : (
             summary.auditRows.map((row) => (
               <TableRow key={row.key}>
                 <TableCell className="truncate font-medium" title={row.label}>
-                  {row.key === 'unassigned' ? 'Unassigned usage' : row.label}
+                  {row.key === 'unassigned' ? t('usage.unassigned') : row.label}
                 </TableCell>
                 <TableCell className="truncate text-muted-foreground" title={row.model ?? '-'}>
                   {row.model ?? '-'}
@@ -525,7 +556,7 @@ function AuditPanel({ locale, summary }: { locale: string; summary: UsageSummary
                   {formatTokens(row.totalTokens, locale)}
                 </TableCell>
                 <TableCell className="text-right font-mono tabular-nums">
-                  {formatUsd(row.estimatedCostUsd, locale)}
+                  {formatUsd(row.estimatedCostUsd, locale, t('usage.unknown'))}
                 </TableCell>
               </TableRow>
             ))
@@ -538,7 +569,7 @@ function AuditPanel({ locale, summary }: { locale: string; summary: UsageSummary
 
 export default function Usage() {
   const colorScheme = useResolvedColorScheme()
-  const { locale } = useI18n()
+  const { locale, t } = useI18n()
   const [periodDays, setPeriodDays] = useState<UsageSummary['periodDays']>(30)
   const [agent, setAgent] = useState<UsageAgentFilter>('all')
   const [project, setProject] = useState<string | null>(null)
@@ -612,27 +643,29 @@ export default function Usage() {
 
   const topModel = summary?.byModel[0]
   const topAgent = summary?.byAgent[0]
-  const topMix = topModel?.label ?? (topAgent ? agentLabel(topAgent.label) : 'None')
+  const topMix = topModel?.label ?? (topAgent ? agentLabel(topAgent.label) : t('usage.none'))
   const isLoading = summary !== null && exactSummary === null
   const hasData = (summary?.totals.recordCount ?? 0) > 0
   const modelItems = [
-    { label: 'All models', value: 'all' },
+    { label: t('usage.allModels'), value: 'all' },
     ...(summary?.availableFilters.models ?? []).map((value) => ({ label: value, value })),
   ]
   const projectItems = [
-    { label: 'All projects', value: 'all' },
+    { label: t('usage.allProjects'), value: 'all' },
     ...(summary?.availableFilters.projects ?? []).map((value) => ({ label: value, value })),
   ]
+  const agentItems = AGENT_FILTERS.map((item) => ({
+    label: item.labelKey ? t(item.labelKey) : (item.label ?? item.value),
+    value: item.value,
+  }))
 
   if (error && !summary) {
     return (
       <PageShell fluid className="flex min-h-full items-center justify-center">
         <div className="flex max-w-md flex-col items-center gap-3 text-center">
           <CircleAlertIcon aria-hidden="true" className="size-8 text-muted-foreground" />
-          <h1 className="text-[20px] font-semibold">Usage data could not be loaded.</h1>
-          <p className="text-[13px] text-muted-foreground">
-            Try refreshing Usage or reopen VibeTime.
-          </p>
+          <h1 className="text-[20px] font-semibold">{t('usage.errorTitle')}</h1>
+          <p className="text-[13px] text-muted-foreground">{t('usage.errorDescription')}</p>
         </div>
       </PageShell>
     )
@@ -642,8 +675,10 @@ export default function Usage() {
     <PageShell fluid className="flex flex-col gap-5 py-7 sm:px-7 sm:py-8">
       <header className="flex flex-wrap items-start justify-between gap-4 px-1">
         <div className="min-w-0">
-          <p className="text-[13px] font-medium text-muted-foreground">Usage analytics</p>
-          <h1 className="mt-1 text-[24px] font-semibold tracking-tight text-foreground">Usage</h1>
+          <p className="text-[13px] font-medium text-muted-foreground">{t('usage.eyebrow')}</p>
+          <h1 className="mt-1 text-[24px] font-semibold tracking-tight text-foreground">
+            {t('usage.title')}
+          </h1>
         </div>
         <div className="electron-no-drag flex flex-wrap items-center justify-end gap-2">
           {(isLoading || refreshState.status === 'loading') && (
@@ -662,7 +697,7 @@ export default function Usage() {
             </TabsList>
           </Tabs>
           <Select
-            items={AGENT_FILTERS}
+            items={agentItems}
             onValueChange={(value) => setAgent((value as UsageAgentFilter | null) ?? 'all')}
             value={agent}
           >
@@ -670,7 +705,7 @@ export default function Usage() {
               <SelectValue />
             </SelectTrigger>
             <SelectPopup>
-              {AGENT_FILTERS.map((item) => (
+              {agentItems.map((item) => (
                 <SelectItem key={item.value} value={item.value}>
                   {item.label}
                 </SelectItem>
@@ -717,7 +752,7 @@ export default function Usage() {
             variant="secondary"
           >
             <RefreshCwIcon aria-hidden="true" />
-            Refresh Usage
+            {t('usage.refresh')}
           </Button>
         </div>
       </header>
@@ -725,44 +760,40 @@ export default function Usage() {
       {!summary ? (
         <div className="rounded-xl border border-border/60 bg-card/40 px-5 py-12 text-center text-[13px] text-muted-foreground">
           <Spinner className="mx-auto mb-3" />
-          Loading usage data
+          {t('usage.loading')}
         </div>
       ) : !hasData ? (
         <div className="rounded-xl border border-border/60 bg-card/40 px-5 py-12 text-center">
-          <h2 className="text-[20px] font-semibold text-foreground">No usage data yet</h2>
-          <p className="mt-2 text-[13px] text-muted-foreground">
-            VibeTime will show Claude Code and Codex tokens after the next background scan.
-          </p>
-          <p className="mt-4 text-[12px] text-muted-foreground">
-            Usage totals include Claude Code and Codex only.
-          </p>
+          <h2 className="text-[20px] font-semibold text-foreground">{t('usage.emptyTitle')}</h2>
+          <p className="mt-2 text-[13px] text-muted-foreground">{t('usage.emptyDescription')}</p>
+          <p className="mt-4 text-[12px] text-muted-foreground">{t('usage.claudeCodexOnly')}</p>
         </div>
       ) : (
         <>
           <div className="grid gap-2 md:grid-cols-4">
             <StatTile
-              label="Estimated cost"
-              value={formatUsd(summary.totals.estimatedCostUsd, locale)}
-              detail="Estimated from local token records and cached public pricing."
+              label={t('usage.estimatedCost')}
+              value={formatUsd(summary.totals.estimatedCostUsd, locale, t('usage.unknown'))}
+              detail={t('usage.disclaimer')}
             />
             <StatTile
-              label="Total tokens"
+              label={t('usage.totalTokens')}
               value={formatTokens(summary.totals.totalTokens, locale)}
-              detail={`${summary.totals.recordCount} usage rows`}
+              detail={`${summary.totals.recordCount} ${t('usage.usageRows')}`}
             />
             <StatTile
-              label="Cache hit rate"
+              label={t('usage.cacheHitRate')}
               value={formatPercent(cacheHitRate(summary.tokenBreakdown))}
               detail={`${formatTokens(
                 summary.tokenBreakdown.cachedInputTokens +
                   summary.tokenBreakdown.cacheCreationInputTokens,
                 locale,
-              )} cached tokens`}
+              )} ${t('usage.cachedTokens')}`}
             />
             <StatTile
-              label="Top model"
+              label={t('usage.topModel')}
               value={topMix}
-              detail={pricingStatusText(summary.pricingStatus)}
+              detail={pricingStatusText(summary.pricingStatus, t)}
             />
           </div>
 
@@ -774,41 +805,37 @@ export default function Usage() {
 
           <div className="grid gap-5 xl:grid-cols-2">
             <DashboardPanel
-              title="Daily usage trend"
-              description="Daily estimated cost or token volume for the selected period"
+              title={t('usage.dailyUsageTrend')}
+              description={t('usage.dailyUsageTrendDescription')}
             >
               <DailyUsageTrend
                 chartThemeName={chartThemeName}
                 locale={locale}
                 summary={summary}
+                t={t}
                 tokens={tokens}
               />
             </DashboardPanel>
             <DashboardPanel
-              title="Token breakdown"
-              description="Input, cache, output, and reasoning token composition"
+              title={t('usage.tokenBreakdown')}
+              description={t('usage.tokenBreakdownDescription')}
             >
               <TokenBreakdownChart
                 chartThemeName={chartThemeName}
                 locale={locale}
                 summary={summary}
+                t={t}
                 tokens={tokens}
               />
             </DashboardPanel>
           </div>
 
-          <DashboardPanel
-            title="Project, model, and agent table"
-            description="Hook-linked project ranking plus transcript-only model and agent rows"
-          >
-            <UsageBreakdownTable locale={locale} summary={summary} />
+          <DashboardPanel title={t('usage.tableTitle')} description={t('usage.tableDescription')}>
+            <UsageBreakdownTable locale={locale} summary={summary} t={t} />
           </DashboardPanel>
 
-          <DashboardPanel
-            title="Pricing status and audit table"
-            description="Unknown prices and Unassigned usage stay visible instead of being hidden"
-          >
-            <AuditPanel locale={locale} summary={summary} />
+          <DashboardPanel title={t('usage.auditTitle')} description={t('usage.auditDescription')}>
+            <AuditPanel locale={locale} summary={summary} t={t} />
           </DashboardPanel>
         </>
       )}

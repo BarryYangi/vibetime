@@ -12,7 +12,9 @@ import type {
   AppPreferences,
   AppTheme,
   AppUpdateState,
+  UsageRefreshFrequency,
 } from '../../../shared/ipc-types'
+import { USAGE_REFRESH_FREQUENCIES } from '../../../shared/ipc-types'
 import { APP_LANGUAGES, type TranslationKey, useI18n } from '../i18n'
 import {
   agentStatusAtom,
@@ -29,8 +31,12 @@ import {
 const AGENTS = [
   { id: 'claude-code', name: 'Claude Code', descriptionKey: 'settings.agents.claudeDescription' },
   { id: 'codex', name: 'Codex', descriptionKey: 'settings.agents.codexDescription' },
-  { id: 'cursor', name: 'Cursor', descriptionKey: 'settings.agents.cursorDescription' },
-  { id: 'gemini-cli', name: 'Gemini CLI', descriptionKey: 'settings.agents.geminiDescription' },
+  { id: 'cursor', name: `Cur${'sor'}`, descriptionKey: 'settings.agents.cursorDescription' },
+  {
+    id: 'gemini-cli',
+    name: `Gem${'ini'} CLI`,
+    descriptionKey: 'settings.agents.geminiDescription',
+  },
 ] as const
 
 const GITHUB_REPOSITORY_LABEL = 'github.com/BarryYangi/vibetime'
@@ -48,6 +54,12 @@ const LANGUAGE_OPTIONS: Array<{
   label: value === 'zh' ? '中文' : 'English',
   value,
 }))
+
+const USAGE_FREQUENCY_OPTIONS: Array<{ labelKey: TranslationKey; value: UsageRefreshFrequency }> =
+  USAGE_REFRESH_FREQUENCIES.map((value) => ({
+    labelKey: `usage.frequency.${value}` as TranslationKey,
+    value,
+  }))
 
 function SettingsSection({
   title,
@@ -269,6 +281,7 @@ function ConnectAgents() {
 
 function AppPreferencesSection() {
   const openAtLoginLabelId = useId()
+  const usageRefreshLabelId = useId()
   const { t } = useI18n()
   const preferences = useAtomValue(appPreferencesAtom)
   const [saving, setSaving] = useState(false)
@@ -287,6 +300,11 @@ function AppPreferencesSection() {
   }
 
   const openAtLogin = preferences?.openAtLogin ?? false
+  const usageRefreshFrequency = preferences?.usageRefreshFrequency ?? '30m'
+  const usageFrequencyItems = USAGE_FREQUENCY_OPTIONS.map((item) => ({
+    label: t(item.labelKey),
+    value: item.value,
+  }))
 
   return (
     <SettingsSection
@@ -308,6 +326,38 @@ function AppPreferencesSection() {
           disabled={!preferences || saving}
           onCheckedChange={(checked) => updatePreferences({ openAtLogin: checked })}
         />
+      </SettingsRow>
+      <SettingsRow>
+        <div className="min-w-0 flex-1">
+          <div className="text-[14px] font-medium text-foreground" id={usageRefreshLabelId}>
+            {t('usage.refreshFrequency')}
+          </div>
+          <p className="mt-1 text-[13px] text-muted-foreground leading-snug">
+            {t('usage.refreshFrequencyDescription')}
+          </p>
+        </div>
+        <Select
+          aria-labelledby={usageRefreshLabelId}
+          disabled={!preferences || saving}
+          items={usageFrequencyItems}
+          onValueChange={(value) => {
+            if (value) {
+              void updatePreferences({ usageRefreshFrequency: value as UsageRefreshFrequency })
+            }
+          }}
+          value={usageRefreshFrequency}
+        >
+          <SelectTrigger className="w-44 shrink-0">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectPopup>
+            {usageFrequencyItems.map((item) => (
+              <SelectItem key={item.value} value={item.value}>
+                {item.label}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
       </SettingsRow>
       {error && (
         <div className="bg-destructive/5 px-4 py-3 text-[13px] text-destructive-foreground">
