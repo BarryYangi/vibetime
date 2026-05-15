@@ -45,6 +45,14 @@ export interface DesktopUsageRefreshResult {
   pricingStatus: RefreshPricingStatus
 }
 
+export interface DesktopUsageSummaryArgs extends Pick<UsageSummaryArgs, 'periodDays' | 'now'> {
+  db?: Database.Database
+  agent?: 'all' | UsageAgent
+  project?: string | null
+  model?: string | null
+  includeSidechain?: boolean
+}
+
 type HookUsageEvent = {
   agent: UsageAgent
   event_type: 'turn_start' | 'turn_end'
@@ -654,15 +662,32 @@ export function readUsageRows(
   ).map(rowToRecord)
 }
 
-export function queryUsageSummary(args: UsageSummaryArgs): UsageSummary {
-  const db = getDb()
-  return db.transaction(() =>
-    buildUsageSummary(readUsageRows(db, args), {
-      ...args,
-      prices: readUsagePricingCache(db),
-      pricingStatus: pricingStatusFromCache(readUsagePricingCache(db), args.now ?? new Date()),
-    }),
-  )()
+function filterUsageRows(
+  records: readonly UsageRecordFact[],
+  args: DesktopUsageSummaryArgs,
+): UsageRecordFact[] {
+  return records.filter((record) => {
+    if (args.agent && args.agent !== 'all' && record.agent !== args.agent) return false
+    if (args.project && record.project !== args.project) return false
+    if (args.model && record.model !== args.model) return false
+    if (args.includeSidechain === false && record.meta?.isSidechain === true) return false
+    return true
+  })
+}
+
+export function queryUsageSummary(args: DesktopUsageSummaryArgs): UsageSummary {
+  const db = args.db ?? getDb()
+  return db.transaction(() => {
+    const prices = readUsagePricingCache(db)
+    const records = filterUsageRows(readUsageRows(db, args), args)
+    return buildUsageSummary(records, {
+      periodDays: args.periodDays,
+      now: args.now,
+      agents: args.agent && args.agent !== 'all' ? [args.agent] : undefined,
+      prices,
+      pricingStatus: pricingStatusFromCache(prices, args.now ?? new Date()),
+    })
+  })()
 }
 
 export async function runUsageRefresh(
