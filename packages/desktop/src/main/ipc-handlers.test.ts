@@ -2,10 +2,15 @@ import type { UsageRefreshResult, UsageSummary } from '../shared/ipc-types.js'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const handles = vi.hoisted(() => new Map<string, (event: unknown, args?: unknown) => unknown>())
+const configMocks = vi.hoisted(() => ({
+  readConfig: vi.fn(),
+  writeConfig: vi.fn(),
+}))
 const mocks = vi.hoisted(() => ({
   notifyRenderer: vi.fn(),
   queryUsageSummary: vi.fn(),
   runUsageRefresh: vi.fn(),
+  startUsageBackgroundRefresh: vi.fn(),
 }))
 
 vi.mock('electron', () => ({
@@ -24,12 +29,8 @@ vi.mock('electron', () => ({
 }))
 
 vi.mock('@vibetime/hook/config', () => ({
-  readConfig: vi.fn(() => ({
-    projects: {},
-    display: { timezone: 'Asia/Shanghai' },
-    app: { language: 'en', open_at_login: false, theme: 'system', last_view: '/' },
-  })),
-  writeConfig: vi.fn(),
+  readConfig: configMocks.readConfig,
+  writeConfig: configMocks.writeConfig,
 }))
 
 vi.mock('@vibetime/hook/install', () => ({
@@ -58,6 +59,7 @@ vi.mock('./updater.js', () => ({
 vi.mock('./usage-service.js', () => ({
   queryUsageSummary: mocks.queryUsageSummary,
   runUsageRefresh: mocks.runUsageRefresh,
+  startUsageBackgroundRefresh: mocks.startUsageBackgroundRefresh,
 }))
 
 const summary: UsageSummary = {
@@ -98,6 +100,17 @@ describe('usage IPC handlers', () => {
   beforeEach(async () => {
     vi.clearAllMocks()
     handles.clear()
+    configMocks.readConfig.mockReturnValue({
+      projects: {},
+      display: { timezone: 'Asia/Shanghai' },
+      app: {
+        language: 'en',
+        open_at_login: false,
+        theme: 'system',
+        last_view: '/',
+        usage_refresh_frequency: '30m',
+      },
+    })
     const { registerIpcHandlers } = await import('./ipc-handlers.js')
     registerIpcHandlers()
   })
@@ -146,5 +159,39 @@ describe('usage IPC handlers', () => {
     await expect(invoke('refreshUsage')).resolves.toEqual({ ok: true, data: refreshResult })
     expect(mocks.runUsageRefresh).toHaveBeenCalledWith({ refreshPricing: true })
     expect(mocks.notifyRenderer).toHaveBeenCalledWith({ type: 'usage-changed' })
+  })
+
+  it('maps usage refresh frequency through app preferences', async () => {
+    await expect(invoke('getAppPreferences')).resolves.toEqual(
+      expect.objectContaining({
+        ok: true,
+        data: expect.objectContaining({ usageRefreshFrequency: '30m' }),
+      }),
+    )
+  })
+
+  it('persists valid usage refresh frequency and reschedules background refresh immediately', async () => {
+    await expect(invoke('updateAppPreferences', { usageRefreshFrequency: '15m' })).resolves.toEqual(
+      expect.objectContaining({
+        ok: true,
+        data: expect.objectContaining({ usageRefreshFrequency: '15m' }),
+      }),
+    )
+
+    expect(configMocks.writeConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        app: expect.objectContaining({ usage_refresh_frequency: '15m' }),
+      }),
+    )
+    expect(mocks.startUsageBackgroundRefresh).toHaveBeenCalledWith('15m')
+  })
+
+  it('rejects invalid usageRefreshFrequency preferences without persisting', async () => {
+    await expect(invoke('updateAppPreferences', { usageRefreshFrequency: '5m' })).resolves.toEqual(
+      expect.objectContaining({ ok: false, error: expect.stringMatching(/usageRefreshFrequency/) }),
+    )
+
+    expect(configMocks.writeConfig).not.toHaveBeenCalled()
+    expect(mocks.startUsageBackgroundRefresh).not.toHaveBeenCalled()
   })
 })
