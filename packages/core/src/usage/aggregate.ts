@@ -179,7 +179,7 @@ export function buildUsageSummary(
     const hasModelPrice = hasAnyUsablePrice(lookupUsagePrice(row.key, prices))
     return {
       key: `unknown-price:${row.key}`,
-      label: hasModelPrice ? 'Some token categories lack pricing.' : 'Cost unknown for this model.',
+      label: hasModelPrice ? 'Some token categories lack pricing' : 'Cost unknown for this model',
       model: row.key,
       totalTokens: row.totalTokens,
       estimatedCostUsd: row.estimatedCostUsd,

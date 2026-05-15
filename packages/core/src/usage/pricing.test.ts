@@ -98,7 +98,7 @@ describe('normalizeLiteLlmPricingPayload', () => {
 })
 
 describe('estimateUsageCostUsd', () => {
-  it('uses per-million rates including separately priced reasoning output tokens', () => {
+  it('uses per-million rates without pricing reasoning output twice', () => {
     const price: UsagePricingEntry = {
       model: 'priced-model',
       provider: 'test',
@@ -112,7 +112,7 @@ describe('estimateUsageCostUsd', () => {
       rawVersion: 'test',
     }
 
-    expect(estimateUsageCostUsd(tokens(), price)).toBe(8.025)
+    expect(estimateUsageCostUsd(tokens(), price)).toBe(7.275)
   })
 
   it('does not double count reasoning output tokens when they are folded into output tokens', () => {
@@ -145,9 +145,9 @@ describe('estimateUsageCostUsd', () => {
     expect(estimateUsageCostUsd(tokens(), null)).toBeNull()
   })
 
-  it('returns null when used token categories are missing prices', () => {
+  it('uses input pricing for cached input tokens when cache read pricing is missing', () => {
     const price: UsagePricingEntry = {
-      model: 'partial-model',
+      model: 'priced-model',
       provider: 'test',
       inputUsdPerMillion: 3,
       cachedInputUsdPerMillion: null,
@@ -166,12 +166,61 @@ describe('estimateUsageCostUsd', () => {
           cachedInputTokens: 10,
           cacheCreationInputTokens: 0,
           outputTokens: 1_000_000,
+          reasoningOutputTokens: 50_000,
+          totalTokens: 2_050_010,
+        }),
+        price,
+      ),
+    ).toBe(18.00003)
+  })
+
+  it('returns null when used token categories are missing prices', () => {
+    const price: UsagePricingEntry = {
+      model: 'partial-model',
+      provider: 'test',
+      inputUsdPerMillion: 3,
+      cachedInputUsdPerMillion: null,
+      cacheCreationInputUsdPerMillion: null,
+      outputUsdPerMillion: 15,
+      reasoningOutputUsdPerMillion: null,
+      source: 'litellm',
+      fetchedAt: '2026-05-15T00:00:00.000Z',
+      rawVersion: 'test',
+    }
+
+    expect(
+      estimateUsageCostUsd(
+        tokens({
+          inputTokens: 1_000_000,
+          cachedInputTokens: 0,
+          cacheCreationInputTokens: 10,
+          outputTokens: 1_000_000,
           reasoningOutputTokens: 0,
           totalTokens: 2_000_010,
         }),
         price,
       ),
     ).toBeNull()
+  })
+})
+
+describe('lookupUsagePrice', () => {
+  it('falls back from Codex model aliases to the base LiteLLM model', () => {
+    const prices = normalizeLiteLlmPricingPayload(
+      {
+        rawVersion: 'alias-test',
+        models: {
+          'gpt-5': {
+            litellm_provider: 'openai',
+            input_cost_per_token: 0.00000125,
+            output_cost_per_token: 0.00001,
+          },
+        },
+      },
+      '2026-05-15T00:00:00.000Z',
+    )
+
+    expect(lookupUsagePrice('gpt-5-codex', prices)?.model).toBe('gpt-5')
   })
 })
 

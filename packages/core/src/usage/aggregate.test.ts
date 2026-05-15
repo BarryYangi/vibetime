@@ -119,7 +119,7 @@ describe('buildUsageSummary', () => {
     expect(summary.auditRows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          label: 'Cost unknown for this model.',
+          label: 'Cost unknown for this model',
           model: 'unknown-future-model',
         }),
         expect.objectContaining({ label: 'Unassigned usage', attributionMethod: 'unmatched' }),
@@ -134,7 +134,8 @@ describe('buildUsageSummary', () => {
           model: 'partial-model',
           tokens: tokens({
             inputTokens: 100,
-            cachedInputTokens: 20,
+            cachedInputTokens: 0,
+            cacheCreationInputTokens: 20,
             outputTokens: 30,
             totalTokens: 150,
           }),
@@ -167,7 +168,7 @@ describe('buildUsageSummary', () => {
       expect.arrayContaining([
         expect.objectContaining({
           key: 'unknown-price:partial-model',
-          label: 'Some token categories lack pricing.',
+          label: 'Some token categories lack pricing',
           model: 'partial-model',
           unknownCostTokens: 150,
         }),

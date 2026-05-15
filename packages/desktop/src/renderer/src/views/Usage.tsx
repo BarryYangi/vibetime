@@ -135,8 +135,8 @@ function pricingStatusText(status: UsageSummary['pricingStatus'], t: TFunction):
 
 function auditLabel(row: UsageSummary['auditRows'][number], t: TFunction): string {
   if (row.key === 'unassigned') return t('usage.unassigned')
-  if (row.label === 'Some token categories lack pricing.') return t('usage.partialModelPrice')
-  if (row.label === 'Cost unknown for this model.') return t('usage.unknownModelPrice')
+  if (row.label === 'Some token categories lack pricing') return t('usage.partialModelPrice')
+  if (row.label === 'Cost unknown for this model') return t('usage.unknownModelPrice')
   return row.label
 }
 

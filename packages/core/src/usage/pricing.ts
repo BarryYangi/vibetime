@@ -136,7 +136,8 @@ export function lookupUsagePrice(
   model: string,
   prices: readonly UsagePricingEntry[],
 ): UsagePricingEntry | null {
-  return prices.find((price) => price.model === model) ?? null
+  const aliases = model.endsWith('-codex') ? [model, model.replace(/-codex$/, '')] : [model]
+  return aliases.flatMap((alias) => prices.filter((price) => price.model === alias))[0] ?? null
 }
 
 export function estimateUsageCostUsd(
@@ -159,10 +160,9 @@ export function estimateUsageCostUsd(
   }
 
   add(tokens.inputTokens, price.inputUsdPerMillion)
-  add(tokens.cachedInputTokens, price.cachedInputUsdPerMillion)
+  add(tokens.cachedInputTokens, price.cachedInputUsdPerMillion ?? price.inputUsdPerMillion)
   add(tokens.cacheCreationInputTokens, price.cacheCreationInputUsdPerMillion)
   add(tokens.outputTokens, price.outputUsdPerMillion)
-  add(tokens.reasoningOutputTokens, price.reasoningOutputUsdPerMillion)
 
   if (unpricedAny) return null
   return pricedAny ? cost : null
