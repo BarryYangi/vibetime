@@ -116,6 +116,17 @@ function upsertGroup(groups: Map<string, Accumulator>, key: string): Accumulator
   return group
 }
 
+function hasAnyUsablePrice(price: UsagePricingEntry | null): boolean {
+  return (
+    price !== null &&
+    (price.inputUsdPerMillion !== null ||
+      price.cachedInputUsdPerMillion !== null ||
+      price.cacheCreationInputUsdPerMillion !== null ||
+      price.outputUsdPerMillion !== null ||
+      price.reasoningOutputUsdPerMillion !== null)
+  )
+}
+
 export function buildUsageSummary(
   records: UsageRecordFact[],
   options: UsageSummaryArgs,
@@ -164,15 +175,18 @@ export function buildUsageSummary(
     }
   }
 
-  const auditRows: UsageAuditRow[] = toBreakdownRows(unknownPriceByModel).map((row) => ({
-    key: `unknown-price:${row.key}`,
-    label: 'Cost unknown for this model.',
-    model: row.key,
-    totalTokens: row.totalTokens,
-    estimatedCostUsd: row.estimatedCostUsd,
-    unknownCostTokens: row.unknownCostTokens,
-    recordCount: row.recordCount,
-  }))
+  const auditRows: UsageAuditRow[] = toBreakdownRows(unknownPriceByModel).map((row) => {
+    const hasModelPrice = hasAnyUsablePrice(lookupUsagePrice(row.key, prices))
+    return {
+      key: `unknown-price:${row.key}`,
+      label: hasModelPrice ? 'Some token categories lack pricing.' : 'Cost unknown for this model.',
+      model: row.key,
+      totalTokens: row.totalTokens,
+      estimatedCostUsd: row.estimatedCostUsd,
+      unknownCostTokens: row.unknownCostTokens,
+      recordCount: row.recordCount,
+    }
+  })
 
   if (unassigned.recordCount > 0) {
     auditRows.push({

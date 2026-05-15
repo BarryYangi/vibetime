@@ -133,6 +133,13 @@ function pricingStatusText(status: UsageSummary['pricingStatus'], t: TFunction):
   return t('usage.pricingUnavailable')
 }
 
+function auditLabel(row: UsageSummary['auditRows'][number], t: TFunction): string {
+  if (row.key === 'unassigned') return t('usage.unassigned')
+  if (row.label === 'Some token categories lack pricing.') return t('usage.partialModelPrice')
+  if (row.label === 'Cost unknown for this model.') return t('usage.unknownModelPrice')
+  return row.label
+}
+
 function DashboardPanel({
   title,
   description,
@@ -517,8 +524,8 @@ function AuditPanel({
           ) : (
             summary.auditRows.map((row) => (
               <TableRow key={row.key}>
-                <TableCell className="truncate font-medium" title={row.label}>
-                  {row.key === 'unassigned' ? t('usage.unassigned') : row.label}
+                <TableCell className="truncate font-medium" title={auditLabel(row, t)}>
+                  {auditLabel(row, t)}
                 </TableCell>
                 <TableCell className="truncate text-muted-foreground" title={row.model ?? '-'}>
                   {row.model ?? '-'}

@@ -144,6 +144,7 @@
   "usage.pricingCached": "正在使用缓存价格。",
   "usage.pricingUnavailable": "价格不可用，Token 总量仍会显示。",
   "usage.unknownModelPrice": "此模型价格未知。",
+  "usage.partialModelPrice": "部分 Token 类型缺少价格。",
   "usage.claudeCodexOnly": "用量合计仅包含 Claude Code 和 Codex。",
   "usage.loading": "正在加载用量数据",
   "usage.unknown": "未知",

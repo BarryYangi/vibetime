@@ -167,6 +167,7 @@ describe('buildUsageSummary', () => {
       expect.arrayContaining([
         expect.objectContaining({
           key: 'unknown-price:partial-model',
+          label: 'Some token categories lack pricing.',
           model: 'partial-model',
           unknownCostTokens: 150,
         }),

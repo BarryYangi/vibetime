@@ -144,6 +144,7 @@
   "usage.pricingCached": "Using cached pricing.",
   "usage.pricingUnavailable": "Pricing unavailable. Token totals are still shown.",
   "usage.unknownModelPrice": "Cost unknown for this model.",
+  "usage.partialModelPrice": "Some token categories lack pricing.",
   "usage.claudeCodexOnly": "Usage totals include Claude Code and Codex only.",
   "usage.loading": "Loading usage data",
   "usage.unknown": "Unknown",
