@@ -759,8 +759,7 @@ export default function Usage() {
               label={t('usage.cacheHitRate')}
               value={formatPercent(cacheHitRate(summary.tokenBreakdown))}
               detail={`${formatTokens(
-                summary.tokenBreakdown.cachedInputTokens +
-                  summary.tokenBreakdown.cacheCreationInputTokens,
+                summary.tokenBreakdown.cachedInputTokens,
                 locale,
               )} ${t('usage.cachedTokens')}`}
             />
