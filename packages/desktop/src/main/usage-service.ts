@@ -565,16 +565,18 @@ function readHookUsageEvents(db: Database.Database): HookUsageEvent[] {
 
 async function refreshPricingCache(db: Database.Database): Promise<RefreshPricingStatus> {
   try {
-    const response = await fetch(LITELLM_PRICING_URL, {
+    const pricingHttpResult = await fetch(LITELLM_PRICING_URL, {
       headers: {
         Accept: 'application/json',
         'User-Agent': 'VibeTime',
       },
     })
-    if (!response.ok) throw new Error(`LiteLLM pricing refresh failed: ${response.status}`)
+    if (!pricingHttpResult.ok) {
+      throw new Error(`LiteLLM pricing refresh failed: ${pricingHttpResult.status}`)
+    }
 
     const fetchedAt = new Date().toISOString()
-    const entries = normalizeLiteLlmPricingPayload(await response.json(), fetchedAt)
+    const entries = normalizeLiteLlmPricingPayload(await pricingHttpResult.json(), fetchedAt)
     if (entries.length === 0) throw new Error('LiteLLM pricing payload had no usable rows')
     upsertUsagePricingCache(db, entries)
     return 'fresh'
