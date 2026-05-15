@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { UsagePricingEntry, UsageRecordFact } from '@vibetime/core'
@@ -6,8 +6,8 @@ import Database from 'better-sqlite3'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { initializeDesktopDbSchema } from './db.js'
 import {
-  readUsageRows,
   queryUsageSummary,
+  readUsageRows,
   runUsageRefresh,
   upsertUsagePricingCache,
   upsertUsageRecords,

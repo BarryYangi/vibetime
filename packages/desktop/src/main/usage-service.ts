@@ -1,12 +1,16 @@
+import { createHash } from 'node:crypto'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { basename, join } from 'node:path'
 import {
   buildUsageSummary,
   normalizeLiteLlmPricingPayload,
   pricingStatusFromCache,
   reconcileUsageWithHookEvents,
-  scanClaudeUsageTranscripts,
-  scanCodexUsageTranscripts,
   SCHEMA_VERSION,
   sanitizeUsageMeta,
+  scanClaudeUsageTranscripts,
+  scanCodexUsageTranscripts,
   type UsageAgent,
   type UsagePricingEntry,
   type UsagePricingStatus,
@@ -18,10 +22,6 @@ import {
   type UsageTranscriptCandidate,
 } from '@vibetime/core'
 import type Database from 'better-sqlite3'
-import { createHash } from 'node:crypto'
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { basename, join } from 'node:path'
 import { getDb, notifyRenderer } from './db.js'
 
 const LITELLM_PRICING_URL =
@@ -474,9 +474,9 @@ function discoverJsonlFiles(root: string, agent: UsageAgent, seenPaths: Set<stri
 function discoverSourceFiles(homeDir: string, env: UsageRefreshOptions['env']): SourceFile[] {
   const seenPaths = new Set<string>()
   return SCANNER_REGISTRY.flatMap((scanner) =>
-    scanner.roots(homeDir, env).flatMap((root) =>
-      discoverJsonlFiles(root, scanner.agent, seenPaths),
-    ),
+    scanner
+      .roots(homeDir, env)
+      .flatMap((root) => discoverJsonlFiles(root, scanner.agent, seenPaths)),
   )
 }
 
@@ -628,8 +628,7 @@ export function readUsageRows(
   args: Pick<UsageSummaryArgs, 'periodDays' | 'now'>,
 ): UsageRecordFact[] {
   const now = args.now ?? new Date()
-  const rangeEnd =
-    new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime() / 1000
+  const rangeEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime() / 1000
   const rangeStart = rangeEnd - args.periodDays * 86400
 
   return (
