@@ -21,7 +21,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-07)
 
 **Core value:** Accurately and silently record agent coding time per project on the developer's machine, then surface it in a visual surface good enough to live on a livestream.
-**Current focus:** Phase 07 usage analytics — Claude Code / Codex token usage and estimated cost under History
+**Current focus:** Phase 07 usage analytics — Claude Code / Codex token usage and estimated cost in a dedicated Usage page
 
 ## Current Position
 
@@ -103,9 +103,9 @@ Recent decisions affecting current work:
 - Release versioning for V0 uses date version `2026.5.8` and tag `v2026.5.8`.
 - GitHub Actions tag workflow builds macOS arm64 and Windows x64 packages and creates GitHub Release assets.
 - Phase 07 scope is Claude Code + Codex only for usage/cost; Cursor and Gemini remain future work.
-- Phase 07 Usage UI lives under History as a Usage tab, not a new top-level route.
+- Phase 07 Usage UI is a dedicated page, separate from History, but should reuse History's dashboard layout and time-window conventions where appropriate.
 - Phase 07 does not add usage CLI/export in MVP.
-- Pricing is a derived estimate from token facts and a refreshable public pricing cache. Opening the Usage tab renders from cache first, then attempts refresh and updates historical estimates.
+- Pricing is a derived estimate from token facts and a refreshable public pricing cache. Opening the Usage page renders from cache first, then attempts refresh and updates historical estimates.
 - Phase 07 must record how parsed usage data links with existing hook data via a `data capability -> hook linkage -> user value -> visualization` mapping before final chart choices are locked.
 
 ### Pending Todos

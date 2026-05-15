@@ -6,7 +6,7 @@
 
 ## Goal
 
-History gains a Usage tab that shows Claude Code and Codex token usage and estimated cost from local transcripts, linked back to VibeTime's existing hook timeline for project/session/turn context.
+A dedicated Usage page shows Claude Code and Codex token usage and estimated cost from local transcripts, linked back to VibeTime's existing hook timeline for project/session/turn context.
 
 ## Background
 
@@ -24,8 +24,8 @@ The product risk is not whether Usage is valuable; it is avoiding false precisio
 
 1. **Claude/Codex-only usage scope**: The phase parses and presents token/cost usage only for Claude Code and Codex.
    - Current: VibeTime records time for Claude Code, Codex, Cursor, and Gemini CLI, but records no token/cost data for any agent.
-   - Target: Usage scanning, cost estimation, and Usage tab analytics operate only on Claude Code and Codex data.
-   - Acceptance: Cursor and Gemini CLI are not included in usage/cost scanner registration, cost aggregation, or Usage tab totals.
+   - Target: Usage scanning, cost estimation, and Usage page analytics operate only on Claude Code and Codex data.
+   - Acceptance: Cursor and Gemini CLI are not included in usage/cost scanner registration, cost aggregation, or Usage page totals.
 
 2. **Local usage scanner records token facts**: The system ingests Claude Code and Codex local transcript usage rows into a durable local representation without persisting prompt, response, tool argument, or transcript content.
    - Current: `packages/core/src/schema.ts` defines only `events` and `open_turns`; there is no usage table or scan state.
@@ -44,7 +44,7 @@ The product risk is not whether Usage is valuable; it is avoiding false precisio
 
 5. **Estimated cost via refreshable pricing cache**: Cost is derived from token facts and a refreshable public pricing cache, not stored as immutable ground truth.
    - Current: No pricing data or cost calculation exists.
-   - Target: Opening the Usage tab attempts to fetch/update public pricing metadata, renders immediately from cache when available, recomputes historical estimated costs after a successful refresh, and shows cost unknown when neither fresh pricing nor cache can price a model.
+   - Target: Opening the Usage page attempts to fetch/update public pricing metadata, renders immediately from cache when available, recomputes historical estimated costs after a successful refresh, and shows cost unknown when neither fresh pricing nor cache can price a model.
    - Acceptance: With a seeded pricing cache, Usage renders cost without network; when a mocked pricing refresh succeeds, historical costs update; when refresh fails and no cached price exists for a model, token totals still render and cost is shown as unknown.
 
 6. **Hook-linked product analysis**: The phase records how raw usage data combines with existing hook data before finalizing visualizations.
@@ -52,14 +52,14 @@ The product risk is not whether Usage is valuable; it is avoiding false precisio
    - Target: The implementation produces a documented `data capability -> hook linkage -> user value -> visualization` mapping after Claude/Codex scanner fields are known.
    - Acceptance: Phase artifacts include a written mapping that identifies which Usage insights come from transcript-only data, which require hook events, and which remain unsupported.
 
-7. **History Usage tab**: History gains a Usage tab that presents Claude/Codex usage and estimated cost without locking chart types before data capability is proven.
+7. **Dedicated Usage page**: A Usage page presents Claude/Codex usage and estimated cost without locking chart types before data capability is proven.
    - Current: History contains time-based visual analytics, but no token/cost usage view.
-   - Target: History contains a Usage tab whose visualizations are chosen from the data capability mapping, with a minimum surface for total tokens, estimated cost, agent/model/project breakdown, pricing cache state, and unavailable-cost states.
-   - Acceptance: In the desktop app, selecting History -> Usage shows Claude/Codex token and estimated cost analytics for the selected period, updates after pricing refresh, and does not display Cursor/Gemini usage.
+   - Target: The desktop app contains a dedicated Usage page whose visualizations are chosen from the data capability mapping, with a minimum surface for total tokens, estimated cost, agent/model/project breakdown, pricing cache state, and unavailable-cost states. It may reuse History's dashboard layout and time-window conventions, but it is not nested inside History.
+   - Acceptance: In the desktop app, selecting Usage shows Claude/Codex token and estimated cost analytics for the selected period, updates after pricing refresh, and does not display Cursor/Gemini usage.
 
 8. **No usage CLI/export in MVP**: This phase does not add `vibetime usage` CLI, CSV export, JSON export, or per-row usage export.
    - Current: VibeTime has time-oriented CLI/export commands from earlier phases.
-   - Target: Usage MVP remains desktop-first under History; export is documented as future work.
+   - Target: Usage MVP remains desktop-first; export is documented as future work.
    - Acceptance: No new usage CLI/export command is introduced by Phase 07 plans; future export remains listed outside MVP.
 
 ## Boundaries
@@ -70,11 +70,11 @@ The product risk is not whether Usage is valuable; it is avoiding false precisio
 - Codex local transcript usage scanning.
 - Durable local usage storage and incremental/idempotent scan state.
 - Estimated cost calculation from token facts plus refreshable public pricing metadata.
-- Pricing cache used optimistically on Usage tab open.
+- Pricing cache used optimistically on Usage page open.
 - Recomputing historical estimated costs when pricing cache updates.
 - Linking usage rows to existing hook timeline where useful for project/session/turn analytics.
 - A documented `data capability -> hook linkage -> user value -> visualization` mapping before final UI chart selection.
-- History -> Usage tab with Claude/Codex token and estimated cost analytics.
+- Dedicated Usage page with Claude/Codex token and estimated cost analytics.
 - Tests for parser, dedupe, cost fallback, and no-content persistence.
 
 **Out of scope:**
@@ -93,7 +93,7 @@ The product risk is not whether Usage is valuable; it is avoiding false precisio
 - Prompt text, response text, tool arguments, and transcript content must not be persisted in VibeTime's usage tables.
 - Usage storage must be idempotent when scanning the same source files repeatedly.
 - Cost must be recomputable from token facts and pricing snapshot.
-- The Usage tab may initiate public pricing refresh on open; it must render from cached pricing first when cache exists.
+- The Usage page may initiate public pricing refresh on open; it must render from cached pricing first when cache exists.
 - If pricing cannot be fetched and no cached model price exists, token totals still render and cost displays as unknown.
 - Renderer continues to use typed IPC/main-process data access; no direct SQLite access from renderer.
 - UI must follow existing History/coss/ECharts conventions.
@@ -105,21 +105,21 @@ The product risk is not whether Usage is valuable; it is avoiding false precisio
 - [ ] Re-scanning unchanged Claude/Codex source files does not duplicate usage rows.
 - [ ] Codex parser tests cover token deltas, cached input, output, reasoning, and model context.
 - [ ] Claude parser tests cover assistant usage, cache creation/read, output tokens, model, and duplicate rows.
-- [ ] Opening History -> Usage renders from cached pricing before any network refresh completes.
+- [ ] Opening Usage renders from cached pricing before any network refresh completes.
 - [ ] Successful pricing refresh updates cache and recomputes historical estimated cost.
 - [ ] Pricing refresh failure falls back to cache; missing cache/model price shows cost unknown while preserving token totals.
 - [ ] Phase artifacts include the data capability / hook linkage / user value / visualization mapping.
-- [ ] History -> Usage shows token totals, estimated cost where price is known, and agent/model/project breakdown for Claude/Codex.
-- [ ] Cursor and Gemini usage/cost do not appear in Usage tab totals.
+- [ ] Usage shows token totals, estimated cost where price is known, and agent/model/project breakdown for Claude/Codex.
+- [ ] Cursor and Gemini usage/cost do not appear in Usage page totals.
 - [ ] No `vibetime usage` CLI or usage export is added in this phase.
 
 ## Ambiguity Report
 
 | Dimension           | Score | Min   | Status | Notes |
 |---------------------|-------|-------|--------|-------|
-| Goal Clarity        | 0.94  | 0.75  | met    | Claude/Codex Usage tab with local transcript tokens and estimated cost. |
+| Goal Clarity        | 0.94  | 0.75  | met    | Claude/Codex Usage page with local transcript tokens and estimated cost. |
 | Boundary Clarity    | 0.93  | 0.70  | met    | Cursor/Gemini and export explicitly excluded. |
-| Constraint Clarity  | 0.88  | 0.65  | met    | Hook stays light; pricing cache refreshes on Usage tab open. |
+| Constraint Clarity  | 0.88  | 0.65  | met    | Hook stays light; pricing cache refreshes on Usage page open. |
 | Acceptance Criteria | 0.88  | 0.70  | met    | Parser, pricing, UI, and out-of-scope checks are pass/fail. |
 | **Ambiguity**       | 0.09  | <=0.20| met    | Gate passed. |
 
@@ -130,11 +130,11 @@ Status: met = dimension meets minimum.
 | Round | Perspective | Question summary | Decision locked |
 |-------|-------------|------------------|-----------------|
 | 1 | Researcher | Which agents should usage/cost support first? | Claude Code and Codex only; Cursor/Gemini deferred. |
-| 1 | Researcher | Where should the product surface live? | History gets a Usage tab; no new top-level route for MVP. |
+| 1 | Researcher | Where should the product surface live? | Initially discussed as History -> Usage; discuss-phase updated this to a dedicated Usage page that reuses History conventions. |
 | 2 | Simplifier | Should the UI lock a fixed chart list now? | No. First prove data capability, then map data to product value and visualizations. |
 | 2 | Simplifier | Should CLI/export be part of MVP? | No usage CLI/export in MVP; record as future work. |
 | 3 | Boundary Keeper | Should attribution confidence be a visible product concept? | No. For Claude/Codex, if token facts are parsed, they enter the main usage/cost metrics. |
-| 3 | Boundary Keeper | How should pricing refresh behave? | Usage tab opens with cache, attempts public pricing refresh, then updates historical estimates optimistically. |
+| 3 | Boundary Keeper | How should pricing refresh behave? | Usage page opens with cache, attempts public pricing refresh, then updates historical estimates optimistically. |
 | 4 | Failure Analyst | How should hook data linkage be handled? | Record a required data capability / hook linkage / user value / visualization mapping after scanner fields are proven. |
 
 ---

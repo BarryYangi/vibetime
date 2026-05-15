@@ -2,7 +2,7 @@
 
 ## Overview
 
-vibetime shipped its v1.0 milestone in six phases tracking the locked ~5-week budget (DEC-008): Phase 1 satisfied the PRD §16 process gate (a user-approved `DECISIONS.md`) and stood up the monorepo + pure `core` package; Phase 2 delivered the agent adapters as pure logic; Phase 3 produced the Bun-compiled `vibetime-hook` binary, the SQLite store with crash recovery, the `~/.vibetime/` filesystem, and the install commands — closing the data-capture loop end-to-end; Phase 4 brought up the Electron desktop shell with IPC, the Today view, the full CLI surface, and minimal Settings; Phase 5 delivered the visual showpiece (Live + History views), the menubar widget, the auto-launch toggle, and the close-to-menubar lifecycle; Phase 6 packaged the macOS arm64 .app + .dmg, added Windows x64 assets, published GitHub Release `v2026.5.8`, and validated V0 acceptance criteria. Phase 7 starts the v0.1+ metrics track by adding Claude Code / Codex usage analytics and estimated cost under History.
+vibetime shipped its v1.0 milestone in six phases tracking the locked ~5-week budget (DEC-008): Phase 1 satisfied the PRD §16 process gate (a user-approved `DECISIONS.md`) and stood up the monorepo + pure `core` package; Phase 2 delivered the agent adapters as pure logic; Phase 3 produced the Bun-compiled `vibetime-hook` binary, the SQLite store with crash recovery, the `~/.vibetime/` filesystem, and the install commands — closing the data-capture loop end-to-end; Phase 4 brought up the Electron desktop shell with IPC, the Today view, the full CLI surface, and minimal Settings; Phase 5 delivered the visual showpiece (Live + History views), the menubar widget, the auto-launch toggle, and the close-to-menubar lifecycle; Phase 6 packaged the macOS arm64 .app + .dmg, added Windows x64 assets, published GitHub Release `v2026.5.8`, and validated V0 acceptance criteria. Phase 7 starts the v0.1+ metrics track by adding a dedicated Claude Code / Codex Usage page with usage analytics and estimated cost.
 
 ## Phases
 
@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Desktop Shell, Today View & CLI** - Electron app with IPC, Today view as default landing, complete CLI surface (`today / project / export / version / install`) running headless, minimal Settings (completed 2026-04-29)
 - [x] **Phase 5: Live, History, Menubar & Lifecycle** - Live view content-asset quality (≥30fps), History view (heatmap + trends + table), persistent menubar widget, close-to-menubar + auto-launch toggle (verified 2026-05-07)
 - [x] **Phase 6: Packaging & V0 Acceptance** - macOS arm64 .app + .dmg, Windows x64 assets, GitHub Release automation, ad-hoc signing, and V0 acceptance evidence complete (completed 2026-05-08)
-- [ ] **Phase 7: Usage Analytics** - Claude Code and Codex token/cost scanning, pricing cache, hook-linked usage analysis, and History -> Usage tab
+- [ ] **Phase 7: Usage Analytics** - Claude Code and Codex token/cost scanning, pricing cache, hook-linked usage analysis, and a dedicated Usage page
 
 ## Phase Details
 
@@ -120,14 +120,14 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] 06-01-PLAN.md — Restore root CI, add electron-builder mac arm64 packaging, bundle `vibetime-hook`, ad-hoc sign, document first launch, publish GitHub Release, and run V0 acceptance — completed 2026-05-08
 
 ### Phase 7: Usage Analytics
-**Goal**: History gains a Usage tab that shows Claude Code and Codex token usage and estimated cost from local transcripts, linked back to VibeTime's existing hook timeline for project/session/turn context.
+**Goal**: A dedicated Usage page shows Claude Code and Codex token usage and estimated cost from local transcripts, linked back to VibeTime's existing hook timeline for project/session/turn context.
 **Depends on**: Phase 6
 **Requirements**: TOK-01, TOK-02, USAGE-01, USAGE-02, USAGE-03, USAGE-04, USAGE-05, USAGE-06, USAGE-07, USAGE-08
 **Success Criteria** (what must be TRUE):
   1. Claude Code and Codex local transcript scanners ingest token/model/timestamp/source identity idempotently without persisting prompt, response, tool argument, or transcript content
-  2. Estimated cost is derived from token facts plus a refreshable public pricing cache; History -> Usage renders from cache first, refreshes pricing on open, recomputes historical estimates on success, and shows cost unknown when no price is available
+  2. Estimated cost is derived from token facts plus a refreshable public pricing cache; Usage renders from cache first, refreshes pricing on open, recomputes historical estimates on success, and shows cost unknown when no price is available
   3. Phase artifacts include a `data capability -> hook linkage -> user value -> visualization` mapping before final chart choices are locked
-  4. History -> Usage shows Claude/Codex token totals, estimated cost where price is known, and agent/model/project breakdowns; Cursor and Gemini do not appear in usage/cost totals
+  4. Usage shows Claude/Codex token totals, estimated cost where price is known, and agent/model/project breakdowns; Cursor and Gemini do not appear in usage/cost totals
   5. No `vibetime usage` CLI or usage export is added in this phase
 **Plans**: pending
 - [ ] Pending GSD plan-phase output

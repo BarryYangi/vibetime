@@ -131,9 +131,9 @@ Acknowledged but deferred. Not in current roadmap.
 - **USAGE-02**: Store usage token facts idempotently with source identity, model, timestamp, session/turn/project context where available, and no prompt/response/tool argument content.
 - **USAGE-03**: Extract Codex usage from native `token_count`/model context records, including cached input, output, reasoning, and token delta handling.
 - **USAGE-04**: Extract Claude Code assistant `message.usage` rows with cache creation/read tokens, output tokens, model, and duplicate-row protection.
-- **USAGE-05**: Estimate cost from token facts plus a refreshable public pricing cache; opening History -> Usage refreshes pricing, renders from cache first, and marks unavailable prices as unknown.
+- **USAGE-05**: Estimate cost from token facts plus a refreshable public pricing cache; opening Usage refreshes pricing, renders from cache first, and marks unavailable prices as unknown.
 - **USAGE-06**: Produce a `data capability -> hook linkage -> user value -> visualization` mapping after scanner data fields are proven and before final Usage chart choices are locked.
-- **USAGE-07**: Add a History -> Usage tab showing Claude/Codex token totals, estimated cost where known, and agent/model/project breakdowns.
+- **USAGE-07**: Add a dedicated Usage page showing Claude/Codex token totals, estimated cost where known, and agent/model/project breakdowns while reusing History's dashboard and time-window conventions where appropriate.
 - **USAGE-08**: Do not add usage CLI/export in MVP; keep usage export as future work.
 
 ### Cross-Platform
