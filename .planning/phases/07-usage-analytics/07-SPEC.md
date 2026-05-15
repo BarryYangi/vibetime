@@ -6,7 +6,7 @@
 
 ## Goal
 
-A dedicated Usage page shows Claude Code and Codex token usage and estimated cost from local transcripts, linked back to VibeTime's existing hook timeline for project/session/turn context.
+A dedicated Usage page placed below History in navigation shows Claude Code and Codex token usage and estimated cost from local transcripts, linked back to VibeTime's existing hook timeline for project/session/turn context.
 
 ## Background
 
@@ -54,7 +54,7 @@ The product risk is not whether Usage is valuable; it is avoiding false precisio
 
 7. **Dedicated Usage page**: A Usage page presents Claude/Codex usage and estimated cost without locking chart types before data capability is proven.
    - Current: History contains time-based visual analytics, but no token/cost usage view.
-   - Target: The desktop app contains a dedicated Usage page whose visualizations are chosen from the data capability mapping, with a minimum surface for total tokens, estimated cost, agent/model/project breakdown, pricing cache state, and unavailable-cost states. It may reuse History's dashboard layout and time-window conventions, but it is not nested inside History.
+   - Target: The desktop app contains a dedicated Usage page placed below History in navigation. Its visualizations are chosen from the data capability mapping, with a minimum surface for total tokens, estimated cost, agent/model/project breakdown, pricing cache state, and unavailable-cost states. It may reuse History's dashboard layout and time-window conventions, but it is not nested inside the History page.
    - Acceptance: In the desktop app, selecting Usage shows Claude/Codex token and estimated cost analytics for the selected period, updates after pricing refresh, and does not display Cursor/Gemini usage.
 
 8. **No usage CLI/export in MVP**: This phase does not add `vibetime usage` CLI, CSV export, JSON export, or per-row usage export.
@@ -130,7 +130,7 @@ Status: met = dimension meets minimum.
 | Round | Perspective | Question summary | Decision locked |
 |-------|-------------|------------------|-----------------|
 | 1 | Researcher | Which agents should usage/cost support first? | Claude Code and Codex only; Cursor/Gemini deferred. |
-| 1 | Researcher | Where should the product surface live? | Initially discussed as History -> Usage; discuss-phase updated this to a dedicated Usage page that reuses History conventions. |
+| 1 | Researcher | Where should the product surface live? | Usage is a dedicated page/module placed below History in navigation; it reuses History conventions but is not inside History. |
 | 2 | Simplifier | Should the UI lock a fixed chart list now? | No. First prove data capability, then map data to product value and visualizations. |
 | 2 | Simplifier | Should CLI/export be part of MVP? | No usage CLI/export in MVP; record as future work. |
 | 3 | Boundary Keeper | Should attribution confidence be a visible product concept? | No. For Claude/Codex, if token facts are parsed, they enter the main usage/cost metrics. |

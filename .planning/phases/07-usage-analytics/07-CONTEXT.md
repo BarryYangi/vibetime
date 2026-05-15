@@ -6,7 +6,7 @@
 <domain>
 ## Phase Boundary
 
-Phase 07 adds a dedicated Usage page for Claude Code and Codex usage analytics. It scans local Claude/Codex transcript sources for token facts, estimates cost from a refreshable pricing cache, and combines those usage facts with VibeTime's existing hook timeline so the product can explain cost, tokens, model usage, cache behavior, and time trends by project, model, turn, day, week, and month.
+Phase 07 adds a dedicated Usage page for Claude Code and Codex usage analytics, placed below History in navigation. It scans local Claude/Codex transcript sources for token facts, estimates cost from a refreshable pricing cache, and combines those usage facts with VibeTime's existing hook timeline so the product can explain cost, tokens, model usage, cache behavior, and time trends by project, model, turn, day, week, and month.
 
 This phase does not add Cursor/Gemini usage, usage CLI/export, cloud account dashboards, or authenticated provider APIs.
 
@@ -46,9 +46,9 @@ Downstream agents MUST read `07-SPEC.md` before planning or implementing. Requir
 ## Implementation Decisions
 
 ### Product Surface
-- **D-01:** Usage is a dedicated page, not a tab nested under History.
+- **D-01:** Usage is a dedicated page/module placed below History in navigation, not a tab nested inside the History page.
 - **D-02:** Usage may reuse History's visual language, dashboard layout patterns, and period selector conventions. It should not be implemented as the same page or a subordinate History mode.
-- **D-03:** Usage needs its own navigation entry and route. The existing History page remains focused on time retrospectives.
+- **D-03:** Usage needs its own route and navigation item immediately after History. The existing History page remains focused on time retrospectives.
 
 ### Background Scanning
 - **D-04:** Usage scanning should stay current in the background after app launch, not only when the user opens the Usage page.
@@ -146,7 +146,7 @@ Downstream agents MUST read `07-SPEC.md` before planning or implementing. Requir
 - Existing UI uses coss neutral light/dark styling, ECharts, Jotai, and localized strings.
 
 ### Integration Points
-- Add dedicated `/usage` route and sidebar item.
+- Add dedicated `/usage` route and sidebar item directly below History.
 - Add shared Usage IPC types and handler(s).
 - Add usage scanner/storage code in a place shared by desktop background refresh and tests without polluting hook hot path.
 - Add settings surface for usage refresh frequency.
@@ -158,7 +158,7 @@ Downstream agents MUST read `07-SPEC.md` before planning or implementing. Requir
 <specifics>
 ## Specific Ideas
 
-- The user explicitly corrected the earlier "History -> Usage tab" idea: Usage and History are different pages. They can share layout and time window conventions, but the product surfaces are separate.
+- The user clarified that "below History" means Usage appears under History in the navigation/tab ordering, not inside the History page. Usage and History are separate modules that can share layout and time window conventions.
 - Background scanning should be inspired by CodexBar's incremental approach and ccusage's parsing/pricing behavior.
 - Pricing should follow ccusage's source rather than choosing among multiple sources in MVP.
 - Usage analysis should combine transcript tokens with hook-captured project/session/turn/time data to support richer product interpretation than raw spend totals alone.

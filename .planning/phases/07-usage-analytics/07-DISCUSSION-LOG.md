@@ -14,11 +14,11 @@
 | Option | Description | Selected |
 |--------|-------------|----------|
 | History nested tab | Add Usage as a tab under the existing History page | |
-| Dedicated Usage page | Usage is a separate page, reusing History layout/time-window ideas where useful | ✓ |
+| Dedicated Usage page below History | Usage is a separate page/module placed below History in navigation, reusing History layout/time-window ideas where useful | ✓ |
 | New top-level standalone app mode | Build Usage as a distinct major app mode without sharing History conventions | |
 
-**User's choice:** Usage and History are two different pages. UI layout and time-window controls can be borrowed from History.
-**Notes:** This supersedes the earlier SPEC wording that said "History -> Usage tab". SPEC, ROADMAP, REQUIREMENTS, and STATE were amended to remove the nested-tab framing.
+**User's choice:** Usage and History are two different modules/pages. Usage should be placed below History in navigation/tab ordering. UI layout and time-window controls can be borrowed from History.
+**Notes:** This supersedes the earlier assistant interpretation that put Usage inside History. SPEC, ROADMAP, REQUIREMENTS, STATE, and CONTEXT were amended to clarify "below History" means navigation placement, not nested implementation.
 
 ---
 
