@@ -37,7 +37,11 @@ function isTokenRow(record: JsonRecord, payload: JsonRecord | null): boolean {
   return asString(record.type) === 'token_count' || asString(payload?.type) === 'token_count'
 }
 
-function tokenObject(record: JsonRecord, payload: JsonRecord | null, key: string): JsonRecord | null {
+function tokenObject(
+  record: JsonRecord,
+  payload: JsonRecord | null,
+  key: string,
+): JsonRecord | null {
   return asObject(record[key]) ?? asObject(payload?.[key])
 }
 
@@ -74,7 +78,10 @@ function subtractTokenBreakdown(
       current.cacheCreationInputTokens - previous.cacheCreationInputTokens,
     ),
     outputTokens: Math.max(0, current.outputTokens - previous.outputTokens),
-    reasoningOutputTokens: Math.max(0, current.reasoningOutputTokens - previous.reasoningOutputTokens),
+    reasoningOutputTokens: Math.max(
+      0,
+      current.reasoningOutputTokens - previous.reasoningOutputTokens,
+    ),
     totalTokens: Math.max(0, current.totalTokens - previous.totalTokens),
   }
 }
@@ -166,9 +173,7 @@ export function scanCodexUsageTranscript(candidate: UsageTranscriptCandidate): U
   return { records }
 }
 
-export function scanCodexUsageTranscripts(
-  candidates: UsageTranscriptCandidate[],
-): UsageScanResult {
+export function scanCodexUsageTranscripts(candidates: UsageTranscriptCandidate[]): UsageScanResult {
   const records: UsageRecordFact[] = []
   const seenRows = new Set<string>()
 

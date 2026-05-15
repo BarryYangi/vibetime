@@ -56,8 +56,10 @@ function stableRowKey(record: JsonRecord, message: JsonRecord, rowIndex: number)
   if (sessionId && requestId && messageId) return `${sessionId}:${requestId}:${messageId}`
 
   const timestamp = asString(record.timestamp)
-  if (sessionId && requestId && timestamp) return `${sessionId}:${requestId}:${timestamp}:${rowIndex}`
-  if (sessionId && messageId && timestamp) return `${sessionId}:${messageId}:${timestamp}:${rowIndex}`
+  if (sessionId && requestId && timestamp)
+    return `${sessionId}:${requestId}:${timestamp}:${rowIndex}`
+  if (sessionId && messageId && timestamp)
+    return `${sessionId}:${messageId}:${timestamp}:${rowIndex}`
 
   return `row:${rowIndex}`
 }

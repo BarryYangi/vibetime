@@ -8,8 +8,6 @@ export type {
   FindCodexTurnCompletionInTranscriptsInput,
 } from './codex-transcript.js'
 export { findCodexTurnCompletionInTranscripts } from './codex-transcript.js'
-export { scanClaudeUsageTranscript, scanClaudeUsageTranscripts } from './usage/claude-scanner.js'
-export { scanCodexUsageTranscript, scanCodexUsageTranscripts } from './usage/codex-scanner.js'
 export type { AdapterFn, Agent, EventType, NormalizedEvent } from './events.js'
 export type {
   HistoryCalendarDay,
@@ -50,6 +48,8 @@ export type {
   TurnIntervalInput,
 } from './time.js'
 export { allocateDurationByLocalDay, durationWithinWindow, resolveTurnInterval } from './time.js'
+export { scanClaudeUsageTranscript, scanClaudeUsageTranscripts } from './usage/claude-scanner.js'
+export { scanCodexUsageTranscript, scanCodexUsageTranscripts } from './usage/codex-scanner.js'
 export type {
   UsageAgent,
   UsageAttributionMethod,
