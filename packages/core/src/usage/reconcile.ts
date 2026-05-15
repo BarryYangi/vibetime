@@ -32,7 +32,7 @@ function applyAttribution(
   return {
     ...record,
     project: event.project === '_unknown' ? null : event.project,
-    sessionId: event.session_id || record.sessionId,
+    sessionId: event.session_id || record.sessionId || null,
     turnId: event.turn_id ?? record.turnId ?? null,
     attributionMethod,
     attributionConfidence,
