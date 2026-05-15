@@ -7,6 +7,10 @@ import {
   DDL_EVENTS,
   DDL_INDICES,
   DDL_OPEN_TURNS,
+  DDL_USAGE_INDICES,
+  DDL_USAGE_PRICING_CACHE,
+  DDL_USAGE_RECORDS,
+  DDL_USAGE_SCAN_STATE,
   durationWithinWindow,
   HISTORY_TURN_START_BUFFER_SEC,
   type HistoryPeriodDays,
@@ -59,13 +63,20 @@ export function getDb(): Database.Database {
     db.pragma('synchronous = NORMAL')
     db.pragma('busy_timeout = 5000')
     db.pragma('foreign_keys = ON')
-    db.exec(DDL_EVENTS.replace('CREATE TABLE', 'CREATE TABLE IF NOT EXISTS'))
-    db.exec(DDL_OPEN_TURNS.replace('CREATE TABLE', 'CREATE TABLE IF NOT EXISTS'))
-    for (const idx of DDL_INDICES) {
-      db.exec(idx.replace('CREATE INDEX', 'CREATE INDEX IF NOT EXISTS'))
-    }
+    initializeDesktopDbSchema(db)
   }
   return db
+}
+
+export function initializeDesktopDbSchema(handle: Database.Database): void {
+  handle.exec(DDL_EVENTS.replace('CREATE TABLE', 'CREATE TABLE IF NOT EXISTS'))
+  handle.exec(DDL_OPEN_TURNS.replace('CREATE TABLE', 'CREATE TABLE IF NOT EXISTS'))
+  handle.exec(DDL_USAGE_RECORDS.replace('CREATE TABLE', 'CREATE TABLE IF NOT EXISTS'))
+  handle.exec(DDL_USAGE_SCAN_STATE.replace('CREATE TABLE', 'CREATE TABLE IF NOT EXISTS'))
+  handle.exec(DDL_USAGE_PRICING_CACHE.replace('CREATE TABLE', 'CREATE TABLE IF NOT EXISTS'))
+  for (const idx of [...DDL_INDICES, ...DDL_USAGE_INDICES]) {
+    handle.exec(idx.replace('CREATE INDEX', 'CREATE INDEX IF NOT EXISTS'))
+  }
 }
 
 export function closeDb(): void {

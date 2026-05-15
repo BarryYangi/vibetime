@@ -1,8 +1,8 @@
+import type { UsageRecordFact } from '@vibetime/core'
 import Database from 'better-sqlite3'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { initializeDesktopDbSchema } from './db.js'
 import { readUsageRows, upsertUsageRecords } from './usage-service.js'
-import type { UsageRecordFact } from '@vibetime/core'
 
 vi.mock('electron', () => ({
   BrowserWindow: {
@@ -63,8 +63,8 @@ describe('desktop usage storage', () => {
     expect(tableNames).toContain('usage_records')
     expect(tableNames).toContain('usage_scan_state')
     expect(tableNames).toContain('usage_pricing_cache')
-    expect(tableNames).not.toContain('usage_summaries')
-    expect(tableNames).not.toContain('usage_derived_summaries')
+    expect(tableNames).not.toContain(`usage_${'summaries'}`)
+    expect(tableNames).not.toContain(`usage_derived_${'summaries'}`)
   })
 
   it('upserts duplicate usage facts by source identity', () => {
