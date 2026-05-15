@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { initializeDesktopDbSchema } from './db.js'
 import {
   readUsageRows,
+  queryUsageSummary,
   runUsageRefresh,
   upsertUsagePricingCache,
   upsertUsageRecords,
@@ -271,5 +272,140 @@ describe('runUsageRefresh', () => {
     expect(success.pricingStatus).toBe('fresh')
     expect(cached.pricingStatus).toBe('cached')
     expect(unavailable.pricingStatus).toBe('unavailable')
+  })
+})
+
+describe('queryUsageSummary', () => {
+  it('uses cached pricing while preserving unknown model tokens', () => {
+    const db = createDb()
+    initializeDesktopDbSchema(db)
+    upsertUsagePricingCache(db, [pricingEntry()])
+    upsertUsageRecords(db, [
+      usageRecord({
+        model: 'gpt-5-codex',
+        project: 'vibetime',
+        attributionMethod: 'turn_id',
+        attributionConfidence: 1,
+      }),
+      usageRecord({
+        sourceRowKey: 'unknown-price-row',
+        model: 'unknown-future-model',
+        project: null,
+        tokens: {
+          inputTokens: 100,
+          cachedInputTokens: 0,
+          cacheCreationInputTokens: 0,
+          outputTokens: 10,
+          reasoningOutputTokens: 0,
+          totalTokens: 110,
+        },
+        attributionMethod: 'unmatched',
+        attributionConfidence: 0,
+      }),
+    ])
+
+    const summary = queryUsageSummary({
+      db,
+      periodDays: 7,
+      now: new Date('2026-05-15T12:00:00.000Z'),
+    })
+
+    expect(summary.totals.totalTokens).toBe(285)
+    expect(summary.totals.estimatedCostUsd).toBeGreaterThan(0)
+    expect(summary.totals.unknownCostTokens).toBe(110)
+    expect(summary.auditRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ model: 'unknown-future-model' }),
+        expect.objectContaining({ label: 'Unassigned usage' }),
+      ]),
+    )
+  })
+
+  it('applies agent project model and includeSidechain filters from persisted rows', () => {
+    const db = createDb()
+    initializeDesktopDbSchema(db)
+    upsertUsagePricingCache(db, [pricingEntry()])
+    upsertUsageRecords(db, [
+      usageRecord({
+        agent: 'codex',
+        sourceRowKey: 'codex-main',
+        project: 'vibetime',
+        model: 'gpt-5-codex',
+        attributionMethod: 'turn_id',
+        attributionConfidence: 1,
+      }),
+      usageRecord({
+        agent: 'codex',
+        sourceRowKey: 'codex-sidechain',
+        project: 'vibetime',
+        model: 'gpt-5-codex',
+        meta: { sourceKind: 'test', isSidechain: true },
+      }),
+      usageRecord({
+        agent: 'claude-code',
+        sourceRowKey: 'claude-other',
+        project: 'other-project',
+        model: 'claude-sonnet-4-5',
+      }),
+    ])
+
+    const summary = queryUsageSummary({
+      db,
+      periodDays: 7,
+      now: new Date('2026-05-15T12:00:00.000Z'),
+      agent: 'codex',
+      project: 'vibetime',
+      model: 'gpt-5-codex',
+      includeSidechain: false,
+    })
+
+    expect(summary.totals.recordCount).toBe(1)
+    expect(summary.availableFilters.agents).toEqual(['codex'])
+    expect(summary.byProject).toEqual([expect.objectContaining({ key: 'vibetime' })])
+    expect(summary.byModel).toEqual([expect.objectContaining({ key: 'gpt-5-codex' })])
+  })
+
+  it('builds project breakdown, turn attribution, and unassigned audit without network work', () => {
+    const db = createDb()
+    initializeDesktopDbSchema(db)
+    vi.stubGlobal('fetch', fetchMock)
+    upsertUsagePricingCache(db, [pricingEntry()])
+    upsertUsageRecords(db, [
+      usageRecord({
+        sourceRowKey: 'linked-turn',
+        project: 'vibetime',
+        turnId: 'turn-1',
+        sessionId: 'session-1',
+        model: 'gpt-5-codex',
+        attributionMethod: 'turn_id',
+        attributionConfidence: 1,
+      }),
+      usageRecord({
+        sourceRowKey: 'unassigned-row',
+        project: null,
+        turnId: null,
+        sessionId: 'session-unmatched',
+        attributionMethod: 'unmatched',
+        attributionConfidence: 0,
+      }),
+    ])
+
+    const summary = queryUsageSummary({
+      db,
+      periodDays: 7,
+      now: new Date('2026-05-15T12:00:00.000Z'),
+    })
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(summary.byProject).toEqual([expect.objectContaining({ key: 'vibetime' })])
+    expect(summary.byModel).toEqual([expect.objectContaining({ key: 'gpt-5-codex' })])
+    expect(summary.auditRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: 'Unassigned usage',
+          attributionMethod: 'unmatched',
+        }),
+      ]),
+    )
   })
 })
