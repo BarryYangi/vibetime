@@ -42,7 +42,13 @@ describe('readConfig — happy paths', () => {
     const cfg: VibetimeConfig = {
       projects: { '/path/to/myproject': 'My Project' },
       display: { timezone: 'Asia/Tokyo' },
-      app: { language: 'zh', open_at_login: true, theme: 'dark', last_view: '/history' },
+      app: {
+        language: 'zh',
+        open_at_login: true,
+        theme: 'dark',
+        last_view: '/history',
+        usage_refresh_frequency: '1h',
+      },
     }
     writeConfig(cfg)
     const result = readConfig()
@@ -59,7 +65,13 @@ describe('readConfig — happy paths', () => {
     const cfg: VibetimeConfig = {
       projects: { '/Users/barry/My "App"': 'Barry\\App' },
       display: { timezone: 'UTC' },
-      app: { language: 'en', open_at_login: false, theme: 'system', last_view: '/' },
+      app: {
+        language: 'en',
+        open_at_login: false,
+        theme: 'system',
+        last_view: '/',
+        usage_refresh_frequency: '30m',
+      },
     }
     writeConfig(cfg)
     expect(readConfig().projects['/Users/barry/My "App"']).toBe('Barry\\App')
@@ -77,7 +89,13 @@ describe('readConfig — adversarial inputs', () => {
     writeConfig({
       projects: {},
       display: { timezone: 'UTC' },
-      app: { language: 'en', open_at_login: false, theme: 'system', last_view: '/' },
+      app: {
+        language: 'en',
+        open_at_login: false,
+        theme: 'system',
+        last_view: '/',
+        usage_refresh_frequency: '30m',
+      },
     })
     // Overwrite with garbage
     writeFileSync(`${tempHome}/.vibetime/config.toml`, '[[[[invalid', 'utf-8')
@@ -146,7 +164,13 @@ describe('writeConfig — happy paths', () => {
     writeConfig({
       projects: {},
       display: { timezone: 'UTC' },
-      app: { language: 'en', open_at_login: false, theme: 'system', last_view: '/' },
+      app: {
+        language: 'en',
+        open_at_login: false,
+        theme: 'system',
+        last_view: '/',
+        usage_refresh_frequency: '30m',
+      },
     })
     expect(existsSync(`${tempHome}/.vibetime/config.toml`)).toBe(true)
   })
@@ -155,7 +179,13 @@ describe('writeConfig — happy paths', () => {
     const cfg: VibetimeConfig = {
       projects: { '/bar/foo': 'Foo' },
       display: { timezone: 'America/New_York' },
-      app: { language: 'zh', open_at_login: true, theme: 'dark', last_view: '/live' },
+      app: {
+        language: 'zh',
+        open_at_login: true,
+        theme: 'dark',
+        last_view: '/live',
+        usage_refresh_frequency: '4h',
+      },
     }
     writeConfig(cfg)
     const raw = readFileSync(`${tempHome}/.vibetime/config.toml`, 'utf-8')

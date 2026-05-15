@@ -16,6 +16,7 @@ import { logger } from './logger.js'
 import { startNotifyServer, stopNotifyServer } from './notify-server.js'
 import { createMenubarTray, destroyMenubarTray, refreshMenubarTray } from './tray.js'
 import { startAutomaticUpdateChecks, stopAutomaticUpdateChecks } from './updater.js'
+import { startUsageBackgroundRefresh, stopUsageBackgroundRefresh } from './usage-service.js'
 import {
   configureSessionSecurity,
   hardenWindow,
@@ -216,6 +217,14 @@ function startUpdateChecksSafely(): void {
   }
 }
 
+function startUsageBackgroundRefreshSafely(): void {
+  try {
+    startUsageBackgroundRefresh(readConfig().app.usage_refresh_frequency)
+  } catch (err) {
+    logger.error('Unable to start usage background refresh', err)
+  }
+}
+
 // CLI subcommands that should run headless.
 const CLI_COMMANDS = new Set([
   'today',
@@ -287,6 +296,7 @@ if (isCliMode) {
     startDbChangeWatcher()
     startReconcileLoop()
     startUpdateChecksSafely()
+    startUsageBackgroundRefreshSafely()
     createMenubarTray({
       openApp: (route) => showMainWindow(route),
       openSettings: () => showMainWindow('/settings'),
@@ -304,6 +314,7 @@ if (isCliMode) {
     isQuitting = true
     setDbChangeListener(null)
     stopAutomaticUpdateChecks()
+    stopUsageBackgroundRefresh()
     destroyMenubarTray()
     stopNotifyServer()
     stopDbChangeWatcher()

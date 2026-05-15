@@ -15,8 +15,8 @@ import type {
   HistoryPeriodDays,
   IpcResult,
   UsageAgentFilter,
-  UsageSummaryArgs,
   UsageRefreshResult,
+  UsageSummaryArgs,
   VibetimeConfig,
 } from '../shared/ipc-types.js'
 import {
@@ -24,6 +24,7 @@ import {
   APP_THEMES,
   HISTORY_PERIODS,
   USAGE_AGENT_FILTERS,
+  USAGE_REFRESH_FREQUENCIES,
 } from '../shared/ipc-types.js'
 import {
   notifyRenderer,
@@ -34,12 +35,13 @@ import {
   writeAndNotify,
 } from './db.js'
 import { getUpdateState, runUpdateAction, runUpdateCheck } from './updater.js'
-import { queryUsageSummary, runUsageRefresh } from './usage-service.js'
+import { queryUsageSummary, runUsageRefresh, startUsageBackgroundRefresh } from './usage-service.js'
 import { normalizeAppRoute } from './window-security.js'
 
 const VALID_AGENTS = new Set(['claude-code', 'codex', 'cursor', 'gemini-cli'])
 const VALID_HISTORY_PERIODS = new Set<number>(HISTORY_PERIODS)
 const VALID_USAGE_AGENT_FILTERS = new Set<string>(USAGE_AGENT_FILTERS)
+const VALID_USAGE_REFRESH_FREQUENCIES = new Set<string>(USAGE_REFRESH_FREQUENCIES)
 const VALID_APP_LANGUAGES = new Set<string>(APP_LANGUAGES)
 const VALID_APP_THEMES = new Set<string>(APP_THEMES)
 const GITHUB_REPOSITORY_URL = 'https://github.com/BarryYangi/vibetime'
@@ -90,6 +92,7 @@ function appPreferencesFromConfig(config: VibetimeConfig): AppPreferences {
     openAtLogin: app.getLoginItemSettings().openAtLogin,
     theme: config.app.theme,
     lastView: config.app.last_view,
+    usageRefreshFrequency: config.app.usage_refresh_frequency,
   }
 }
 
@@ -103,6 +106,10 @@ function normalizeAppTheme(theme: unknown, fallback: AppPreferences['theme']) {
   return typeof theme === 'string' && VALID_APP_THEMES.has(theme)
     ? (theme as AppPreferences['theme'])
     : fallback
+}
+
+function isUsageRefreshFrequency(value: unknown): value is AppPreferences['usageRefreshFrequency'] {
+  return typeof value === 'string' && VALID_USAGE_REFRESH_FREQUENCIES.has(value)
 }
 
 function applyNativeTheme(theme: AppPreferences['theme']) {
@@ -182,20 +189,21 @@ export function registerIpcHandlers(
     },
   )
 
-  ipcMain.handle('getUsageSummary', async (_event, args): Promise<IpcResult<ReturnType<typeof queryUsageSummary>>> => {
-    try {
-      assertValidUsageSummaryArgs(args)
-      return { ok: true, data: queryUsageSummary(args) }
-    } catch (err) {
-      return { ok: false, error: String(err) }
-    }
-  })
+  ipcMain.handle(
+    'getUsageSummary',
+    async (_event, args): Promise<IpcResult<ReturnType<typeof queryUsageSummary>>> => {
+      try {
+        assertValidUsageSummaryArgs(args)
+        return { ok: true, data: queryUsageSummary(args) }
+      } catch (err) {
+        return { ok: false, error: String(err) }
+      }
+    },
+  )
 
   ipcMain.handle('refreshUsage', async (): Promise<IpcResult<UsageRefreshResult>> => {
     try {
-      const result = usageRefreshResultFromService(
-        await runUsageRefresh({ refreshPricing: true }),
-      )
+      const result = usageRefreshResultFromService(await runUsageRefresh({ refreshPricing: true }))
       notifyRenderer({ type: 'usage-changed' })
       return { ok: true, data: result }
     } catch (err) {
@@ -270,6 +278,12 @@ export function registerIpcHandlers(
           return { ok: false, error: 'Invalid preferences payload' }
         }
         const prefs = preferences as Partial<AppPreferences>
+        if (
+          prefs.usageRefreshFrequency !== undefined &&
+          !isUsageRefreshFrequency(prefs.usageRefreshFrequency)
+        ) {
+          return { ok: false, error: 'Invalid usageRefreshFrequency preference' }
+        }
         const current = readConfig()
         if (typeof prefs.openAtLogin === 'boolean') {
           app.setLoginItemSettings({ openAtLogin: prefs.openAtLogin })
@@ -284,11 +298,19 @@ export function registerIpcHandlers(
               prefs.lastView === undefined
                 ? current.app.last_view
                 : normalizeAppRoute(prefs.lastView),
+            usage_refresh_frequency:
+              prefs.usageRefreshFrequency ?? current.app.usage_refresh_frequency,
           },
         })
         writeConfig(next)
         if (prefs.theme !== undefined) {
           applyNativeTheme(next.app.theme)
+        }
+        if (
+          prefs.usageRefreshFrequency !== undefined &&
+          next.app.usage_refresh_frequency !== current.app.usage_refresh_frequency
+        ) {
+          startUsageBackgroundRefresh(next.app.usage_refresh_frequency)
         }
         return { ok: true, data: appPreferencesFromConfig(next) }
       } catch (err) {

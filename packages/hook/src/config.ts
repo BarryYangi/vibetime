@@ -21,8 +21,11 @@ export interface VibetimeConfig {
     open_at_login: boolean
     theme: 'system' | 'light' | 'dark'
     last_view: string
+    usage_refresh_frequency: '15m' | '30m' | '1h' | '4h'
   }
 }
+
+const USAGE_REFRESH_FREQUENCIES = ['15m', '30m', '1h', '4h'] as const
 
 const DEFAULT_CONFIG: VibetimeConfig = {
   projects: {},
@@ -34,6 +37,7 @@ const DEFAULT_CONFIG: VibetimeConfig = {
     open_at_login: false,
     theme: 'system',
     last_view: '/',
+    usage_refresh_frequency: '30m',
   },
 }
 
@@ -74,6 +78,11 @@ export function readConfig(): VibetimeConfig {
         open_at_login: readBoolean(config.app?.open_at_login, DEFAULT_CONFIG.app.open_at_login),
         theme: readEnum(config.app?.theme, ['system', 'light', 'dark'], DEFAULT_CONFIG.app.theme),
         last_view: readString(config.app?.last_view, DEFAULT_CONFIG.app.last_view),
+        usage_refresh_frequency: readEnum(
+          config.app?.usage_refresh_frequency,
+          USAGE_REFRESH_FREQUENCIES,
+          DEFAULT_CONFIG.app.usage_refresh_frequency,
+        ),
       },
     }
   } catch (err) {
@@ -112,6 +121,7 @@ function serializeToml(config: VibetimeConfig): string {
   lines.push(`open_at_login = ${config.app.open_at_login}`)
   lines.push(`theme = "${config.app.theme}"`)
   lines.push(`last_view = "${escapeTomlString(config.app.last_view)}"`)
+  lines.push(`usage_refresh_frequency = "${config.app.usage_refresh_frequency}"`)
   return `${lines.join('\n')}\n`
 }
 

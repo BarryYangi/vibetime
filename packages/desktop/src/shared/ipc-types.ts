@@ -70,6 +70,7 @@ export interface VibetimeConfig {
     open_at_login: boolean
     theme: AppTheme
     last_view: string
+    usage_refresh_frequency: UsageRefreshFrequency
   }
 }
 
@@ -177,6 +178,7 @@ export interface AppPreferences {
   openAtLogin: boolean
   theme: AppTheme
   lastView: string
+  usageRefreshFrequency: UsageRefreshFrequency
 }
 
 export interface CliInstallStatus {
@@ -208,7 +210,7 @@ export interface IpcMethods {
   getTodayLiveState: { args: undefined; result: TodayLiveState }
   getHistorySummary: { args: { periodDays: 7 | 30 | 90 | 365 }; result: HistorySummary }
   getUsageSummary: { args: UsageSummaryArgs; result: UsageSummary }
-  refreshUsage: { args: void; result: UsageRefreshResult }
+  refreshUsage: { args: undefined; result: UsageRefreshResult }
   getMenubarState: { args: undefined; result: MenubarState }
   getAgentStatus: { args: undefined; result: AgentStatus[] }
   getConfig: { args: undefined; result: VibetimeConfig }

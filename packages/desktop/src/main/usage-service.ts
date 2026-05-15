@@ -78,7 +78,9 @@ type ScannerDefinition = {
   scan: (candidates: UsageTranscriptCandidate[]) => { records: UsageRecordFact[] }
 }
 
+let activeUsageRefreshFrequency: UsageRefreshFrequency = DEFAULT_REFRESH_FREQUENCY
 let backgroundRefreshTimer: ReturnType<typeof setInterval> | null = null
+let backgroundImmediateRefreshTimer: ReturnType<typeof setTimeout> | null = null
 
 type UsageRecordRow = {
   agent: UsageRecordFact['agent']
@@ -716,7 +718,7 @@ export async function runUsageRefresh(
   if (recordsInserted > 0 || pricingStatus === 'fresh') notifyRenderer({ type: 'db-changed' })
 
   return {
-    frequency: DEFAULT_REFRESH_FREQUENCY,
+    frequency: activeUsageRefreshFrequency,
     scannedAt,
     recordsFound: records.length,
     recordsInserted,
@@ -726,14 +728,23 @@ export async function runUsageRefresh(
 
 export function startUsageBackgroundRefresh(frequency: UsageRefreshFrequency): void {
   stopUsageBackgroundRefresh()
-  void runUsageRefresh({ refreshPricing: true })
+  activeUsageRefreshFrequency = frequency
+  backgroundImmediateRefreshTimer = setTimeout(() => {
+    backgroundImmediateRefreshTimer = null
+    void runUsageRefresh({ refreshPricing: true })
+  }, 0)
   backgroundRefreshTimer = setInterval(() => {
     void runUsageRefresh({ refreshPricing: true })
   }, frequencyToMs(frequency))
 }
 
 export function stopUsageBackgroundRefresh(): void {
-  if (!backgroundRefreshTimer) return
-  clearInterval(backgroundRefreshTimer)
-  backgroundRefreshTimer = null
+  if (backgroundImmediateRefreshTimer) {
+    clearTimeout(backgroundImmediateRefreshTimer)
+    backgroundImmediateRefreshTimer = null
+  }
+  if (backgroundRefreshTimer) {
+    clearInterval(backgroundRefreshTimer)
+    backgroundRefreshTimer = null
+  }
 }

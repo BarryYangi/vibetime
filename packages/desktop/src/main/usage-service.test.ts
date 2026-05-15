@@ -9,6 +9,8 @@ import {
   queryUsageSummary,
   readUsageRows,
   runUsageRefresh,
+  startUsageBackgroundRefresh,
+  stopUsageBackgroundRefresh,
   upsertUsagePricingCache,
   upsertUsageRecords,
 } from './usage-service.js'
@@ -407,5 +409,31 @@ describe('queryUsageSummary', () => {
         }),
       ]),
     )
+  })
+})
+
+describe('usage background refresh cadence', () => {
+  afterEach(() => {
+    stopUsageBackgroundRefresh()
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  it('clears and reschedules the timer when cadence changes', () => {
+    vi.useFakeTimers()
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
+    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval')
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout')
+    const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval')
+
+    startUsageBackgroundRefresh('15m')
+    expect(setTimeoutSpy).toHaveBeenLastCalledWith(expect.any(Function), 0)
+    expect(setIntervalSpy).toHaveBeenLastCalledWith(expect.any(Function), 15 * 60 * 1000)
+
+    startUsageBackgroundRefresh('1h')
+    expect(clearTimeoutSpy).toHaveBeenCalled()
+    expect(clearIntervalSpy).toHaveBeenCalled()
+    expect(setTimeoutSpy).toHaveBeenLastCalledWith(expect.any(Function), 0)
+    expect(setIntervalSpy).toHaveBeenLastCalledWith(expect.any(Function), 60 * 60 * 1000)
   })
 })

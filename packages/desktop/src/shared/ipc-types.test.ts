@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  type IpcMethods,
+  type IpcPushEvent,
   USAGE_AGENT_FILTERS,
   USAGE_AGENTS,
   USAGE_REFRESH_FREQUENCIES,
-  type IpcMethods,
-  type IpcPushEvent,
   type UsageSummaryArgs,
 } from './ipc-types.js'
 

@@ -1,5 +1,5 @@
-import type { UsageRefreshResult, UsageSummary } from '../shared/ipc-types.js'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { UsageRefreshResult, UsageSummary } from '../shared/ipc-types.js'
 
 const handles = vi.hoisted(() => new Map<string, (event: unknown, args?: unknown) => unknown>())
 const configMocks = vi.hoisted(() => ({
