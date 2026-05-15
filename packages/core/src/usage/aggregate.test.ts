@@ -52,8 +52,14 @@ describe('buildUsageSummary', () => {
           model: 'gpt-5-codex',
           tokens: tokens({ inputTokens: 200, totalTokens: 200 }),
         }),
-        record({ agent: 'cursor', tokens: tokens({ inputTokens: 999, totalTokens: 999 }) } as never),
-        record({ agent: 'gemini', tokens: tokens({ inputTokens: 999, totalTokens: 999 }) } as never),
+        record({
+          agent: 'cursor',
+          tokens: tokens({ inputTokens: 999, totalTokens: 999 }),
+        } as never),
+        record({
+          agent: 'gemini',
+          tokens: tokens({ inputTokens: 999, totalTokens: 999 }),
+        } as never),
       ],
       {
         periodDays: 7,
@@ -112,7 +118,10 @@ describe('buildUsageSummary', () => {
     expect(summary.totals.unknownCostTokens).toBe(580)
     expect(summary.auditRows).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ label: 'Cost unknown for this model.', model: 'unknown-future-model' }),
+        expect.objectContaining({
+          label: 'Cost unknown for this model.',
+          model: 'unknown-future-model',
+        }),
         expect.objectContaining({ label: 'Unassigned usage', attributionMethod: 'unmatched' }),
       ]),
     )
