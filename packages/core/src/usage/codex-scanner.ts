@@ -52,7 +52,13 @@ function tokenBreakdown(input: JsonRecord): UsageTokenBreakdown {
   const outputTokens = asNumber(input.output_tokens)
   const reasoningOutputTokens = asNumber(input.reasoning_output_tokens)
   const reportedTotal = asNumber(input.total_tokens)
-  const totalTokens = reportedTotal || inputTokens + outputTokens + reasoningOutputTokens
+  const totalTokens =
+    reportedTotal ||
+    inputTokens +
+      cachedInputTokens +
+      cacheCreationInputTokens +
+      outputTokens +
+      reasoningOutputTokens
 
   return {
     inputTokens,

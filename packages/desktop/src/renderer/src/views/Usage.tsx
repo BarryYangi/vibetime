@@ -114,7 +114,8 @@ function formatPercent(value: number): string {
 
 function cacheHitRate(tokens: UsageTokenBreakdown): number {
   const cacheTokens = tokens.cachedInputTokens + tokens.cacheCreationInputTokens
-  return tokens.inputTokens > 0 ? cacheTokens / tokens.inputTokens : 0
+  const inputRelatedTokens = tokens.inputTokens + cacheTokens
+  return inputRelatedTokens > 0 ? Math.min(1, cacheTokens / inputRelatedTokens) : 0
 }
 
 function agentLabel(agent: string): string {

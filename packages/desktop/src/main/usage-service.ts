@@ -782,15 +782,21 @@ export const __usageServiceTestInternals = {
   scanSourceFiles,
 }
 
+function runBackgroundUsageRefresh(): void {
+  void runUsageRefresh({ refreshPricing: true }).catch(() => {
+    // Background refresh is best-effort; foreground refresh surfaces errors to the UI.
+  })
+}
+
 export function startUsageBackgroundRefresh(frequency: UsageRefreshFrequency): void {
   stopUsageBackgroundRefresh()
   activeUsageRefreshFrequency = frequency
   backgroundImmediateRefreshTimer = setTimeout(() => {
     backgroundImmediateRefreshTimer = null
-    void runUsageRefresh({ refreshPricing: true })
+    runBackgroundUsageRefresh()
   }, 0)
   backgroundRefreshTimer = setInterval(() => {
-    void runUsageRefresh({ refreshPricing: true })
+    runBackgroundUsageRefresh()
   }, frequencyToMs(frequency))
 }
 

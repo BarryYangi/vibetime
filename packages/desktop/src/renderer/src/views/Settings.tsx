@@ -707,16 +707,6 @@ function About() {
 
 export default function Settings() {
   const { t } = useI18n()
-  const preferences = useAtomValue(appPreferencesAtom)
-  const agentStatus = useAtomValue(agentStatusAtom)
-  const cliStatus = useAtomValue(cliStatusAtom)
-
-  // Wait until prefetched data is ready so switches render with correct state
-  const ready = preferences !== null && agentStatus !== null && cliStatus !== null
-
-  if (!ready) {
-    return <div className="h-full bg-background" />
-  }
 
   return (
     <PageShell prose className="space-y-10 pb-12">

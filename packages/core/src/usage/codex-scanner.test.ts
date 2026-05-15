@@ -87,6 +87,36 @@ describe('scanCodexUsageTranscript', () => {
     expect(result.records[0]?.tokens.totalTokens).toBe(1458)
   })
 
+  it('includes cache tokens when total_tokens is absent', () => {
+    const result = scanCodexUsageTranscript({
+      sourceFileKey: 'codex/sessions/no-total.jsonl',
+      sourceFileBasename: 'no-total.jsonl',
+      content: JSON.stringify({
+        timestamp: '2026-05-15T03:00:00.000Z',
+        type: 'token_count',
+        session_id: 'codex-session-no-total',
+        turn_id: 'codex-turn-no-total',
+        model: 'gpt-5-codex',
+        last_token_usage: {
+          input_tokens: 100,
+          cached_input_tokens: 40,
+          cache_creation_input_tokens: 10,
+          output_tokens: 20,
+          reasoning_output_tokens: 5,
+        },
+      }),
+    })
+
+    expect(result.records[0]?.tokens).toMatchObject({
+      inputTokens: 100,
+      cachedInputTokens: 40,
+      cacheCreationInputTokens: 10,
+      outputTokens: 20,
+      reasoningOutputTokens: 5,
+      totalTokens: 175,
+    })
+  })
+
   it('ignores malformed rows', () => {
     const result = scanCodexUsageTranscript({
       sourceFileKey: 'codex/sessions/malformed.jsonl',
