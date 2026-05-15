@@ -206,25 +206,35 @@ function ConnectAgents() {
   const handleInstall = async (agent: string) => {
     setActiveAction(`${agent}:install`)
     setError(null)
-    const result = await window.api.invoke('installAgent', { agent })
-    if (result.ok) {
-      await refreshAgentStatus()
-    } else {
-      setError(result.error)
+    try {
+      const result = await window.api.invoke('installAgent', { agent })
+      if (result.ok) {
+        await refreshAgentStatus()
+      } else {
+        setError(result.error)
+      }
+    } catch (err) {
+      setError(String(err))
+    } finally {
+      setActiveAction(null)
     }
-    setActiveAction(null)
   }
 
   const handleUninstall = async (agent: string) => {
     setActiveAction(`${agent}:uninstall`)
     setError(null)
-    const result = await window.api.invoke('uninstallAgent', { agent })
-    if (result.ok) {
-      await refreshAgentStatus()
-    } else {
-      setError(result.error)
+    try {
+      const result = await window.api.invoke('uninstallAgent', { agent })
+      if (result.ok) {
+        await refreshAgentStatus()
+      } else {
+        setError(result.error)
+      }
+    } catch (err) {
+      setError(String(err))
+    } finally {
+      setActiveAction(null)
     }
-    setActiveAction(null)
   }
 
   const handleToggle = (agent: string, checked: boolean) => {
@@ -415,14 +425,19 @@ function CliSection() {
   const updateCli = async (checked: boolean) => {
     setSaving(true)
     setError(null)
-    const result = await window.api.invoke(checked ? 'installCli' : 'uninstallCli')
-    if (result.ok) {
-      store.set(cliStatusAtom, result.data)
-    } else {
-      setError(result.error)
-      await refreshCliStatus()
+    try {
+      const result = await window.api.invoke(checked ? 'installCli' : 'uninstallCli')
+      if (result.ok) {
+        store.set(cliStatusAtom, result.data)
+      } else {
+        setError(result.error)
+        await refreshCliStatus()
+      }
+    } catch (err) {
+      setError(String(err))
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
   }
 
   const installed = status?.installed ?? false
