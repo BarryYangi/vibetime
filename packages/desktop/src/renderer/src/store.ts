@@ -175,9 +175,8 @@ export async function refreshUsageSummary(
       setUsageSummary(key, result.data)
     }
     return result
-  } catch {
-    // Usage pages keep stale cache visible and surface explicit refresh errors separately.
-    return null
+  } catch (err) {
+    return { ok: false, error: String(err) }
   }
 }
 

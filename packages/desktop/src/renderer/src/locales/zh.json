@@ -139,6 +139,7 @@
   "usage.errorTitle": "无法加载用量数据。",
   "usage.errorDescription": "请刷新用量，或重新打开 VibeTime。",
   "usage.disclaimer": "根据本地 Token 记录和缓存的公开价格估算。",
+  "usage.pricingFresh": "价格已更新。",
   "usage.pricingRefreshing": "正在刷新价格...",
   "usage.pricingCached": "正在使用缓存价格。",
   "usage.pricingUnavailable": "价格不可用，Token 总量仍会显示。",

@@ -139,6 +139,7 @@
   "usage.errorTitle": "Usage data could not be loaded.",
   "usage.errorDescription": "Try refreshing Usage or reopen VibeTime.",
   "usage.disclaimer": "Estimated from local token records and cached public pricing.",
+  "usage.pricingFresh": "Pricing up to date.",
   "usage.pricingRefreshing": "Refreshing pricing...",
   "usage.pricingCached": "Using cached pricing.",
   "usage.pricingUnavailable": "Pricing unavailable. Token totals are still shown.",

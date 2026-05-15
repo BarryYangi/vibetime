@@ -290,13 +290,18 @@ function AppPreferencesSection() {
   const updatePreferences = async (patch: Partial<AppPreferences>) => {
     setSaving(true)
     setError(null)
-    const result = await window.api.invoke('updateAppPreferences', patch)
-    if (result.ok) {
-      store.set(appPreferencesAtom, result.data)
-    } else {
-      setError(result.error)
+    try {
+      const result = await window.api.invoke('updateAppPreferences', patch)
+      if (result.ok) {
+        store.set(appPreferencesAtom, result.data)
+      } else {
+        setError(result.error)
+      }
+    } catch (err) {
+      setError(String(err))
+    } finally {
+      setSaving(false)
     }
-    setSaving(false)
   }
 
   const openAtLogin = preferences?.openAtLogin ?? false

@@ -150,6 +150,19 @@ describe('usage renderer store', () => {
     expect(calls.map((call) => call.channel)).toEqual(['getUsageSummary', 'refreshUsage'])
   })
 
+  it('surfaces Usage summary IPC rejection as an explicit error result', async () => {
+    const invoke = vi.fn(async () => {
+      throw new Error('ipc offline')
+    })
+    vi.stubGlobal('window', { api: { invoke } })
+
+    await expect(refreshUsageSummary(baseArgs)).resolves.toEqual({
+      ok: false,
+      error: 'Error: ipc offline',
+    })
+    expect(store.get(usageSummariesAtom)).toEqual({})
+  })
+
   it('manual refresh invokes refreshUsage once and records the result', async () => {
     const refreshResult = makeUsageRefreshResult()
     const invoke = vi.fn(async (channel: string) => {

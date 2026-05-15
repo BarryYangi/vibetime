@@ -124,7 +124,7 @@ function agentLabel(agent: string): string {
 }
 
 function pricingStatusText(status: UsageSummary['pricingStatus'], t: TFunction): string {
-  if (status === 'fresh') return t('usage.pricingRefreshing')
+  if (status === 'fresh') return t('usage.pricingFresh')
   if (status === 'cached' || status === 'refresh_failed_with_cache') {
     return t('usage.pricingCached')
   }
