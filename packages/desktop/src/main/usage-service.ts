@@ -27,6 +27,7 @@ import { getDb, notifyRenderer } from './db.js'
 const LITELLM_PRICING_URL =
   'https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json'
 const DEFAULT_REFRESH_FREQUENCY: UsageRefreshFrequency = '30m'
+const NO_USAGE_ROW_KEY = '__vibetime_no_usage__'
 
 type RefreshPricingStatus = UsagePricingStatus | 'unavailable'
 
@@ -486,6 +487,7 @@ function changedSourceFiles(db: Database.Database, files: SourceFile[]): SourceF
   const scanState = readUsageScanStateMap(db)
   return files.filter((file) => {
     const previous = scanState.get(`${file.agent}:${file.sourceFileKey}`)
+    if (file.agent === 'codex' && previous?.last_row_key === null) return true
     return !previous || previous.mtime_ms !== file.mtimeMs || previous.size_bytes !== file.sizeBytes
   })
 }
@@ -533,7 +535,7 @@ function scanSourceFiles(files: readonly SourceFile[]): {
       mtimeMs: file.mtimeMs,
       sizeBytes: file.sizeBytes,
       lastScannedAt: scannedAt,
-      lastRowKey: lastRowByFile.get(file.sourceFileKey) ?? null,
+      lastRowKey: lastRowByFile.get(file.sourceFileKey) ?? NO_USAGE_ROW_KEY,
     })),
   }
 }

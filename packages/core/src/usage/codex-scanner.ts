@@ -9,6 +9,8 @@ type JsonRecord = Record<string, unknown>
 
 interface ScannerState {
   model: string
+  sessionId: string | null
+  turnId: string | null
   previousTotal: UsageTokenBreakdown | null
   seenRows: Set<string>
 }
@@ -40,9 +42,10 @@ function isTokenRow(record: JsonRecord, payload: JsonRecord | null): boolean {
 function tokenObject(
   record: JsonRecord,
   payload: JsonRecord | null,
+  info: JsonRecord | null,
   key: string,
 ): JsonRecord | null {
-  return asObject(record[key]) ?? asObject(payload?.[key])
+  return asObject(record[key]) ?? asObject(payload?.[key]) ?? asObject(info?.[key])
 }
 
 function tokenBreakdown(input: JsonRecord): UsageTokenBreakdown {
@@ -96,21 +99,27 @@ function stableRowKey(
   candidate: UsageTranscriptCandidate,
   record: JsonRecord,
   payload: JsonRecord | null,
+  info: JsonRecord | null,
   rowIndex: number,
 ): string {
   const explicit =
     asString(record.source_row_key) ??
     asString(payload?.source_row_key) ??
+    asString(info?.source_row_key) ??
     asString(record.id) ??
     asString(payload?.id) ??
+    asString(info?.id) ??
     asString(record.message_id) ??
     asString(payload?.message_id) ??
+    asString(info?.message_id) ??
     asString(record.item_id) ??
-    asString(payload?.item_id)
+    asString(payload?.item_id) ??
+    asString(info?.item_id)
   if (explicit) return explicit
 
-  const turnId = asString(record.turn_id) ?? asString(payload?.turn_id)
-  const timestamp = asString(record.timestamp) ?? asString(payload?.timestamp)
+  const turnId = asString(record.turn_id) ?? asString(payload?.turn_id) ?? asString(info?.turn_id)
+  const timestamp =
+    asString(record.timestamp) ?? asString(payload?.timestamp) ?? asString(info?.timestamp)
   if (turnId && timestamp) return `${turnId}:${timestamp}:${rowIndex}`
 
   return `${candidate.sourceFileKey}:${rowIndex}`
@@ -123,15 +132,25 @@ function scanRecord(
   state: ScannerState,
 ): UsageRecordFact | null {
   const payload = asObject(record.payload)
-  const rowModel = asString(record.model) ?? asString(payload?.model)
+  const info = asObject(payload?.info)
+  const rowModel = asString(record.model) ?? asString(payload?.model) ?? asString(info?.model)
   if (rowModel) state.model = rowModel
+  const rowSessionId =
+    asString(record.session_id) ??
+    asString(payload?.session_id) ??
+    asString(info?.session_id) ??
+    (asString(record.type) === 'session_meta' ? asString(payload?.id) : null)
+  if (rowSessionId) state.sessionId = rowSessionId
+  const rowTurnId =
+    asString(record.turn_id) ?? asString(payload?.turn_id) ?? asString(info?.turn_id)
+  if (rowTurnId) state.turnId = rowTurnId
   if (!isTokenRow(record, payload)) return null
 
-  const totalUsage = tokenObject(record, payload, 'total_token_usage')
-  const lastUsage = tokenObject(record, payload, 'last_token_usage')
+  const totalUsage = tokenObject(record, payload, info, 'total_token_usage')
+  const lastUsage = tokenObject(record, payload, info, 'last_token_usage')
   if (!lastUsage && !totalUsage) return null
 
-  const rowKey = stableRowKey(candidate, record, payload, rowIndex)
+  const rowKey = stableRowKey(candidate, record, payload, info, rowIndex)
   if (state.seenRows.has(rowKey)) return null
   state.seenRows.add(rowKey)
 
@@ -146,10 +165,10 @@ function scanRecord(
     sourceFileKey: candidate.sourceFileKey,
     sourceRowKey: rowKey,
     sourceFileBasename: candidate.sourceFileBasename,
-    sessionId: asString(record.session_id) ?? asString(payload?.session_id),
-    turnId: asString(record.turn_id) ?? asString(payload?.turn_id),
+    sessionId: rowSessionId ?? state.sessionId,
+    turnId: rowTurnId ?? state.turnId,
     project: null,
-    ts: parseTimestamp(record.timestamp ?? payload?.timestamp),
+    ts: parseTimestamp(record.timestamp ?? payload?.timestamp ?? info?.timestamp),
     model: rowModel ?? state.model,
     tokens,
     attributionMethod: 'unmatched',
@@ -160,7 +179,13 @@ function scanRecord(
 
 export function scanCodexUsageTranscript(candidate: UsageTranscriptCandidate): UsageScanResult {
   const records: UsageRecordFact[] = []
-  const state: ScannerState = { model: 'unknown', previousTotal: null, seenRows: new Set() }
+  const state: ScannerState = {
+    model: 'unknown',
+    sessionId: null,
+    turnId: null,
+    previousTotal: null,
+    seenRows: new Set(),
+  }
 
   for (const [index, line] of candidate.content.split('\n').entries()) {
     if (!line.trim()) continue

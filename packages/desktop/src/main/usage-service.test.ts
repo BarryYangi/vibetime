@@ -1,6 +1,7 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { mkdirSync, mkdtempSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import type { UsagePricingEntry, UsageRecordFact } from '@vibetime/core'
 import Database from 'better-sqlite3'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -81,6 +82,11 @@ function pricingEntry(overrides: Partial<UsagePricingEntry> = {}): UsagePricingE
     rawVersion: 'fixture',
     ...overrides,
   }
+}
+
+function testSourceFileKey(agent: UsageRecordFact['agent'], path: string): string {
+  const hash = createHash('sha256').update(path).digest('hex').slice(0, 16)
+  return `${agent}:${hash}:${basename(path)}`
 }
 
 function insertHookRows(db: Database.Database): void {
@@ -289,6 +295,87 @@ describe('runUsageRefresh', () => {
       attributionMethod: 'session_time_window',
       attributionConfidence: 0.8,
     })
+  })
+
+  it('rescans old Codex files that were marked scanned before token rows were recognized', async () => {
+    const db = createDb()
+    initializeDesktopDbSchema(db)
+
+    const homeDir = createTempDir()
+    const codexHome = join(homeDir, '.codex')
+    const codexSessionDir = join(codexHome, 'sessions', '2026', '05', '15')
+    mkdirSync(codexSessionDir, { recursive: true })
+    const sessionPath = join(codexSessionDir, 'current-codex-shape.jsonl')
+    writeFileSync(
+      sessionPath,
+      [
+        JSON.stringify({
+          timestamp: '2026-05-15T03:59:00.000Z',
+          type: 'session_meta',
+          payload: { id: 'old-null-scan-session' },
+        }),
+        JSON.stringify({
+          timestamp: '2026-05-15T04:00:00.000Z',
+          type: 'turn_context',
+          payload: { turn_id: 'old-null-scan-turn', model: 'gpt-5.5' },
+        }),
+        JSON.stringify({
+          timestamp: '2026-05-15T04:00:12.000Z',
+          type: 'event_msg',
+          payload: {
+            type: 'token_count',
+            info: {
+              last_token_usage: {
+                input_tokens: 100,
+                cached_input_tokens: 20,
+                output_tokens: 30,
+                reasoning_output_tokens: 5,
+                total_tokens: 155,
+              },
+            },
+          },
+        }),
+      ].join('\n'),
+    )
+
+    const stat = statSync(sessionPath)
+    const sourceKey = testSourceFileKey('codex', sessionPath)
+    db.prepare(`
+      INSERT INTO usage_scan_state (
+        agent, source_file_key, source_file_basename, mtime_ms, size_bytes, last_scanned_at, last_row_key
+      )
+      VALUES ('codex', ?, ?, ?, ?, 1778840000, NULL)
+    `).run(sourceKey, basename(sessionPath), stat.mtimeMs, stat.size)
+
+    const first = await runUsageRefresh({
+      db,
+      homeDir,
+      env: { CODEX_HOME: codexHome },
+      refreshPricing: false,
+    })
+    const second = await runUsageRefresh({
+      db,
+      homeDir,
+      env: { CODEX_HOME: codexHome },
+      refreshPricing: false,
+    })
+    const [row] = readUsageRows(db, {
+      periodDays: 7,
+      now: new Date('2026-05-15T12:00:00.000Z'),
+    })
+    const state = db
+      .prepare('SELECT last_row_key FROM usage_scan_state WHERE agent = ? AND source_file_key = ?')
+      .get('codex', sourceKey) as { last_row_key: string | null }
+
+    expect(first.recordsFound).toBe(1)
+    expect(second.recordsFound).toBe(0)
+    expect(row).toMatchObject({
+      sessionId: 'old-null-scan-session',
+      turnId: 'old-null-scan-turn',
+      model: 'gpt-5.5',
+      tokens: expect.objectContaining({ totalTokens: 155 }),
+    })
+    expect(state.last_row_key).not.toBeNull()
   })
 
   it('refreshes LiteLLM pricing and falls back to cached or unavailable status on failure', async () => {

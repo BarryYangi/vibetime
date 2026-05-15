@@ -117,6 +117,71 @@ describe('scanCodexUsageTranscript', () => {
     })
   })
 
+  it('extracts current Codex event_msg payload.info token counts', () => {
+    const result = scanCodexUsageTranscript({
+      sourceFileKey: 'codex/sessions/current-shape.jsonl',
+      sourceFileBasename: 'current-shape.jsonl',
+      content: [
+        JSON.stringify({
+          timestamp: '2026-05-15T03:59:00.000Z',
+          type: 'session_meta',
+          payload: {
+            id: 'real-codex-session',
+            model_provider: 'openai',
+          },
+        }),
+        JSON.stringify({
+          timestamp: '2026-05-15T04:00:00.000Z',
+          type: 'turn_context',
+          payload: {
+            turn_id: 'real-codex-turn',
+            model: 'gpt-5.5',
+          },
+        }),
+        JSON.stringify({
+          timestamp: '2026-05-15T04:00:12.000Z',
+          type: 'event_msg',
+          payload: {
+            type: 'token_count',
+            info: {
+              last_token_usage: {
+                input_tokens: 100,
+                cached_input_tokens: 20,
+                output_tokens: 30,
+                reasoning_output_tokens: 5,
+                total_tokens: 155,
+              },
+              total_token_usage: {
+                input_tokens: 100,
+                cached_input_tokens: 20,
+                output_tokens: 30,
+                reasoning_output_tokens: 5,
+                total_tokens: 155,
+              },
+            },
+          },
+        }),
+      ].join('\n'),
+    })
+
+    expect(result.records).toEqual([
+      expect.objectContaining({
+        sessionId: 'real-codex-session',
+        turnId: 'real-codex-turn',
+        ts: 1778817612,
+        model: 'gpt-5.5',
+        tokens: {
+          inputTokens: 100,
+          cachedInputTokens: 20,
+          cacheCreationInputTokens: 0,
+          outputTokens: 30,
+          reasoningOutputTokens: 5,
+          totalTokens: 155,
+        },
+      }),
+    ])
+  })
+
   it('ignores malformed rows', () => {
     const result = scanCodexUsageTranscript({
       sourceFileKey: 'codex/sessions/malformed.jsonl',
