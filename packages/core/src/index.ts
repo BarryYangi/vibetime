@@ -8,6 +8,7 @@ export type {
   FindCodexTurnCompletionInTranscriptsInput,
 } from './codex-transcript.js'
 export { findCodexTurnCompletionInTranscripts } from './codex-transcript.js'
+export { scanCodexUsageTranscript, scanCodexUsageTranscripts } from './usage/codex-scanner.js'
 export type { AdapterFn, Agent, EventType, NormalizedEvent } from './events.js'
 export type {
   HistoryCalendarDay,
@@ -57,11 +58,13 @@ export type {
   UsageRecordFact,
   UsageRefreshFrequency,
   UsageRefreshResult,
+  UsageScanResult,
   UsageScanState,
   UsageSummary,
   UsageSummaryArgs,
   UsageSummaryBreakdownRow,
   UsageTokenBreakdown,
+  UsageTranscriptCandidate,
 } from './usage/types.js'
 export {
   isUsageAgent,

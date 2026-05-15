@@ -19,6 +19,12 @@ export interface UsageTokenBreakdown {
   totalTokens: number
 }
 
+export interface UsageTranscriptCandidate {
+  sourceFileKey: string
+  sourceFileBasename: string
+  content: string
+}
+
 export interface UsagePersistableMeta {
   isSidechain?: boolean
   subagentType?: string
@@ -40,6 +46,10 @@ export interface UsageRecordFact {
   attributionMethod: UsageAttributionMethod
   attributionConfidence: number
   meta?: UsagePersistableMeta | null
+}
+
+export interface UsageScanResult {
+  records: UsageRecordFact[]
 }
 
 export interface UsageScanState {
