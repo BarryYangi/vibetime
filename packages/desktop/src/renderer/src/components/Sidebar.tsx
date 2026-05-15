@@ -2,6 +2,7 @@ import { useAtomValue } from 'jotai'
 import {
   BarChart3Icon,
   CalendarDaysIcon,
+  ChartPieIcon,
   DownloadIcon,
   RadioIcon,
   SettingsIcon,
@@ -16,6 +17,7 @@ const navItems = [
   { to: '/', labelKey: 'nav.today', icon: BarChart3Icon },
   { to: '/live', labelKey: 'nav.live', icon: RadioIcon },
   { to: '/history', labelKey: 'nav.history', icon: CalendarDaysIcon },
+  { to: '/usage', labelKey: 'nav.usage', icon: ChartPieIcon },
   { to: '/settings', labelKey: 'nav.settings', icon: SettingsIcon },
 ] as const
 
@@ -43,7 +45,7 @@ export default function Sidebar({ className }: SidebarProps) {
       className={cn('flex w-[13rem] shrink-0 flex-col items-stretch pt-3 text-left', className)}
     >
       <div className="mb-5 w-full pl-0 pr-1">
-        <p className="w-full select-none cursor-default text-left font-logo text-[2rem] font-bold leading-[0.92] tracking-wide text-foreground">
+        <p className="w-full select-none text-left font-logo text-[2rem] font-bold leading-[0.92] tracking-wide text-foreground">
           VibeTime
         </p>
       </div>
@@ -70,7 +72,7 @@ export default function Sidebar({ className }: SidebarProps) {
         <div className="electron-no-drag mt-auto pl-0 pr-1">
           <Button
             aria-label={tooltip}
-            className="cursor-default bg-foreground/6 text-foreground transition-colors hover:bg-foreground/12 dark:bg-foreground/8 dark:hover:bg-foreground/16"
+            className="bg-foreground/6 text-foreground transition-colors hover:bg-foreground/12 dark:bg-foreground/8 dark:hover:bg-foreground/16"
             onClick={handleUpdateAction}
             size="icon-sm"
             title={tooltip}

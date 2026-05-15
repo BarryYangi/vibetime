@@ -15,8 +15,9 @@ import Settings from './views/Settings'
 import Today from './views/Today'
 
 const isMac = window.api.platform === 'darwin'
-const LAST_VIEW_ROUTES = new Set(['/', '/live', '/history', '/settings'])
+const LAST_VIEW_ROUTES = new Set(['/', '/live', '/history', '/usage', '/settings'])
 const History = lazy(() => import('./views/History'))
+const Usage = lazy(() => import('./views/Usage'))
 
 function RouteFallback() {
   return <div className="h-full bg-background" />
@@ -69,6 +70,7 @@ function AppRoutes() {
                 <Route path="/" element={<Today />} />
                 <Route path="/live" element={<Live />} />
                 <Route path="/history" element={<History />} />
+                <Route path="/usage" element={<Usage />} />
                 <Route path="/settings" element={<Settings />} />
               </Routes>
             </Suspense>
