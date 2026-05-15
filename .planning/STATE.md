@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: complete
-stopped_at: Milestone v1.0 complete; VibeTime v2026.5.8 released
-last_updated: "2026-05-08T06:40:00Z"
-last_activity: 2026-05-08
+status: active
+stopped_at: Phase 07 usage analytics SPEC locked; next step is discuss-phase
+last_updated: "2026-05-15T00:00:00+08:00"
+last_activity: 2026-05-15
 progress:
-  total_phases: 6
+  total_phases: 7
   completed_phases: 6
   total_plans: 19
   completed_plans: 19
-  percent: 100
+  percent: 86
 ---
 
 # Project State
@@ -20,17 +20,17 @@ progress:
 
 See: .planning/PROJECT.md (updated 2026-05-07)
 
-**Core value:** Accurately and silently record agent coding time per project on the developer's machine, then surface it in a visual surface good enough to live on a livestream — with zero network calls.
-**Current focus:** Milestone v1.0 complete; release `v2026.5.8` published
+**Core value:** Accurately and silently record agent coding time per project on the developer's machine, then surface it in a visual surface good enough to live on a livestream.
+**Current focus:** Phase 07 usage analytics — Claude Code / Codex token usage and estimated cost under History
 
 ## Current Position
 
-Phase: 06 (packaging-v0-acceptance) — COMPLETE
-Plan: 1 of 1
-Status: GitHub Release `v2026.5.8` created with macOS arm64 and Windows x64 assets; Phase 6 UAT/verification recorded as PASS
-Last activity: 2026-05-08
+Phase: 07 (usage-analytics) — SPEC LOCKED
+Plan: pending
+Status: `07-SPEC.md` and `07-RESEARCH.md` define Claude/Codex-only usage analytics; next step is GSD discuss-phase
+Last activity: 2026-05-15
 
-Progress: [██████████] 100%
+Progress: [████████░░] 86%
 
 ## Performance Metrics
 
@@ -50,6 +50,7 @@ Progress: [██████████] 100%
 | 4. Desktop Shell, Today & CLI   | 6 | ~30 min | ~5 min   |
 | 5. Live, History, Menubar & Lifecycle | 4 | ~100 min | ~25 min |
 | 6. Packaging & V0 Acceptance | 1 | ~1 day elapsed | integrated release plan |
+| 7. Usage Analytics | pending | pending | pending |
 
 **Recent Trend:**
 
@@ -101,10 +102,16 @@ Recent decisions affecting current work:
 - Phase 6 packaging now uses the user-provided deterministic SVG macOS app icon. The source lives at `packages/desktop/assets/app-icon-source.svg`; `pnpm --filter @vibetime/desktop run generate:icons` renders `build/app-icon-source.png` and generates modern macOS `build/AppIcon.icon` / packaged `Assets.car`.
 - Release versioning for V0 uses date version `2026.5.8` and tag `v2026.5.8`.
 - GitHub Actions tag workflow builds macOS arm64 and Windows x64 packages and creates GitHub Release assets.
+- Phase 07 scope is Claude Code + Codex only for usage/cost; Cursor and Gemini remain future work.
+- Phase 07 Usage UI lives under History as a Usage tab, not a new top-level route.
+- Phase 07 does not add usage CLI/export in MVP.
+- Pricing is a derived estimate from token facts and a refreshable public pricing cache. Opening the Usage tab renders from cache first, then attempts refresh and updates historical estimates.
+- Phase 07 must record how parsed usage data links with existing hook data via a `data capability -> hook linkage -> user value -> visualization` mapping before final chart choices are locked.
 
 ### Pending Todos
 
-None for milestone v1.0.
+- Run `$gsd-discuss-phase 07` to lock implementation decisions from `07-SPEC.md`.
+- Run `$gsd-plan-phase 07 --skip-research` after discussion to produce executable plans.
 
 ### Blockers/Concerns
 
@@ -117,13 +124,14 @@ None yet. (Phase 1 must produce DECISIONS.md before Phase 1 implementation can a
 | Distribution | Apple Developer notarization | Deferred to V0.1+ | 2026-04-28 |
 | Distribution | Auto-update mechanism | Deferred to V0.1+ | 2026-04-28 |
 | Platform | Linux and Windows arm64 binaries | Deferred to V0.1+ | 2026-04-28 |
-| Metrics | Token / cost tracking | Deferred to V0.1+ | 2026-04-28 |
+| Metrics | Cursor / Gemini token-cost tracking | Deferred beyond Phase 07 | 2026-05-15 |
+| Metrics | Usage CLI/export | Deferred beyond Phase 07 | 2026-05-15 |
 | Metrics | `agent_ratio` (Toggl integration) | Deferred to V0.1+ | 2026-04-28 |
 | Surface | Web UI consuming `core` | Deferred to V0.1+ | 2026-04-28 |
 | Surface | TUI | Deferred | 2026-04-28 |
 
 ## Session Continuity
 
-Last session: 2026-05-08T06:40:00Z
-Stopped at: Milestone v1.0 complete; release `v2026.5.8` published
+Last session: 2026-05-15T00:00:00+08:00
+Stopped at: Phase 07 SPEC locked; ready for discuss-phase
 Resume file: None
