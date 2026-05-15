@@ -1,12 +1,76 @@
 import {
+  buildUsageSummary,
+  normalizeLiteLlmPricingPayload,
+  pricingStatusFromCache,
+  reconcileUsageWithHookEvents,
+  scanClaudeUsageTranscripts,
+  scanCodexUsageTranscripts,
   SCHEMA_VERSION,
   sanitizeUsageMeta,
+  type UsageAgent,
   type UsagePricingEntry,
+  type UsagePricingStatus,
   type UsageRecordFact,
+  type UsageRefreshFrequency,
   type UsageScanState,
+  type UsageSummary,
   type UsageSummaryArgs,
+  type UsageTranscriptCandidate,
 } from '@vibetime/core'
 import type Database from 'better-sqlite3'
+import { createHash } from 'node:crypto'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { basename, join } from 'node:path'
+import { getDb, notifyRenderer } from './db.js'
+
+const LITELLM_PRICING_URL =
+  'https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json'
+const DEFAULT_REFRESH_FREQUENCY: UsageRefreshFrequency = '30m'
+
+type RefreshPricingStatus = UsagePricingStatus | 'unavailable'
+
+export interface UsageRefreshOptions {
+  refreshPricing?: boolean
+  db?: Database.Database
+  homeDir?: string
+  env?: Pick<NodeJS.ProcessEnv, 'CODEX_HOME' | 'CLAUDE_CONFIG_DIR'>
+}
+
+export interface DesktopUsageRefreshResult {
+  frequency: UsageRefreshFrequency
+  scannedAt: number
+  recordsFound: number
+  recordsInserted: number
+  pricingStatus: RefreshPricingStatus
+}
+
+type HookUsageEvent = {
+  agent: UsageAgent
+  event_type: 'turn_start' | 'turn_end'
+  project: string
+  session_id: string
+  turn_id: string | null
+  ts: number
+  duration_sec: number | null
+}
+
+type SourceFile = {
+  agent: UsageAgent
+  path: string
+  sourceFileKey: string
+  sourceFileBasename: string
+  mtimeMs: number
+  sizeBytes: number
+}
+
+type ScannerDefinition = {
+  agent: UsageAgent
+  roots: (homeDir: string, env: UsageRefreshOptions['env']) => string[]
+  scan: (candidates: UsageTranscriptCandidate[]) => { records: UsageRecordFact[] }
+}
+
+let backgroundRefreshTimer: ReturnType<typeof setInterval> | null = null
 
 type UsageRecordRow = {
   agent: UsageRecordFact['agent']
@@ -28,6 +92,52 @@ type UsageRecordRow = {
   attribution_confidence: number
   meta: string | null
 }
+
+type UsagePricingRow = {
+  model: string
+  provider: string
+  input_usd_per_million: number | null
+  cached_input_usd_per_million: number | null
+  cache_creation_input_usd_per_million: number | null
+  output_usd_per_million: number | null
+  reasoning_output_usd_per_million: number | null
+  source: string
+  fetched_at: string
+  raw_version: string
+}
+
+type UsageScanStateRow = {
+  agent: UsageAgent
+  source_file_key: string
+  source_file_basename: string
+  mtime_ms: number
+  size_bytes: number
+  last_scanned_at: number
+  last_row_key: string | null
+}
+
+const SCANNER_REGISTRY: ScannerDefinition[] = [
+  {
+    agent: 'claude-code',
+    roots: (homeDir, env) => [
+      ...(env?.CLAUDE_CONFIG_DIR ? [join(env.CLAUDE_CONFIG_DIR, 'projects')] : []),
+      join(homeDir, '.config', 'claude', 'projects'),
+      join(homeDir, '.claude', 'projects'),
+    ],
+    scan: scanClaudeUsageTranscripts,
+  },
+  {
+    agent: 'codex',
+    roots: (homeDir, env) => [
+      ...(env?.CODEX_HOME
+        ? [join(env.CODEX_HOME, 'sessions'), join(env.CODEX_HOME, 'archived_sessions')]
+        : []),
+      join(homeDir, '.codex', 'sessions'),
+      join(homeDir, '.codex', 'archived_sessions'),
+    ],
+    scan: scanCodexUsageTranscripts,
+  },
+]
 
 function nowSeconds(): number {
   return Date.now() / 1000
@@ -266,6 +376,218 @@ export function upsertUsagePricingCache(
   })(entries)
 }
 
+function pricingRowToEntry(row: UsagePricingRow): UsagePricingEntry {
+  return {
+    model: row.model,
+    provider: row.provider,
+    inputUsdPerMillion: row.input_usd_per_million,
+    cachedInputUsdPerMillion: row.cached_input_usd_per_million,
+    cacheCreationInputUsdPerMillion: row.cache_creation_input_usd_per_million,
+    outputUsdPerMillion: row.output_usd_per_million,
+    reasoningOutputUsdPerMillion: row.reasoning_output_usd_per_million,
+    source: row.source,
+    fetchedAt: row.fetched_at,
+    rawVersion: row.raw_version,
+  }
+}
+
+export function readUsagePricingCache(db: Database.Database): UsagePricingEntry[] {
+  return (
+    db
+      .prepare(`
+        SELECT
+          model,
+          provider,
+          input_usd_per_million,
+          cached_input_usd_per_million,
+          cache_creation_input_usd_per_million,
+          output_usd_per_million,
+          reasoning_output_usd_per_million,
+          source,
+          fetched_at,
+          raw_version
+        FROM usage_pricing_cache
+        ORDER BY model ASC
+      `)
+      .all() as UsagePricingRow[]
+  ).map(pricingRowToEntry)
+}
+
+function readUsageScanStateMap(db: Database.Database): Map<string, UsageScanStateRow> {
+  const rows = db.prepare('SELECT * FROM usage_scan_state').all() as UsageScanStateRow[]
+  return new Map(rows.map((row) => [`${row.agent}:${row.source_file_key}`, row]))
+}
+
+function sourceFileKey(agent: UsageAgent, path: string): string {
+  const hash = createHash('sha256').update(path).digest('hex').slice(0, 16)
+  return `${agent}:${hash}:${basename(path)}`
+}
+
+function discoverJsonlFiles(root: string, agent: UsageAgent, seenPaths: Set<string>): SourceFile[] {
+  if (!existsSync(root)) return []
+
+  const results: SourceFile[] = []
+  const visit = (dir: string): void => {
+    let entries: ReturnType<typeof readdirSync>
+    try {
+      entries = readdirSync(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+
+    for (const entry of entries) {
+      const path = join(dir, entry.name)
+      if (entry.isDirectory()) {
+        visit(path)
+        continue
+      }
+      if (!entry.isFile() || !entry.name.endsWith('.jsonl') || seenPaths.has(path)) continue
+      try {
+        const stat = statSync(path)
+        seenPaths.add(path)
+        results.push({
+          agent,
+          path,
+          sourceFileKey: sourceFileKey(agent, path),
+          sourceFileBasename: basename(path),
+          mtimeMs: stat.mtimeMs,
+          sizeBytes: stat.size,
+        })
+      } catch {
+        // Files can be rotated while the background scan is running.
+      }
+    }
+  }
+
+  visit(root)
+  return results
+}
+
+function discoverSourceFiles(homeDir: string, env: UsageRefreshOptions['env']): SourceFile[] {
+  const seenPaths = new Set<string>()
+  return SCANNER_REGISTRY.flatMap((scanner) =>
+    scanner.roots(homeDir, env).flatMap((root) =>
+      discoverJsonlFiles(root, scanner.agent, seenPaths),
+    ),
+  )
+}
+
+function changedSourceFiles(db: Database.Database, files: SourceFile[]): SourceFile[] {
+  const scanState = readUsageScanStateMap(db)
+  return files.filter((file) => {
+    const previous = scanState.get(`${file.agent}:${file.sourceFileKey}`)
+    return !previous || previous.mtime_ms !== file.mtimeMs || previous.size_bytes !== file.sizeBytes
+  })
+}
+
+function scanSourceFiles(files: readonly SourceFile[]): {
+  records: UsageRecordFact[]
+  states: UsageScanState[]
+} {
+  const scannedAt = nowSeconds()
+  const byAgent = new Map<UsageAgent, UsageTranscriptCandidate[]>()
+  for (const file of files) {
+    let content: string
+    try {
+      content = readFileSync(file.path, 'utf8')
+    } catch {
+      continue
+    }
+    const candidates = byAgent.get(file.agent) ?? []
+    candidates.push({
+      sourceFileKey: file.sourceFileKey,
+      sourceFileBasename: file.sourceFileBasename,
+      content,
+    })
+    byAgent.set(file.agent, candidates)
+  }
+
+  const records: UsageRecordFact[] = []
+  for (const scanner of SCANNER_REGISTRY) {
+    const candidates = byAgent.get(scanner.agent) ?? []
+    if (candidates.length === 0) continue
+    records.push(...scanner.scan(candidates).records)
+  }
+
+  const lastRowByFile = new Map<string, string>()
+  for (const record of records) lastRowByFile.set(record.sourceFileKey, record.sourceRowKey)
+
+  return {
+    records,
+    states: files.map((file) => ({
+      agent: file.agent,
+      sourceFileKey: file.sourceFileKey,
+      sourceFileBasename: file.sourceFileBasename,
+      mtimeMs: file.mtimeMs,
+      sizeBytes: file.sizeBytes,
+      lastScannedAt: scannedAt,
+      lastRowKey: lastRowByFile.get(file.sourceFileKey) ?? null,
+    })),
+  }
+}
+
+function readHookUsageEvents(db: Database.Database): HookUsageEvent[] {
+  const completed = db
+    .prepare(`
+      SELECT agent, event_type, project, session_id, turn_id, ts, duration_sec
+      FROM events
+      WHERE agent IN ('claude-code', 'codex')
+        AND event_type IN ('turn_start', 'turn_end')
+      ORDER BY ts ASC
+    `)
+    .all() as HookUsageEvent[]
+  const active = db
+    .prepare(`
+      SELECT
+        agent,
+        'turn_start' AS event_type,
+        project,
+        session_id,
+        turn_id,
+        started_at AS ts,
+        NULL AS duration_sec
+      FROM open_turns
+      WHERE agent IN ('claude-code', 'codex')
+      ORDER BY started_at ASC
+    `)
+    .all() as HookUsageEvent[]
+
+  return [...completed, ...active]
+}
+
+async function refreshPricingCache(db: Database.Database): Promise<RefreshPricingStatus> {
+  try {
+    const response = await fetch(LITELLM_PRICING_URL, {
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'VibeTime',
+      },
+    })
+    if (!response.ok) throw new Error(`LiteLLM pricing refresh failed: ${response.status}`)
+
+    const fetchedAt = new Date().toISOString()
+    const entries = normalizeLiteLlmPricingPayload(await response.json(), fetchedAt)
+    if (entries.length === 0) throw new Error('LiteLLM pricing payload had no usable rows')
+    upsertUsagePricingCache(db, entries)
+    return 'fresh'
+  } catch {
+    return readUsagePricingCache(db).length > 0 ? 'cached' : 'unavailable'
+  }
+}
+
+function frequencyToMs(frequency: UsageRefreshFrequency): number {
+  switch (frequency) {
+    case '15m':
+      return 15 * 60 * 1000
+    case '30m':
+      return 30 * 60 * 1000
+    case '1h':
+      return 60 * 60 * 1000
+    case '4h':
+      return 4 * 60 * 60 * 1000
+  }
+}
+
 function rowToRecord(row: UsageRecordRow): UsageRecordFact {
   return {
     agent: row.agent,
@@ -330,4 +652,62 @@ export function readUsageRows(
       `)
       .all(rangeStart, rangeEnd) as UsageRecordRow[]
   ).map(rowToRecord)
+}
+
+export function queryUsageSummary(args: UsageSummaryArgs): UsageSummary {
+  const db = getDb()
+  return db.transaction(() =>
+    buildUsageSummary(readUsageRows(db, args), {
+      ...args,
+      prices: readUsagePricingCache(db),
+      pricingStatus: pricingStatusFromCache(readUsagePricingCache(db), args.now ?? new Date()),
+    }),
+  )()
+}
+
+export async function runUsageRefresh(
+  options: UsageRefreshOptions = {},
+): Promise<DesktopUsageRefreshResult> {
+  const db = options.db ?? getDb()
+  const homeDir = options.homeDir ?? homedir()
+  const refreshPricing = options.refreshPricing ?? true
+  const scannedAt = nowSeconds()
+  const files = changedSourceFiles(db, discoverSourceFiles(homeDir, options.env ?? process.env))
+  const { records, states } = scanSourceFiles(files)
+  const hookEvents = readHookUsageEvents(db)
+  const reconciled = reconcileUsageWithHookEvents(records, hookEvents)
+
+  const recordsInserted = db.transaction(() => {
+    const changedRows = upsertUsageRecords(db, reconciled)
+    upsertUsageScanState(db, states)
+    return changedRows
+  })()
+
+  const pricingStatus = refreshPricing
+    ? await refreshPricingCache(db)
+    : pricingStatusFromCache(readUsagePricingCache(db), new Date(scannedAt * 1000))
+
+  if (recordsInserted > 0 || pricingStatus === 'fresh') notifyRenderer({ type: 'db-changed' })
+
+  return {
+    frequency: DEFAULT_REFRESH_FREQUENCY,
+    scannedAt,
+    recordsFound: records.length,
+    recordsInserted,
+    pricingStatus,
+  }
+}
+
+export function startUsageBackgroundRefresh(frequency: UsageRefreshFrequency): void {
+  stopUsageBackgroundRefresh()
+  void runUsageRefresh({ refreshPricing: true })
+  backgroundRefreshTimer = setInterval(() => {
+    void runUsageRefresh({ refreshPricing: true })
+  }, frequencyToMs(frequency))
+}
+
+export function stopUsageBackgroundRefresh(): void {
+  if (!backgroundRefreshTimer) return
+  clearInterval(backgroundRefreshTimer)
+  backgroundRefreshTimer = null
 }

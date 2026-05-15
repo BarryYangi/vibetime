@@ -84,11 +84,11 @@ function insertHookRows(db: Database.Database): void {
     INSERT INTO events (
       schema_version, agent, event_type, project, session_id, turn_id, ts, timezone, duration_sec, meta
     )
-    VALUES (1, 'codex', 'turn_end', 'vibetime', 'codex-session-1', 'codex-turn-1', 1778814072, 'Asia/Shanghai', 120, '{}')
+    VALUES (1, 'codex', 'turn_end', 'vibetime', 'codex-session-1', 'codex-turn-1', 1778840472, 'Asia/Shanghai', 120, '{}')
   `).run()
   db.prepare(`
     INSERT INTO open_turns (turn_id, agent, project, session_id, started_at, timezone, meta)
-    VALUES ('claude-turn-open', 'claude-code', 'vibetime', 'claude-session-open', 1778813900, 'Asia/Shanghai', '{}')
+    VALUES ('claude-turn-open', 'claude-code', 'vibetime', 'claude-session-open', 1778840300, 'Asia/Shanghai', '{}')
   `).run()
 }
 
@@ -141,7 +141,7 @@ describe('desktop usage storage', () => {
 })
 
 describe('runUsageRefresh', () => {
-  it('scans configured Claude and Codex roots incrementally and persists hook attribution', async () => {
+  it('scans configured Claude and Codex roots incrementally and leaves Unassigned usage auditable', async () => {
     const db = createDb()
     initializeDesktopDbSchema(db)
     insertHookRows(db)
