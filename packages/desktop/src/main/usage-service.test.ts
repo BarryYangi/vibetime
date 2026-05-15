@@ -75,7 +75,7 @@ function pricingEntry(overrides: Partial<UsagePricingEntry> = {}): UsagePricingE
     cachedInputUsdPerMillion: 0.1,
     cacheCreationInputUsdPerMillion: 1.25,
     outputUsdPerMillion: 10,
-    reasoningOutputUsdPerMillion: null,
+    reasoningOutputUsdPerMillion: 10,
     source: 'litellm',
     fetchedAt: '2026-05-15T00:00:00.000Z',
     rawVersion: 'fixture',

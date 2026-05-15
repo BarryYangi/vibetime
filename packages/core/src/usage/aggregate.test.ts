@@ -127,6 +127,53 @@ describe('buildUsageSummary', () => {
     )
   })
 
+  it('treats partial pricing as unknown when used token categories are unpriced', () => {
+    const summary = buildUsageSummary(
+      [
+        record({
+          model: 'partial-model',
+          tokens: tokens({
+            inputTokens: 100,
+            cachedInputTokens: 20,
+            outputTokens: 30,
+            totalTokens: 150,
+          }),
+        }),
+      ],
+      {
+        periodDays: 7,
+        now: new Date('2026-05-15T12:00:00.000Z'),
+        prices: [
+          {
+            model: 'partial-model',
+            provider: 'test',
+            inputUsdPerMillion: 3,
+            cachedInputUsdPerMillion: null,
+            cacheCreationInputUsdPerMillion: null,
+            outputUsdPerMillion: 15,
+            reasoningOutputUsdPerMillion: null,
+            source: 'litellm',
+            fetchedAt: '2026-05-15T00:00:00.000Z',
+            rawVersion: 'test',
+          },
+        ],
+        pricingStatus: 'fresh',
+      },
+    )
+
+    expect(summary.totals.estimatedCostUsd).toBeNull()
+    expect(summary.totals.unknownCostTokens).toBe(150)
+    expect(summary.auditRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: 'unknown-price:partial-model',
+          model: 'partial-model',
+          unknownCostTokens: 150,
+        }),
+      ]),
+    )
+  })
+
   it('sorts project model and agent breakdowns by tokens descending', () => {
     const summary = buildUsageSummary(
       [

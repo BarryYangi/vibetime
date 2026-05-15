@@ -144,6 +144,35 @@ describe('estimateUsageCostUsd', () => {
   it('returns null for unknown model pricing', () => {
     expect(estimateUsageCostUsd(tokens(), null)).toBeNull()
   })
+
+  it('returns null when used token categories are missing prices', () => {
+    const price: UsagePricingEntry = {
+      model: 'partial-model',
+      provider: 'test',
+      inputUsdPerMillion: 3,
+      cachedInputUsdPerMillion: null,
+      cacheCreationInputUsdPerMillion: null,
+      outputUsdPerMillion: 15,
+      reasoningOutputUsdPerMillion: null,
+      source: 'litellm',
+      fetchedAt: '2026-05-15T00:00:00.000Z',
+      rawVersion: 'test',
+    }
+
+    expect(
+      estimateUsageCostUsd(
+        tokens({
+          inputTokens: 1_000_000,
+          cachedInputTokens: 10,
+          cacheCreationInputTokens: 0,
+          outputTokens: 1_000_000,
+          reasoningOutputTokens: 0,
+          totalTokens: 2_000_010,
+        }),
+        price,
+      ),
+    ).toBeNull()
+  })
 })
 
 describe('pricingStatusFromCache', () => {

@@ -147,8 +147,13 @@ export function estimateUsageCostUsd(
 
   let cost = 0
   let pricedAny = false
+  let unpricedAny = false
   const add = (count: number, rate: number | null): void => {
-    if (rate === null || count <= 0) return
+    if (count <= 0) return
+    if (rate === null) {
+      unpricedAny = true
+      return
+    }
     cost += (count / MILLION) * rate
     pricedAny = true
   }
@@ -159,6 +164,7 @@ export function estimateUsageCostUsd(
   add(tokens.outputTokens, price.outputUsdPerMillion)
   add(tokens.reasoningOutputTokens, price.reasoningOutputUsdPerMillion)
 
+  if (unpricedAny) return null
   return pricedAny ? cost : null
 }
 
