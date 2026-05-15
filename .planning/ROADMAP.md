@@ -130,7 +130,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Usage shows Claude/Codex token totals, estimated cost where price is known, and agent/model/project breakdowns; Cursor and Gemini do not appear in usage/cost totals
   5. No `vibetime usage` CLI or usage export is added in this phase
 **Plans**: 6 plans in 6 waves
-- [ ] 07-01-PLAN.md — Usage validation fixtures, core usage contracts, storage DDL, and privacy canary tests
+- [x] 07-01-PLAN.md — Usage validation fixtures, core usage contracts, storage DDL, and privacy canary tests
 - [ ] 07-02-PLAN.md — Claude Code and Codex transcript scanners for sanitized token facts
 - [ ] 07-03-PLAN.md — Pricing, hook attribution, Usage aggregation, and `07-USAGE-MAPPING.md`
 - [ ] 07-04-PLAN.md — Desktop main usage storage, background scanning, pricing cache, and cache-first summaries
@@ -150,4 +150,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 4. Desktop Shell, Today View & CLI | 6/6 | Complete | 2026-04-29 |
 | 5. Live, History, Menubar & Lifecycle | 4/4 | Complete | 2026-05-07 |
 | 6. Packaging & V0 Acceptance | 1/1 | Complete | 2026-05-08 |
-| 7. Usage Analytics | 0/0 | Spec locked | — |
+| 7. Usage Analytics | 1/6 | In Progress | — |
