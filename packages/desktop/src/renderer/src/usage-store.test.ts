@@ -14,6 +14,7 @@ import {
   store,
   usageRefreshStateAtom,
   usageSummariesAtom,
+  usageSummaryCacheKey,
 } from './store'
 
 function deferred<T>() {
@@ -77,16 +78,6 @@ function makeUsageRefreshResult(): UsageRefreshResult {
   }
 }
 
-function cacheKey(args: UsageSummaryArgs): string {
-  return JSON.stringify({
-    periodDays: args.periodDays,
-    agent: args.agent ?? 'all',
-    project: args.project ?? null,
-    model: args.model ?? null,
-    includeSidechain: args.includeSidechain ?? true,
-  })
-}
-
 describe('usage renderer store', () => {
   beforeEach(() => {
     vi.unstubAllGlobals()
@@ -107,7 +98,9 @@ describe('usage renderer store', () => {
 
     expect(result).toEqual({ ok: true, data: summary })
     expect(store.get(activeUsageQueryAtom)).toEqual(baseArgs)
-    expect(store.get(usageSummariesAtom)[cacheKey(baseArgs)]?.totals.totalTokens).toBe(1234)
+    expect(store.get(usageSummariesAtom)[usageSummaryCacheKey(baseArgs)]?.totals.totalTokens).toBe(
+      1234,
+    )
   })
 
   it('ignores stale Usage summary refreshes when a newer refresh wins', async () => {
@@ -125,7 +118,9 @@ describe('usage renderer store', () => {
 
     await expect(secondRefresh).resolves.toEqual({ ok: true, data: makeUsageSummary(30, 2000) })
     await expect(firstRefresh).resolves.toBeNull()
-    expect(store.get(usageSummariesAtom)[cacheKey(baseArgs)]?.totals.totalTokens).toBe(2000)
+    expect(store.get(usageSummariesAtom)[usageSummaryCacheKey(baseArgs)]?.totals.totalTokens).toBe(
+      2000,
+    )
   })
 
   it('supports cache-first page open flow and preserves cached totals on refresh failure', async () => {
@@ -145,8 +140,12 @@ describe('usage renderer store', () => {
     const refreshResult = await runUsageRefresh()
 
     expect(refreshResult).toEqual({ ok: false, error: 'network unavailable' })
-    expect(store.get(usageSummariesAtom)[cacheKey(baseArgs)]?.totals.totalTokens).toBe(900)
-    expect(store.get(usageSummariesAtom)[cacheKey(baseArgs)]?.totals.estimatedCostUsd).toBeNull()
+    expect(store.get(usageSummariesAtom)[usageSummaryCacheKey(baseArgs)]?.totals.totalTokens).toBe(
+      900,
+    )
+    expect(
+      store.get(usageSummariesAtom)[usageSummaryCacheKey(baseArgs)]?.totals.estimatedCostUsd,
+    ).toBeNull()
     expect(store.get(usageRefreshStateAtom).status).toBe('error')
     expect(calls.map((call) => call.channel)).toEqual(['getUsageSummary', 'refreshUsage'])
   })

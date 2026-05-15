@@ -35,6 +35,7 @@ import {
   runUsageRefresh,
   usageRefreshStateAtom,
   usageSummariesAtom,
+  usageSummaryCacheKey,
 } from '../store'
 
 type ChartTokens = ReturnType<typeof getChartTokens>
@@ -48,29 +49,6 @@ const AGENT_FILTERS: Array<{ value: UsageAgentFilter; labelKey?: TranslationKey;
     { value: 'claude-code', label: 'Claude Code' },
     { value: 'codex', label: 'Codex' },
   ]
-
-function normalizeUsageSummaryArgs(args: UsageSummaryArgs): UsageSummaryArgs {
-  return {
-    periodDays: args.periodDays,
-    agent: args.agent ?? 'all',
-    project: args.project ?? null,
-    model: args.model ?? null,
-    includeSidechain: args.includeSidechain ?? true,
-  }
-}
-
-function usageSummaryCacheKey(args: UsageSummaryArgs): string {
-  const normalized = normalizeUsageSummaryArgs(args)
-  return [
-    normalized.periodDays,
-    normalized.agent,
-    normalized.project ?? '',
-    normalized.model ?? '',
-    normalized.includeSidechain ? 'with-sidechain' : 'without-sidechain',
-  ]
-    .map((part) => encodeURIComponent(String(part)))
-    .join('|')
-}
 
 function axisLabelStyle(tokens: ChartTokens) {
   return { color: tokens.axisLabel, fontFamily: 'SN Pro', fontSize: 11 }

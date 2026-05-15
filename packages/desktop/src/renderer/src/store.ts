@@ -60,7 +60,7 @@ function normalizeUsageSummaryArgs(args: UsageSummaryArgs): UsageSummaryArgs {
   }
 }
 
-function usageSummaryCacheKey(args: UsageSummaryArgs): string {
+export function usageSummaryCacheKey(args: UsageSummaryArgs): string {
   const normalized = normalizeUsageSummaryArgs(args)
   return JSON.stringify({
     periodDays: normalized.periodDays,
