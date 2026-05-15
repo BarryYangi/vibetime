@@ -33,7 +33,7 @@ Declared values (must be multiples of 4):
 
 | Token | Value | Usage |
 |-------|-------|-------|
-| xs | 4px | Icon gaps, table icon nudges, chart cell gaps |
+| xs | 4px | Icon gaps, table icon nudges, chart cell gaps including heatmap gaps |
 | sm | 8px | Compact control spacing, nav row gap, period tab inner rhythm |
 | md | 16px | Settings rows, metric tile padding, panel internal gaps |
 | lg | 24px | Page section padding and header-to-content spacing |
@@ -41,7 +41,7 @@ Declared values (must be multiples of 4):
 | 2xl | 48px | Empty state vertical separation only |
 | 3xl | 64px | Reserved for page-level blank-space states; do not use inside dense dashboard panels |
 
-Exceptions: icon-only/touch-target controls use existing coss pointer-coarse minimum 44px; desktop visual size remains 28-36px as defined by local coss button/select variants. Chart internals may use ECharts-native 1-2px strokes and heatmap cell gaps.
+Exceptions: icon-only/touch-target controls use existing coss pointer-coarse minimum 44px; desktop visual size remains 28-36px as defined by local coss button/select variants. Chart cell and heatmap gaps use the `xs` spacing token when explicitly configured.
 
 ---
 
@@ -57,7 +57,7 @@ Exceptions: icon-only/touch-target controls use existing coss pointer-coarse min
 Constraints:
 
 - Use exactly two weights in this phase: 400 and 600.
-- Panel headings may use existing dense History convention: 14px / 600 / 1.2.
+- Panel headings may use the existing dense History convention: Body size with 600 weight and heading line height.
 - Numeric totals use tabular numerals and the heading font; cost and token totals must not resize the surrounding metric tile when values change.
 - Do not scale font size with viewport width.
 
@@ -135,9 +135,15 @@ The header uses the History pattern:
 - Right controls in this order: loading spinner, period tabs, optional filters, `Refresh Usage` button.
 - Period tabs are exactly `7d`, `30d`, `90d`, `365d`, backed by the existing `HISTORY_PERIODS` values and localized with the same formatter as History.
 
+### Above-The-Fold Focal Hierarchy
+
+- Primary focal point: the first row of metric tiles, led by estimated cost and total tokens. These two tiles appear first and use Display role numerics with tabular alignment.
+- Secondary focal point: the daily usage trend panel directly below or beside the metric tiles, depending on available width.
+- Tertiary focal point: pricing/audit status and dense detail tables. These must sit below the primary metric row and daily trend so they support investigation rather than competing with the overview.
+
 ### Controls
 
-- Period selector: coss `Tabs`, same dimensions as History (`h-6`, 11.5px labels, tabular numerals).
+- Period selector: coss `Tabs`, same dimensions as History (`h-6`, Label role text, tabular numerals).
 - Agent filter: coss `Select`, options limited to `All`, `Claude Code`, `Codex`.
 - Project filter: coss `Select`, populated only from usage rows linked to projects; no placeholder rows for Cursor/Gemini.
 - Model filter: coss `Select`, populated from scanned usage models.
@@ -156,7 +162,7 @@ Add a Settings row under App Startup or a new Usage section:
 
 ### Data States
 
-- Loading: blank background shell for first route suspense; within loaded Usage, show a 14px muted line plus spinner without shifting dashboard layout.
+- Loading: blank background shell for first route suspense; within loaded Usage, show a Body role muted line plus spinner without shifting dashboard layout.
 - Empty: show the empty state copy above, no charts, and no Cursor/Gemini explanation beyond the Claude/Codex-only note.
 - Partial pricing failure with cache: show metric values from cache, a muted `Using cached pricing.` status, and keep `Refresh Usage` enabled.
 - Pricing failure with no usable cache/model price: show token totals, set cost fields to `Unknown`, and show `Pricing unavailable. Token totals are still shown.`
@@ -198,8 +204,9 @@ Cursor and Gemini are excluded from every Usage aggregate and legend in Phase 07
 - Page open sequence: render cached DB/pricing state -> request pricing refresh -> request/observe background scan state -> recompute and refresh visible aggregates.
 - Refresh CTA shows loading on the button, disables duplicate clicks, and preserves stale visible data until fresh data arrives or a failure state is known.
 - Background scanner push events should update Usage only after the Usage view has loaded once, mirroring History's best-effort refresh pattern.
-- Sorting in tables follows History: clickable headers with lucide up/down sort icons, 11px table headers, 13px body cells.
+- Sorting in tables follows History: clickable headers with lucide up/down sort icons; table headers use Label role and body cells use Body role.
 - Charts use existing ECharts init/dispose/resize hook pattern from `History.tsx`; no custom canvas/SVG chart engine.
+- Chart rendering may use ECharts-native thin strokes for line, axis, border, and grid rendering. These strokes are rendering primitives, not spacing tokens.
 - Tooltips are confined, use chart theme tokens, and must include whether cost is estimated or unknown when hovering cost values.
 - Hover/focus states use existing coss classes and default macOS arrow cursor, matching the project decision in `index.css`.
 - Cost values format as USD with two decimals for totals under $1,000; token values use compact localized number formatting; unknown cost displays text, not `$0.00`.
