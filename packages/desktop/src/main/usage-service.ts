@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { type Dirent, existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import {
@@ -34,7 +34,7 @@ export interface UsageRefreshOptions {
   refreshPricing?: boolean
   db?: Database.Database
   homeDir?: string
-  env?: Pick<NodeJS.ProcessEnv, 'CODEX_HOME' | 'CLAUDE_CONFIG_DIR'>
+  env?: Partial<Pick<NodeJS.ProcessEnv, 'CODEX_HOME' | 'CLAUDE_CONFIG_DIR'>>
 }
 
 export interface DesktopUsageRefreshResult {
@@ -438,7 +438,7 @@ function discoverJsonlFiles(root: string, agent: UsageAgent, seenPaths: Set<stri
 
   const results: SourceFile[] = []
   const visit = (dir: string): void => {
-    let entries: ReturnType<typeof readdirSync>
+    let entries: Dirent[]
     try {
       entries = readdirSync(dir, { withFileTypes: true })
     } catch {
