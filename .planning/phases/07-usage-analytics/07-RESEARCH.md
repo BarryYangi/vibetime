@@ -1,653 +1,531 @@
-# Usage Analytics Research
-
-Date: 2026-05-15
-
-Scope: local-first usage/cost analytics for the currently supported agents:
-Claude Code, Codex, Cursor, and Gemini CLI.
-
-References reviewed:
-
-- ccusage: https://github.com/ryoppippi/ccusage and https://ccusage.com/
-- ccusage Codex package: https://ccusage.com/guide/codex/
-- CodexBar: https://github.com/steipete/CodexBar
-- CodexBar Codex notes: https://github.com/steipete/CodexBar/blob/main/docs/codex.md
-- CodexBar Claude notes: https://github.com/steipete/CodexBar/blob/main/docs/claude.md
-- Claude Code hooks reference: https://code.claude.com/docs/en/hooks
-- Gemini CLI hooks reference: https://geminicli.com/docs/hooks/reference/
-- Local VibeTime code:
-  - `packages/core/src/schema.ts`
-  - `packages/core/src/adapters/*`
-  - `packages/hook/src/hook.ts`
-  - `packages/hook/src/store.ts`
-  - `packages/hook/src/install.ts`
-  - `packages/hook/src/recovery.ts`
-
-## Executive Summary
-
-Usage 模块适合做，而且和 VibeTime 当前架构天然相合。
-
-第一性原理看，usage dashboard 需要四类事实：
-
-1. 谁在工作：agent、project、session、turn。
-2. 何时工作：turn start/end、usage row timestamp。
-3. 用了什么：model、token breakdown。
-4. 花了多少：用本地 token * 定价表估算出来的 cost。
-
-当前 hook 已经可靠解决第 1、2 类的大半：project/session/turn/time window。usage 模块不应把 hook 变重，而应新增一个 read-only scanner 去读各工具已有的本地 transcript，再由 reconciler 把 usage rows 归因到 VibeTime turns。
-
-结论分层：
-
-| Agent | 本地 token/cost 可行性 | turn 归因质量 | 建议 |
-| --- | --- | --- | --- |
-| Codex | 高 | 高 | MVP 必做。原生日志含 token_count、turn_context、task_started/turn_id。 |
-| Claude Code | 高 | 中高 | MVP 必做。JSONL assistant usage 稳定，缺原生 turn_id，用 session + transcript + 时间窗归因。 |
-| Gemini CLI | 中 | 中 | 不进 MVP。以后再做，本机日志已有 tokens，但格式稳定性低于 Claude/Codex。 |
-| Cursor | 低 | 高但无 usage | 不进 MVP。以后再做，当前只保留 hook timeline，不做 token/cost。 |
-
-MVP 范围决策：
-
-- usage scanner：只注册 Claude Code 和 Codex。
-- cost estimation：只估算 Claude Code 和 Codex。
-- dashboard aggregates：默认只统计 Claude Code 和 Codex 的 usage/cost rows。
-- Gemini CLI / Cursor：现阶段不展示 token/cost，不做 unknown usage surface，避免初版范围发散。
-
-因此最稳路线：
-
-1. 保持 hook 当前轻量职责不变。
-2. 新增 usage scanner 读本地文件。
-3. 新增 attribution/reconciliation 层把 scanner rows 贴到 turns。
-4. 新增 ECharts dashboard 做项目、模型、时间、agent、成本趋势分析。
-5. cost 全部标为 estimate，带 pricing snapshot version。
-
-## Existing VibeTime Baseline
-
-当前 schema 只有两个核心表：
-
-- `events`: session/turn lifecycle events。
-- `open_turns`: crash recovery 和 live state。
-
-`events.meta` 已经保留模型/source/reason 等轻量扩展字段，但没有 token/cost 表。
-
-当前 hook pipeline:
-
-1. 从 stdin 读 agent hook JSON。
-2. detect agent。
-3. adapter 归一化。
-4. resolve project。
-5. persist event。
-6. notify desktop。
-
-这正是 usage 归因所需的时间轴。不要在 hook 中扫描大文件、算价格、聚合报表；这些应放到后台 scanner 或 app refresh 流程里。
-
-当前 adapter 粒度：
-
-| Agent | 当前 turn id 情况 | 当前 model 情况 |
-| --- | --- | --- |
-| Codex | hook payload 有 `turn_id` 时直接保存 | session/turn meta 可保存 model |
-| Claude Code | 无原生 turn id，当前派生 `${session_id}-${ts}` | session meta 可保存 model |
-| Cursor | `generation_id` 可作为 turn_id | `model` 可保存 |
-| Gemini CLI | `BeforeAgent` 创建 turn_id，`BeforeModel` 可 enrich 当前 open turn meta | `BeforeModel.llm_request.model` 或 top-level model |
-
-这说明：turn/project/model 归属，hook 已有基础；token/cost 需要另一个数据源。
-
-## Data Source Findings
-
-### Claude Code
-
-成熟项目做法：
-
-- ccusage 读取：
-  - `~/.config/claude/projects`
-  - `~/.claude/projects`
-  - 支持 `CLAUDE_CONFIG_DIR`
-- CodexBar 也以这些 project JSONL 为 native cost usage source。
-
-本机观察：
-
-- `~/.claude/projects/**/*.jsonl` 内有 assistant rows。
-- 常见字段：
-  - `timestamp`
-  - `sessionId`
-  - `cwd`
-  - `message.id`
-  - `requestId`
-  - `message.model`
-  - `message.usage.input_tokens`
-  - `message.usage.output_tokens`
-  - `message.usage.cache_creation_input_tokens`
-  - `message.usage.cache_read_input_tokens`
-  - `isSidechain`
-  - `agentId`
-  - `gitBranch`
-
-去重规则：
-
-- streaming/chunk 场景会出现重复/累积行。
-- ccusage 和 CodexBar 的核心思路都是用 `message.id + requestId` 去重。
-- 更安全的 row key：`sessionId + message.id + requestId`。
-- 同一 key 多行时取最后/最完整 usage row。
-
-turn 归因：
-
-- Claude 本地 usage row 通常没有 VibeTime turn_id。
-- Claude hook input 的 common fields 包含 `session_id`、`transcript_path`、`cwd` 等，Stop hook 在每 turn 结束时触发。
-- 最稳归因不是“在 transcript 里找 hook 执行记录”，而是：
-  1. 用 VibeTime events 建立 turn window。
-  2. 用 `session_id` 精筛。
-  3. 若 hook meta 保存 transcript file fingerprint/path basename，则再用 transcript 精筛。
-  4. 用 usage row timestamp 落入 `[turn_start - grace, turn_end + grace]` 做匹配。
-  5. 多候选时选最小窗口、最近 turn_end。
-
-严格性判断：
-
-- 可以做到高置信，不应宣称数学上 100% exact。
-- 若一个 Claude turn 内产生多次 assistant/API usage，应该允许一个 turn 对多个 usage rows。
-- 若 subagent/sidechain 出现在同 session/time window 内，需要保留 `isSidechain`、`agentId`，UI 可选择 include/exclude。
-
-适合 MVP。
-
-### Codex
-
-成熟项目做法：
-
-- ccusage Codex 读取 `$CODEX_HOME`，默认 `~/.codex`。
-- 主要读：
-  - `~/.codex/sessions/YYYY/MM/DD/*.jsonl`
-  - `~/.codex/archived_sessions/*.jsonl`
-- CodexBar 同样读取 native Codex logs，并解析 `event_msg` token_count 和 `turn_context`。
-
-关键日志字段：
-
-- `event_msg` with `payload.type === "token_count"`
-- `info.total_token_usage`
-- `info.last_token_usage`
-- token fields:
-  - `input_tokens`
-  - `cached_input_tokens`
-  - `output_tokens`
-  - `reasoning_output_tokens`
-  - `total_tokens`
-  - `model_context_window`
-- `turn_context` carries model metadata。
-- `task_started` can carry current turn id in recent logs。
-- `rate_limits` can include plan/window metadata。
-
-token delta：
-
-- 优先用 `last_token_usage`，它已经是 delta。
-- 若只有 `total_token_usage`，用当前 total 减 previous total。
-- `cached_input_tokens` 应 clamp 到 input tokens。
-- `reasoning_output_tokens` 只用于展示；Codex/OpenAI billing 里 output 通常已包含 reasoning，不应重复计费。
-
-model：
-
-- `turn_context` 是最可靠的 model bucket。
-- 旧日志缺 `turn_context` 时可以 fallback 为 unknown，或像 ccusage 早期兼容那样标 `isFallbackModel`。
-- 不建议静默按 `gpt-5` 计价；VibeTime 更应显示 unknown/fallback，避免误导。
-
-turn 归因：
-
-- VibeTime Codex hook 已有 `session_id` 和 `turn_id`。
-- Codex transcript 也有 `task_started`/turn id 时，可以 exact join。
-- 没有 turn id 时 fallback 到 session + time window。
-
-严格性判断：
-
-- 在四家里 Codex 最接近 strict alignment。
-- 可以把 attribution method 标为:
-  - `native_turn_id`: high
-  - `session_time_window`: medium
-
-适合 MVP。
-
-### Cursor
-
-当前 hook 能拿到：
-
-- `conversation_id` -> session_id
-- `generation_id` -> turn_id
-- `model`
-- `workspace_roots`
-- `beforeSubmitPrompt`
-- `stop`
-
-本机观察：
-
-- `~/.cursor/projects/**/agent-transcripts/**/*.jsonl` 有消息、tool use、role/content 等。
-- 未观察到稳定的 token usage/model cost 字段。
-- `~/Library/Application Support/Cursor/logs/**` 有 agent/extension logs，但没有确认可稳定解析 token/cost。
-- `~/.cursor/**/store.db` 可能保存 chat state，但不是一个成熟、可承诺的 usage source。
-
-外部材料：
-
-- Cursor marketplace/forum 可见 hooks 存在，如 `beforeSubmitPrompt`、`stop`、`afterAgentResponse` 等。
-- 但未找到等价于 Claude/Codex 的稳定 local usage transcript 规范。
-
-结论：
-
-- Cursor 可精确知道“哪个项目、哪个 conversation、哪个 generation、什么 model/default、何时开始/结束”。
-- 但纯本地 token/cost 不应承诺。
-- MVP 不做 Cursor usage/cost surface；仅继续保留现有 hook timeline 能力。
-
-后续可做专项调查：
-
-- Cursor `store.db` schema。
-- Cursor 团队是否暴露 usage API 或本地 usage log。
-- 企业/团队 usage 是否只能云端拿。
-
-### Gemini CLI
-
-Status: future work, not MVP.
-
-官方 hook 参考：
-
-- `BeforeAgent`
-- `AfterAgent`
-- `BeforeModel`
-- `AfterModel`
-- `SessionStart`
-- `SessionEnd`
-
-官方文档中 `BeforeModel`/`AfterModel` 的 stable model API 包含：
-
-- `llm_request.model`
-- `llm_response.usageMetadata.totalTokenCount`
-
-本机观察：
-
-- `~/.gemini/tmp/<project-or-hash>/chats/session-*.jsonl` 存在 session chat logs。
-- usage rows 可见：
-  - `sessionId`
-  - `projectHash`
-  - `id`
-  - `timestamp`
-  - `type: "gemini"`
-  - `model`
-  - `tokens.input`
-  - `tokens.output`
-  - `tokens.cached`
-  - `tokens.thoughts`
-  - `tokens.tool`
-  - `tokens.total`
-
-注意：
-
-- 同一 `id` 有时出现两行：前一行无 toolCalls，后一行补 toolCalls，但 tokens 一样。
-- 去重 row key 建议：`sessionId + id`，若冲突再加 timestamp。
-- 同 key 多行取最后/最完整 row。
-- 不要持久化 content/thoughts/tool args，只读 token/model/timestamp/id。
-
-turn 归因：
-
-- VibeTime Gemini hook 在 `BeforeAgent` 生成 turn_id，`BeforeModel` enrich model。
-- Gemini chat usage rows 未观察到 VibeTime turn_id。
-- 用 `sessionId + timestamp window` 归因，confidence medium。
-- 若未来 hook 可记录 `llm_request` fingerprint 或 response id，可提高精度，但需避免保存内容。
-
-结论：
-
-- 值得做，但放在 Claude/Codex 之后；初版不实现 scanner、不进费用估算。
-- 标为 observed local format，不把它当长期稳定 contract。
-
-## Proposed Architecture
-
-### Components
+# Phase 07: Usage Analytics - Research
+
+**Researched:** 2026-05-15 [VERIFIED: system current date]
+**Domain:** Local-first Claude Code and Codex usage analytics, pricing cache, hook-linked desktop visualization [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md]
+**Confidence:** HIGH for VibeTime integration and validation architecture; MEDIUM for vendor transcript stability because Claude/Codex log formats are external and may change [VERIFIED: codebase grep; CITED: https://ccusage.com/guide/codex/]
+
+<user_constraints>
+## User Constraints (from CONTEXT.md)
+
+### Locked Decisions
+
+Phase 07 adds a dedicated Usage page for Claude Code and Codex usage analytics, placed below History in navigation. It scans local Claude/Codex transcript sources for token facts, estimates cost from a refreshable pricing cache, and combines those usage facts with VibeTime's existing hook timeline so the product can explain cost, tokens, model usage, cache behavior, and time trends by project, model, turn, day, week, and month. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md]
+
+This phase does not add Cursor/Gemini usage, usage CLI/export, cloud account dashboards, or authenticated provider APIs. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md]
+
+- Usage is a dedicated page/module placed below History in navigation, not a tab nested inside History. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md]
+- Usage may reuse History's visual language, dashboard layout patterns, and period selector conventions. It should not be implemented as the same page or a subordinate History mode. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md]
+- Usage scanning should stay current in the background after app launch, not only when the user opens the Usage page. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md]
+- The app should support a Settings control for usage refresh frequency. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md]
+- Scanning must be incremental; study CodexBar and ccusage patterns for scan state, file mtime/size tracking, row keys, and backfill behavior before final table design. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md]
+- Hook invocations remain lightweight. Background usage scanning must not run inside the hook hot path. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md]
+- Use one pricing source in MVP: follow the pricing source used by ccusage. Do not build a multi-source pricing resolver in Phase 07. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md]
+- Keep a local pricing cache. If the app can refresh pricing, update the cache and recompute displayed historical estimates. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md]
+- If pricing refresh fails but cache exists, continue using cache. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md]
+- If pricing refresh fails and no usable cache exists for a model, show a clear network/pricing failure state on the Usage page and keep token metrics visible. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md]
+- A small embedded fallback snapshot is acceptable as the initial cache/fallback if it simplifies first-run behavior. Cost must remain derived from token facts and pricing, not immutable source data. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md]
+- The required `data capability -> hook linkage -> user value -> visualization` mapping must explicitly analyze project spend, model per turn, model efficiency, cache hit rate, cost/time relationship, time spent per model, daily/weekly/monthly trends for cost/token/time, and aggregation by project/model/agent. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md]
+- Final chart choices follow proven scanner fields; do not design a fake dashboard before available data is known. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md]
+
+### the agent's Discretion
+
+- Pick exact usage table/index structure after studying CodexBar and ccusage implementation details. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md]
+- Pick the default background refresh interval and settings labels, provided the setting exists and scanning is incremental. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md]
+- Pick final ECharts chart types after producing the data capability / hook linkage / user value / visualization mapping. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md]
+- Decide whether the first implementation computes estimated cost on read or materializes derived cost caches, as long as historical costs update after pricing refresh. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md]
+
+### Deferred Ideas (OUT OF SCOPE)
+
+- Cursor usage/cost support. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md]
+- Gemini CLI usage/cost support. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md]
+- Usage CLI/export. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md]
+- Cloud/provider authenticated usage dashboards. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md]
+- Multi-source pricing resolver beyond the ccusage-aligned source. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md]
+</user_constraints>
+
+<phase_requirements>
+## Phase Requirements
+
+| ID | Description | Research Support |
+|----|-------------|------------------|
+| TOK-01 | Track per-turn token usage when agent payload or local transcript exposes it. [VERIFIED: .planning/REQUIREMENTS.md] | Scanner rows must link to VibeTime turn windows by native turn id first, then session/time window fallback. [VERIFIED: packages/core/src/history.ts; VERIFIED: packages/desktop/src/main/db.ts] |
+| TOK-02 | Per-project / per-agent token aggregation in History/Usage-style analytics. [VERIFIED: .planning/REQUIREMENTS.md] | Usage summaries should mirror History's period and aggregation style while living on `/usage`. [VERIFIED: packages/core/src/history.ts; VERIFIED: packages/desktop/src/renderer/src/views/History.tsx] |
+| USAGE-01 | Parse Claude Code and Codex local transcript usage only; Cursor and Gemini excluded from MVP totals. [VERIFIED: .planning/REQUIREMENTS.md] | Scanner registry and aggregations must whitelist `claude-code` and `codex`. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+| USAGE-02 | Store usage token facts idempotently with source identity and no prompt/response/tool content. [VERIFIED: .planning/REQUIREMENTS.md] | Use `(agent, source_file_key, source_row_key)` uniqueness and privacy canary tests. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+| USAGE-03 | Extract Codex `token_count`/model context records, cached input, output, reasoning, and token deltas. [VERIFIED: .planning/REQUIREMENTS.md] | Prefer `last_token_usage`; otherwise delta cumulative totals; do not double-charge reasoning tokens. [CITED: https://ccusage.com/guide/codex/] |
+| USAGE-04 | Extract Claude assistant `message.usage` rows with cache creation/read, output, model, and duplicate protection. [VERIFIED: .planning/REQUIREMENTS.md] | Deduplicate by session/message/request identity and keep sidechain metadata without content. [VERIFIED: baseline 07-RESEARCH.md; CITED: https://ccusage.com/guide/cost-modes] |
+| USAGE-05 | Estimate cost from token facts plus refreshable public pricing cache. [VERIFIED: .planning/REQUIREMENTS.md] | Render cache first, refresh pricing on open, recompute estimates, show unknown where price missing. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+| USAGE-06 | Produce data capability -> hook linkage -> user value -> visualization mapping before final chart choices. [VERIFIED: .planning/REQUIREMENTS.md] | Planner must create this artifact before UI chart implementation tasks. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md] |
+| USAGE-07 | Add dedicated Usage page below History, showing Claude/Codex totals, cost where known, and breakdowns. [VERIFIED: .planning/REQUIREMENTS.md] | Add `/usage`, sidebar item after History, typed IPC, coss/ECharts UI. [VERIFIED: .planning/phases/07-usage-analytics/07-UI-SPEC.md] |
+| USAGE-08 | Do not add usage CLI/export in MVP. [VERIFIED: .planning/REQUIREMENTS.md] | Validation must include a negative check that no `vibetime usage` command or usage export surface appears. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+</phase_requirements>
+
+## Summary
+
+Usage Analytics should be planned as a desktop/main-process background data pipeline plus a renderer dashboard, not as hook-path work. VibeTime already owns project/session/turn/time facts in SQLite `events` and `open_turns`; Phase 07 should add read-only local scanners for Claude Code and Codex transcripts, persist only token/model/timestamp/source identity facts, reconcile rows to existing hook turns, and expose cache-first summaries through typed IPC. [VERIFIED: packages/core/src/schema.ts; VERIFIED: packages/desktop/src/main/db.ts; VERIFIED: packages/hook/src/store.ts]
+
+The main planning risk is not charting; it is proving data capability without violating privacy or creating false cost precision. Claude/Codex token rows are mature enough for MVP, but price is an estimate, pricing may be unavailable for unknown models, and some rows will be unassigned or lower-confidence. [CITED: https://ccusage.com/guide/cost-modes; CITED: https://ccusage.com/guide/codex/; VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md]
+
+**Primary recommendation:** Plan Phase 07 as five deliverables: usage schema + fixtures, Claude/Codex scanners, pricing cache + cost estimator, hook-link reconciler + mapping artifact, and dedicated Usage UI + Settings cadence; gate each with Vitest tests that prove idempotency, pricing fallback, Cursor/Gemini exclusion, and no-content persistence. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md; VERIFIED: vitest.config.ts]
+
+## Project Constraints (from AGENTS.md)
+
+No `AGENTS.md` file exists at repo root in this workspace, but the user provided equivalent per-project instructions in the prompt. [VERIFIED: `sed -n '1,200p' AGENTS.md` failed; VERIFIED: user prompt]
+
+- Prefer `rtk` wrappers for shell commands where applicable, such as `rtk git status`, `rtk pnpm test`, and `rtk grep`. [VERIFIED: user prompt; VERIFIED: `rtk --version` -> 0.39.0]
+- Use first-principles reasoning; if motivation or goal is unclear, stop and discuss; if the path is not shortest, say so and propose a better one. [VERIFIED: user prompt]
+- Output should be concise Chinese when speaking to the user. [VERIFIED: user prompt]
+- Project UI work should follow local coss rules and only use coss APIs verified against docs/particles when adding new primitives. [VERIFIED: .agents/skills/coss/SKILL.md; VERIFIED: .agents/skills/coss-particles/SKILL.md]
+
+## Architectural Responsibility Map
+
+| Capability | Primary Tier | Secondary Tier | Rationale |
+|------------|--------------|----------------|-----------|
+| Claude transcript scanning | API / Backend (Electron main/core service) | Database / Storage | Renderer must not read files or SQLite; scanners need filesystem and local DB access. [VERIFIED: packages/desktop/src/shared/ipc-types.ts; VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+| Codex transcript scanning | API / Backend (Electron main/core service) | Database / Storage | Existing Codex transcript recovery is main/hook-side, and scanner should stay outside hook hot path. [VERIFIED: packages/desktop/src/main/codex-transcript.ts; VERIFIED: packages/hook/src/recovery.ts] |
+| Usage fact storage | Database / Storage | API / Backend | Token facts, scan state, pricing cache, and derived estimates belong in local SQLite. [VERIFIED: packages/core/src/schema.ts; VERIFIED: packages/desktop/src/main/db.ts] |
+| Pricing refresh/cache | API / Backend (Electron main) | Database / Storage | Existing network state pattern lives in main process and pushes state changes to renderer. [VERIFIED: packages/desktop/src/main/updater.ts] |
+| Hook linkage/reconciliation | API / Backend (Electron main/core service) | Database / Storage | Reconciliation joins scanner facts to VibeTime `events`/`open_turns`; page reads should remain pure. [VERIFIED: packages/desktop/src/main/db.ts] |
+| Usage UI/dashboard | Browser / Client (renderer) | API / Backend via IPC | Renderer renders cached IPC summaries with coss/ECharts and no direct SQLite/filesystem access. [VERIFIED: packages/desktop/src/renderer/src/App.tsx; VERIFIED: packages/desktop/src/shared/ipc-types.ts] |
+| Settings refresh frequency | Browser / Client for control | API / Backend for timer config | Settings presents coss `Select`; main process owns background scan cadence. [VERIFIED: .planning/phases/07-usage-analytics/07-UI-SPEC.md; VERIFIED: packages/hook/src/config.ts] |
+| Privacy enforcement | Database / Storage | API / Backend | Persistence schema and parser outputs must exclude prompt/response/tool fields before data reaches SQLite. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+
+## Standard Stack
+
+### Core
+
+| Library | Version | Purpose | Why Standard |
+|---------|---------|---------|--------------|
+| TypeScript | 6.0.3 installed | Shared typed scanner, IPC, aggregation, and renderer contracts. [VERIFIED: pnpm list; VERIFIED: package.json] | Existing monorepo standard; no new language/runtime needed. [VERIFIED: package.json] |
+| Vitest | 3.2.4 installed; latest npm was 4.1.6 during refresh | Unit/integration tests for parsers, pricing, aggregation, store, and renderer store. [VERIFIED: pnpm list; VERIFIED: npm registry; CITED: /vitest-dev/vitest/v3_2_4] | Existing core/desktop test framework; supports file/name filtering and mocking. [VERIFIED: vitest.config.ts; CITED: /vitest-dev/vitest/v3_2_4] |
+| better-sqlite3 | 12.9.0 installed; latest npm was 12.10.0 during refresh | Main-process local SQLite reads/writes for usage tables and pricing cache. [VERIFIED: pnpm list; VERIFIED: npm registry] | Existing desktop DB dependency and query pattern. [VERIFIED: packages/desktop/src/main/db.ts] |
+| Bun test / bun:sqlite | Bun 1.3.8 available | Hook package tests and hook storage remain available, but usage scanner should not execute in hook path. [VERIFIED: bun --version; VERIFIED: packages/hook/package.json] | Existing hook package test/runtime standard. [VERIFIED: packages/hook/src/store.ts] |
+| React + Jotai + typed IPC | React 19.2.5 and Jotai 2.19.1 installed | Usage renderer state cache, refresh sequencing, and route UI. [VERIFIED: pnpm list; VERIFIED: packages/desktop/src/renderer/src/store.ts] | Existing renderer pattern already protects against stale async updates. [VERIFIED: packages/desktop/src/renderer/src/store.test.ts] |
+| ECharts | 6.0.0 installed | Usage charts selected after mapping artifact. [VERIFIED: pnpm list; VERIFIED: .planning/phases/07-usage-analytics/07-UI-SPEC.md] | Existing History visualization convention. [VERIFIED: packages/desktop/src/renderer/src/views/History.tsx] |
+| coss/Base UI components | @base-ui/react 1.4.1 installed | Usage controls, settings select, tables, switches, tabs. [VERIFIED: pnpm list; VERIFIED: .agents/skills/coss/SKILL.md] | UI-SPEC requires installed local coss components first. [VERIFIED: .planning/phases/07-usage-analytics/07-UI-SPEC.md] |
+
+### Supporting
+
+| Library / Source | Version | Purpose | When to Use |
+|------------------|---------|---------|-------------|
+| LiteLLM pricing dataset via ccusage-aligned source | external refreshable data | Pricing cache source for estimated cost. [CITED: https://ccusage.com/guide/cost-modes; CITED: https://ccusage.com/guide/codex/] | Refresh on Usage page open and background/manual refresh; use cached/fallback data if network fails. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md] |
+| Claude Code local JSONL transcripts | external local files | Claude assistant `message.usage` scanner source. [CITED: https://ccusage.com/guide/cost-modes] | Read-only background scan; never persist message content. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+| Codex local session JSONL | external local files | Codex `token_count` and model context scanner source. [CITED: https://ccusage.com/guide/codex/] | Read-only background scan under `CODEX_HOME`/`~/.codex`. [CITED: https://ccusage.com/guide/codex/] |
+
+### Alternatives Considered
+
+| Instead of | Could Use | Tradeoff |
+|------------|-----------|----------|
+| Local transcript scanners | Provider cloud usage APIs | Out of scope because Phase 07 is local-first and excludes authenticated provider APIs. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+| SQLite pricing cache | Live pricing request per render | Violates cache-first UX and makes page rendering dependent on network. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md] |
+| Typed IPC summaries | Renderer SQLite/filesystem access | Contradicts project IPC rule and Electron boundary. [VERIFIED: .planning/REQUIREMENTS.md; VERIFIED: packages/desktop/src/shared/ipc-types.ts] |
+| Usage CLI/export | `vibetime usage` command | Explicitly deferred from MVP. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+
+**Installation:** No new package is required for the planned MVP unless implementation discovers a parser/test fixture need that cannot be met with standard Node APIs. [VERIFIED: package.json; VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md]
+
+**Version verification commands run:**
+
+```bash
+pnpm --filter @vibetime/desktop list --depth 0 --json
+pnpm --filter @vibetime/core list --depth 0 --json
+npm view vitest version
+npm view better-sqlite3 version
+npm view echarts version
+npm view jotai version
+```
+
+## Architecture Patterns
+
+### System Architecture Diagram
 
 ```text
-vendor local logs
-    |
-    v
-usage scanners  -- read-only, incremental, no prompt persistence
-    |
-    v
-usage_records table
-    |
-    v
-reconciler  -- match usage rows to VibeTime turns
-    |
-    v
-Usage dashboard / ECharts / exports
+Claude/Codex local JSONL files
+  -> read-only background scanners
+  -> normalized usage facts + scan state
+  -> SQLite usage_records / usage_scan_state
+  -> hook-link reconciler joins events/open_turns
+  -> pricing cache refresh + cost estimator
+  -> typed IPC Usage summary
+  -> renderer Usage page with coss controls + ECharts
 ```
 
-### Keep Hook Lightweight
+This pipeline keeps filesystem/network/SQLite work out of the renderer and hook hot path. [VERIFIED: packages/desktop/src/main/db.ts; VERIFIED: packages/hook/src/hook.ts; VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md]
 
-Hook 只保留当前职责：
+### Recommended Project Structure
 
-- 记录 lifecycle events。
-- 记录 project/session/turn/timezone/model meta。
-- 不扫描 vendor logs。
-- 不计算 cost。
-- 不做 ECharts 聚合。
+```text
+packages/core/src/usage/
+  types.ts              # normalized usage records, token fields, pricing types
+  codex-scanner.ts      # pure JSONL parser + delta logic
+  claude-scanner.ts     # pure JSONL parser + dedupe logic
+  pricing.ts            # cache shape + cost estimator
+  aggregate.ts          # period/project/model/agent summaries
+  reconcile.ts          # usage row -> hook turn attribution
+  privacy.test.ts       # content canary and allowed-key tests
 
-可以做的小增强：
+packages/desktop/src/main/
+  usage-service.ts      # scan loop, pricing refresh, DB writes, IPC query orchestration
 
-- Claude/Codex hook meta 里保存 `transcript_path` 的 basename/hash 或 root-relative path，而非完整绝对路径。
-- 保存 source root type，如 `claude-projects`, `codex-sessions`。
-- 保存 hook payload 中已有且非敏感的 native ids。
+packages/desktop/src/renderer/src/views/
+  Usage.tsx             # dedicated route, no direct SQLite/filesystem
+```
 
-不建议：
+This structure preserves `core` as dependency-light logic and keeps Electron-specific DB/network orchestration in desktop main. [VERIFIED: package.json; VERIFIED: packages/core/package.json; VERIFIED: packages/desktop/src/main/db.ts]
 
-- hook 内读整个 JSONL。
-- hook 内解析 prompt/content。
-- hook 内联网查价格。
+### Pattern 1: Parser Returns Facts, Not Transcript Content
 
-### Suggested Schema
+**What:** Provider parsers should emit normalized token facts plus source identity and drop all prompt/assistant/tool content before persistence. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md]
 
-新增表：`usage_records`
+**When to use:** All Claude and Codex scanner paths. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md]
+
+**Example:**
+
+```typescript
+// Source: packages/core/src/codex-transcript.ts pattern + Phase 07 privacy constraint
+for (const line of jsonl.split('\n')) {
+  if (!line.trim()) continue
+  const record = JSON.parse(line) as unknown
+  const usage = extractUsageOnly(record)
+  if (!usage) continue
+  rows.push({
+    sourceRowKey: usage.sourceRowKey,
+    model: usage.model ?? null,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    // No prompt, response, content, tool arguments, or raw transcript line.
+  })
+}
+```
+
+### Pattern 2: Cache-First Then Refresh
+
+**What:** Usage page reads cached DB/pricing summary first, then asks main process to refresh pricing and scanning, preserving stale visible data until success/failure resolves. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md; VERIFIED: .planning/phases/07-usage-analytics/07-UI-SPEC.md]
+
+**When to use:** Usage initial render, manual `Refresh Usage`, and background scanner push updates. [VERIFIED: .planning/phases/07-usage-analytics/07-UI-SPEC.md]
+
+**Example:**
+
+```typescript
+// Source: packages/desktop/src/renderer/src/store.ts refresh sequencing pattern
+const seq = ++usageRefreshSeq
+const result = await window.api.invoke('getUsageSummary', { periodDays })
+if (seq !== usageRefreshSeq) return null
+if (result.ok) store.set(usageSummaryAtom, result.data)
+```
+
+### Anti-Patterns to Avoid
+
+- **Scanning in hooks:** Hook invocations must stay fast, silent, and no-op-safe; scanner I/O belongs in desktop background logic. [VERIFIED: packages/hook/src/store.ts; VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md]
+- **Persisting raw transcript JSON:** Raw JSONL can contain prompts, assistant responses, tool arguments, paths, and summaries; persist only facts and sanitized source identity. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md; CITED: https://code.claude.com/docs/en/hooks]
+- **Treating estimated cost as billing truth:** ccusage itself distinguishes calculated vs displayed costs and pricing-source behavior; VibeTime should label cost as estimated. [CITED: https://ccusage.com/guide/cost-modes]
+- **Synthetic dashboard data:** UI-SPEC requires unsupported charts to render unavailable states, not invented data. [VERIFIED: .planning/phases/07-usage-analytics/07-UI-SPEC.md]
+
+## Don't Hand-Roll
+
+| Problem | Don't Build | Use Instead | Why |
+|---------|-------------|-------------|-----|
+| Chart engine | Custom SVG/canvas chart renderer | Existing ECharts | UI-SPEC and History already standardize on ECharts. [VERIFIED: packages/desktop/src/renderer/src/views/History.tsx] |
+| UI primitives | New unvetted controls | Existing installed coss components | Project coss skill requires verified primitives and UI-SPEC restricts new registry blocks. [VERIFIED: .agents/skills/coss/SKILL.md; VERIFIED: .planning/phases/07-usage-analytics/07-UI-SPEC.md] |
+| Pricing database | Hand-maintained multi-source resolver | ccusage-aligned LiteLLM pricing cache | Locked decision says one pricing source; ccusage documents LiteLLM pricing use. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md; CITED: https://ccusage.com/guide/cost-modes] |
+| SQLite access layer in renderer | Direct DB/file access | Existing typed IPC | IPC-01 forbids renderer SQLite access. [VERIFIED: .planning/REQUIREMENTS.md; VERIFIED: packages/desktop/src/shared/ipc-types.ts] |
+| Transcript row dedupe | Ad hoc append-only inserts | Unique source identity + scan state | Duplicate transcript rows are explicit acceptance/negative cases. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+
+**Key insight:** This phase should hand-roll only the domain-specific normalization/reconciliation logic; storage, IPC, tests, charting, and UI controls should follow existing VibeTime standards. [VERIFIED: codebase grep; VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md]
+
+## Common Pitfalls
+
+### Pitfall 1: Prompt/Response Content Leaks Into SQLite
+
+**What goes wrong:** Parser convenience stores raw JSON, `message`, `content`, `tool_calls`, `last_assistant_message`, or transcript lines in `meta`. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md; CITED: https://code.claude.com/docs/en/hooks]
+
+**Why it happens:** Claude hook/transcript fields can include `last_assistant_message`, transcript paths, subagent transcript paths, and rich conversation rows. [CITED: https://code.claude.com/docs/en/hooks]
+
+**How to avoid:** Define an allowlist serializer for persisted usage fields and test fixture canaries with unique secret strings. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md]
+
+**Warning signs:** Any SQL column or JSON `meta` key named `content`, `prompt`, `response`, `message`, `tool`, `arguments`, `raw`, or `transcript_line`. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md]
+
+### Pitfall 2: Double Counting Codex Totals
+
+**What goes wrong:** Codex cumulative `total_token_usage` rows get stored as per-turn deltas, inflating totals. [CITED: https://ccusage.com/guide/codex/]
+
+**Why it happens:** Some Codex rows report cumulative token totals, while `last_token_usage` already represents a delta. [CITED: https://ccusage.com/guide/codex/]
+
+**How to avoid:** Prefer `last_token_usage`; otherwise subtract previous cumulative totals per session/model stream. [CITED: https://ccusage.com/guide/codex/]
+
+**Warning signs:** Re-scanning or later rows cause monotonically growing daily totals for the same session. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md]
+
+### Pitfall 3: Pricing Failure Hides Token Data
+
+**What goes wrong:** UI treats missing prices as total query failure and hides useful token metrics. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md]
+
+**Why it happens:** Cost estimation gets coupled too tightly to aggregation. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md]
+
+**How to avoid:** Store token facts separately from nullable estimated cost and return `pricingStatus`/`unknownCostRows` in IPC. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md]
+
+**Warning signs:** Unknown model price produces `$0.00`, empty charts, or a whole-page error. [VERIFIED: .planning/phases/07-usage-analytics/07-UI-SPEC.md]
+
+### Pitfall 4: Cursor/Gemini Sneak Into Totals
+
+**What goes wrong:** Existing agent lists include all four agents, so naive grouping can include Cursor/Gemini in Usage filters or totals. [VERIFIED: packages/desktop/src/main/db.ts; VERIFIED: packages/desktop/src/main/ipc-handlers.ts]
+
+**Why it happens:** Current app supports four time-tracking agents, but Phase 07 usage/cost scope is Claude/Codex only. [VERIFIED: .planning/REQUIREMENTS.md; VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md]
+
+**How to avoid:** Whitelist usage scanner agents, usage rows, filters, legends, summaries, and tests to `claude-code` and `codex`. [VERIFIED: .planning/phases/07-usage-analytics/07-UI-SPEC.md]
+
+**Warning signs:** Usage UI strings, filter options, chart legends, or SQL totals mention Cursor/Gemini. [VERIFIED: .planning/phases/07-usage-analytics/07-UI-SPEC.md]
+
+## Code Examples
+
+### Idempotent Usage Storage
 
 ```sql
-CREATE TABLE usage_records (
-    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
-    schema_version         INTEGER NOT NULL DEFAULT 1,
-    agent                  TEXT    NOT NULL,
-    source_kind            TEXT    NOT NULL,
-    source_file_key        TEXT    NOT NULL,
-    source_row_key         TEXT    NOT NULL,
-    session_id             TEXT,
-    turn_id                TEXT,
-    project                TEXT,
-    usage_ts               REAL    NOT NULL,
-    timezone               TEXT    NOT NULL,
-    model                  TEXT,
-    input_tokens           INTEGER NOT NULL DEFAULT 0,
-    cached_input_tokens    INTEGER NOT NULL DEFAULT 0,
-    cache_creation_tokens  INTEGER NOT NULL DEFAULT 0,
-    output_tokens          INTEGER NOT NULL DEFAULT 0,
-    reasoning_tokens       INTEGER NOT NULL DEFAULT 0,
-    tool_tokens            INTEGER NOT NULL DEFAULT 0,
-    total_tokens           INTEGER NOT NULL DEFAULT 0,
-    estimated_cost_usd     REAL,
-    currency               TEXT    NOT NULL DEFAULT 'USD',
-    pricing_source         TEXT,
-    pricing_version        TEXT,
-    attribution_method     TEXT    NOT NULL,
-    attribution_confidence TEXT    NOT NULL,
-    meta                   TEXT
+-- Source: Phase 07 SPEC + existing schema/index style
+CREATE TABLE IF NOT EXISTS usage_records (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  schema_version INTEGER NOT NULL DEFAULT 1,
+  agent TEXT NOT NULL,
+  source_kind TEXT NOT NULL,
+  source_file_key TEXT NOT NULL,
+  source_row_key TEXT NOT NULL,
+  session_id TEXT,
+  turn_id TEXT,
+  project TEXT,
+  usage_ts REAL NOT NULL,
+  timezone TEXT NOT NULL,
+  model TEXT,
+  input_tokens INTEGER NOT NULL DEFAULT 0,
+  cached_input_tokens INTEGER NOT NULL DEFAULT 0,
+  cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
+  output_tokens INTEGER NOT NULL DEFAULT 0,
+  reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+  total_tokens INTEGER NOT NULL DEFAULT 0,
+  estimated_cost_usd REAL,
+  pricing_source TEXT,
+  pricing_version TEXT,
+  attribution_method TEXT NOT NULL,
+  attribution_confidence TEXT NOT NULL,
+  meta TEXT
 );
-```
 
-Unique index:
-
-```sql
-CREATE UNIQUE INDEX idx_usage_unique_source
+CREATE UNIQUE INDEX IF NOT EXISTS idx_usage_unique_source
 ON usage_records(agent, source_file_key, source_row_key);
 ```
 
-Query indices:
+### Pricing Unknown Is Nullable, Not Zero
 
-```sql
-CREATE INDEX idx_usage_ts ON usage_records(usage_ts);
-CREATE INDEX idx_usage_project_ts ON usage_records(project, usage_ts);
-CREATE INDEX idx_usage_agent_model_ts ON usage_records(agent, model, usage_ts);
-CREATE INDEX idx_usage_turn_id ON usage_records(turn_id) WHERE turn_id IS NOT NULL;
+```typescript
+// Source: Phase 07 SPEC + OpenAI/Anthropic pricing docs
+if (!price) {
+  return { estimatedCostUsd: null, reason: 'unknown_model_price' as const }
+}
 ```
 
-新增表：`usage_scan_state`
+## State of the Art
 
-```sql
-CREATE TABLE usage_scan_state (
-    scanner         TEXT NOT NULL,
-    root_key        TEXT NOT NULL,
-    source_file_key TEXT NOT NULL,
-    size_bytes      INTEGER NOT NULL,
-    mtime_ms        INTEGER NOT NULL,
-    parsed_offset   INTEGER NOT NULL DEFAULT 0,
-    last_scanned_at REAL    NOT NULL,
-    meta            TEXT,
-    PRIMARY KEY (scanner, root_key, source_file_key)
-);
+| Old Approach | Current Approach | When Changed | Impact |
+|--------------|------------------|--------------|--------|
+| Claude-only local cost reports | Claude plus Codex local transcript usage tools | Codex support documented by ccusage beta docs after Codex token events became available. [CITED: https://ccusage.com/guide/codex/] | VibeTime can support Claude/Codex MVP and defer Cursor/Gemini. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+| Cumulative Codex totals as final facts | Delta extraction from `last_token_usage` or previous totals | ccusage Codex docs describe cumulative token_count conversion. [CITED: https://ccusage.com/guide/codex/] | Tests must cover delta fallback to avoid double count. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+| Static cost numbers | Refreshable pricing cache with cached/offline fallback | ccusage documents LiteLLM pricing and offline/cache options. [CITED: https://ccusage.com/guide/cost-modes; CITED: https://ccusage.com/guide/codex/session] | Usage must render cached first, then refresh on open. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md] |
+
+**Deprecated/outdated:** The old baseline research recommendation "online pricing refresh out of MVP" is superseded by locked CONTEXT/SPEC decisions requiring refresh on Usage open with cache-first rendering. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md; VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md]
+
+## Validation Architecture
+
+### Test Framework
+
+| Property | Value |
+|----------|-------|
+| Framework | Vitest 3.2.4 for `core` and `desktop`; Bun test for `hook` package. [VERIFIED: package.json; VERIFIED: packages/hook/package.json] |
+| Config file | `vitest.config.ts`, `packages/core/vitest.config.ts`, `packages/desktop/vitest.config.ts`, `packages/hook/vitest.config.ts`. [VERIFIED: rg --files packages] |
+| Quick run command | `rtk pnpm --filter @vibetime/core test -- src/usage` for parser/aggregator work; `rtk pnpm --filter @vibetime/desktop test -- src/main/usage src/renderer/src/store.test.ts` for main/store work. [VERIFIED: package.json; CITED: /vitest-dev/vitest/v3_2_4] |
+| Full suite command | `rtk pnpm run ci`. [VERIFIED: package.json] |
+
+Vitest supports running a specific file by passing the file path and supports mocking helpers such as `vi.mocked`; use those patterns for focused usage tests and pricing fetch mocks. [CITED: /vitest-dev/vitest/v3_2_4]
+
+### Fixtures To Create
+
+| Fixture | Location | Purpose | Must Include |
+|---------|----------|---------|--------------|
+| Codex token_count JSONL | `packages/core/src/usage/__fixtures__/codex-token-count.jsonl` | Unit-test Codex scanner. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] | `last_token_usage`, cumulative `total_token_usage`, cached input, output, reasoning, `turn_context`, unknown model, malformed line, duplicate row. [CITED: https://ccusage.com/guide/codex/] |
+| Codex duplicate/backfill JSONL | `packages/core/src/usage/__fixtures__/codex-duplicate-session.jsonl` | Idempotency and scan-state tests. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] | Same source row scanned twice; later file append; missing timestamp; missing turn context. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+| Claude assistant usage JSONL | `packages/core/src/usage/__fixtures__/claude-assistant-usage.jsonl` | Unit-test Claude scanner. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] | `sessionId`, `requestId`, `message.id`, `message.model`, `message.usage.input_tokens`, output, cache creation/read, `isSidechain`, `agentId`. [VERIFIED: baseline 07-RESEARCH.md; CITED: https://ccusage.com/guide/cost-modes] |
+| Claude privacy canary JSONL | `packages/core/src/usage/__fixtures__/claude-privacy-canary.jsonl` | Prove no prompt/response/tool text persists. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] | Unique strings such as `SECRET_PROMPT_CANARY`, `SECRET_RESPONSE_CANARY`, `SECRET_TOOL_ARG_CANARY` in non-usage fields. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+| Pricing cache JSON | `packages/core/src/usage/__fixtures__/pricing-cache.json` | Pricing estimator/cache tests. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] | Known Claude/OpenAI model prices, unknown model, cache metadata/version, stale cache timestamp. [CITED: https://ccusage.com/guide/cost-modes; CITED: https://developers.openai.com/api/docs/pricing] |
+| Hook timeline rows | `packages/core/src/usage/__fixtures__/hook-events.ts` | Reconciler tests. [VERIFIED: packages/core/src/history.test.ts pattern] | Codex exact `turn_id`, Claude session/time-window rows, missing project, unassigned usage, mixed-model turn, Cursor/Gemini events excluded. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+| Renderer IPC summaries | inline factories in `packages/desktop/src/renderer/src/store.test.ts` or new `usage-store.test.ts` | UI store cache-first and push sequencing tests. [VERIFIED: packages/desktop/src/renderer/src/store.test.ts] | Cached summary, refresh success, refresh failure with cache, refresh failure without model price, stale refresh sequence. [VERIFIED: .planning/phases/07-usage-analytics/07-UI-SPEC.md] |
+
+### Unit / Integration / E2E / Manual Strategy
+
+| Area | Unit | Integration | E2E / Manual | Acceptance Criteria |
+|------|------|-------------|--------------|---------------------|
+| Claude scanner | Parse only assistant usage rows; dedupe duplicate `sessionId + message.id + requestId`; extract cache creation/read/output/model. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] | Scan temp transcript root twice and assert one persisted row per source key. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] | Manual with copied sanitized local Claude JSONL optional; never use real raw content in repo. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] | Rows include token/model/timestamp/source identity and no prompt/response/tool content. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+| Codex scanner | Parse `token_count`, `last_token_usage`, cumulative delta fallback, cached input, output, reasoning, model context. [CITED: https://ccusage.com/guide/codex/] | Scan `sessions` + `archived_sessions` temp roots with unchanged and appended files. [CITED: https://ccusage.com/guide/codex/] | Manual with `CODEX_HOME` pointing to a temp fixture root. [VERIFIED: packages/desktop/src/main/codex-transcript.ts pattern] | Duplicate scans do not change totals; reasoning shown but not double-counted in cost. [CITED: https://ccusage.com/guide/codex/] |
+| Pricing cache | Cost formula returns nullable cost for unknown model; cached input/read/write use provider-specific rates where known. [CITED: https://developers.openai.com/api/docs/pricing; CITED: https://platform.claude.com/docs/en/build-with-claude/prompt-caching] | Mock `fetch` success/failure; assert cache update, stale-cache fallback, and no-cache failure state. [VERIFIED: packages/desktop/src/main/updater.ts; CITED: /vitest-dev/vitest/v3_2_4] | Manual: disable network or stub invalid pricing URL; Usage still shows token totals. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] | Cache-first render; successful refresh recomputes historical estimates; failed refresh with no usable model price shows `Unknown`, not `$0.00`. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+| Aggregation | Build period/project/model/agent totals from normalized rows only for Claude/Codex. [VERIFIED: .planning/REQUIREMENTS.md] | Seed temp SQLite with usage rows and query summaries for 7/30/90/365 periods. [VERIFIED: packages/core/src/history.ts] | Manual: inspect Usage with fixture DB if executor adds a fixture runner. [VERIFIED: .planning/phases/07-usage-analytics/07-UI-SPEC.md] | Totals, breakdowns, audit counts, unknown price counts, and unassigned rows match fixtures. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+| Hook linkage | Match native turn id first; session/transcript/time window second; project/time fallback low confidence; unmatched preserved. [VERIFIED: baseline 07-RESEARCH.md; VERIFIED: packages/core/src/history.ts] | Seed `events` + usage rows and assert attribution method/confidence. [VERIFIED: packages/desktop/src/main/db.ts] | Manual: compare a recent known Codex turn with VibeTime History time window. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md] | Missing timestamp/project linkage does not drop row; row becomes unassigned or low-confidence audit item. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+| Usage UI | Store tests for cache-first, refresh sequencing, stale async protection, pricing states. [VERIFIED: packages/desktop/src/renderer/src/store.test.ts] | IPC contract test validates `getUsageSummary`, `refreshUsage`, and settings methods reject invalid args. [VERIFIED: packages/desktop/src/main/ipc-handlers.ts] | Manual Electron run: `/usage` below History, `Refresh Usage`, filters, empty/pricing failure states, no Cursor/Gemini legends. [VERIFIED: .planning/phases/07-usage-analytics/07-UI-SPEC.md] | Dedicated route renders token totals and known/unknown cost states; Cursor/Gemini absent. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+| Settings refresh frequency | Validate config values: 15m, 30m default, 1h, 4h; reject unsupported values. [VERIFIED: .planning/phases/07-usage-analytics/07-UI-SPEC.md] | Main-process timer test with fake timers asserts launch scan then cadence update. [VERIFIED: packages/desktop/src/main/db.ts timer pattern] | Manual: change setting, reopen app, confirm persisted label and next scan cadence in logs/status. [VERIFIED: packages/hook/src/config.ts] | Background scan starts after launch; hook invocation never scans/prices/aggregates. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md] |
+| Privacy constraints | Canary tests assert serialized DB/meta JSON excludes forbidden strings and forbidden keys. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] | Temp SQLite integration test dumps `usage_records` and `usage_scan_state` and searches for canaries. [VERIFIED: packages/hook/src/store.test.ts pattern] | Manual: `sqlite3 ~/.vibetime/data.db '.dump usage_records' | rg 'SECRET_|prompt|response|tool_args|content'` against test DB only. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] | No prompt, response, tool argument, raw content, or full transcript content is persisted. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+
+### Negative Cases Required
+
+| Case | Test |
+|------|------|
+| Unknown model pricing | Seed `model='unknown-future-model'`; assert tokens visible, `estimatedCostUsd === null`, UI says cost unknown. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+| Failed pricing fetch with cache | Mock fetch rejection with seeded cache; assert cached cost and `Using cached pricing`. [VERIFIED: .planning/phases/07-usage-analytics/07-UI-SPEC.md] |
+| Failed pricing fetch without usable cache | Mock fetch rejection and empty cache; assert token totals visible and pricing unavailable state. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+| Duplicate transcript rows | Re-scan identical fixtures and assert row count/totals unchanged by unique source key. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+| Missing timestamps | Parser returns skipped/error audit row or unassigned row; no crash and no fake timestamp. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+| Missing project linkage | Usage row remains visible as `Unassigned usage`; aggregation excludes it from project ranking but includes it in agent/model totals. [VERIFIED: .planning/phases/07-usage-analytics/07-UI-SPEC.md] |
+| Cursor/Gemini excluded | Seed Cursor/Gemini `events` and synthetic usage-like rows; scanner registry, summaries, filters, legends, and totals include only Claude/Codex. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+| No usage CLI/export | `rg -n "usage" packages/hook/src packages/desktop/src/main packages -g '*.ts'` after implementation must not reveal new CLI/export command surface. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+
+### Commands The Executor / Checker Should Run
+
+```bash
+# Focused parser + privacy checks
+rtk pnpm --filter @vibetime/core test -- src/usage
+
+# Focused desktop main/store checks
+rtk pnpm --filter @vibetime/desktop test -- src/main/usage src/renderer/src/usage-store.test.ts
+
+# Hook regression: proves no accidental hook hot-path breakage
+rtk pnpm --filter @vibetime/hook test
+
+# Whole repository gate
+rtk pnpm run ci
+
+# Static privacy scan after implementation
+rtk rg -n "prompt|response|tool_args|arguments|content|rawTranscript|transcript_line" packages/core/src/usage packages/desktop/src/main/usage* packages/desktop/src/shared
 ```
 
-说明：
-
-- `source_file_key` 不要默认存完整绝对路径；可用 known root + relative path，或 hash + basename。
-- DB 是本地，但导出/截图/issue 里绝对路径会泄露用户名和项目结构。
-- `meta` 可存 provider-specific details，但不能存 prompt/content/tool args。
-
-### Reconciler
-
-输入：
-
-- `events` 里的 turn windows。
-- scanner 产生的 `usage_records`。
-
-turn window 构建：
-
-- `turn_start.ts` 到对应 `turn_end.ts`。
-- 若 turn still open，用 `next turn_start` 或 now。
-- 对 crash/orphan turns，使用 recovery 后的 synthetic end。
-
-匹配优先级：
-
-1. `agent + native turn_id` exact match。
-2. `agent + session_id + usage_ts in [start - 2s, end + 15s]`。
-3. `agent + project + usage_ts in window`，仅作 low confidence fallback。
-4. 未匹配则保留为 unassigned，不丢数据。
-
-多候选 tie-break：
-
-1. 最小包含窗口。
-2. usage_ts 最接近 turn_end。
-3. 最新 turn_start。
-
-confidence：
-
-| Method | Confidence |
-| --- | --- |
-| `native_turn_id` | high |
-| `session_transcript_time_window` | high/medium |
-| `session_time_window` | medium |
-| `project_time_window` | low |
-| `unassigned` | none |
-
-关键点：
-
-- 一个 turn 可以有多个 usage rows。
-- 一个 session 可以跨多个项目时，project 以 hook event 为准；scanner cwd 只作 fallback。
-- model attribution 以 usage row model 为准；turn meta model 只在缺失时补。
-- 一个 turn 多模型时，UI 显示 mixed，并给 breakdown。
-
-## Cost Estimation
-
-成本只能叫 estimated cost。
-
-原因：
-
-- 本地 logs 不一定包括所有云端收费项。
-- vendor 定价会变。
-- enterprise/team plan、credits、discount、included quota 不一定可本地推导。
-- web search、tools、remote agent、subscription quota 不一定能从 transcript 精确还原。
-
-定价来源建议：
-
-1. 先内置一个 versioned pricing snapshot。
-2. 后续可从 LiteLLM pricing dataset 或 models.dev 拉取并缓存。
-3. 每条 cost 记录保存 `pricing_source` 和 `pricing_version`。
-4. 无价格或模型别名未知时 cost = null，不要按错模型硬算。
-
-provider rules：
-
-- Codex/OpenAI:
-  - non-cached input * input price。
-  - cached input * cache-read price，缺失则 fallback input price 或 cost unknown。
-  - output * output price。
-  - reasoning tokens 展示但不额外计费，避免双算。
-- Claude:
-  - input tokens、cache creation、cache read、output 分别按 Anthropic pricing rule。
-  - 若 row 自带 `costUSD`，可保留 original_cost_usd，同时仍可计算 estimated_cost_usd 供一致聚合。
-- Gemini:
-  - future work，不进 MVP。
-- Cursor:
-  - future work，不进 MVP。
-
-## UI Opportunities With ECharts
-
-Usage 模块可以比 CodexBar/ccusage 更适合 VibeTime，因为我们有项目/turn timeline。
-
-建议首屏指标：
-
-- Today cost estimate。
-- Today tokens。
-- Active model mix。
-- Project cost ranking。
-- Cost per productive hour / per turn。
-- Unknown/unattributed rows count。
-
-图表：
-
-- Daily stacked cost by agent/model。
-- Token breakdown: input/cache/output/reasoning。
-- Project x model heatmap。
-- Turn scatter: duration vs estimated cost。
-- Per-session waterfall。
-- Mixed model turn breakdown。
-- Unassigned usage audit table。
-
-过滤：
-
-- date range。
-- agent。
-- project。
-- model。
-- include/exclude subagents。
-- include/exclude low confidence attribution。
-
-必须展示的信任信息：
-
-- cost is estimated。
-- per-row attribution confidence。
-- unknown cost/model rows 不应被隐藏。
-
-## MVP Implementation Plan
-
-### Phase 1: Data Model And Scanner Skeleton
-
-- Add usage schema DDL and migration path。
-- Add scanner interfaces in core:
-  - `scanUsage(options): UsageRecord[]`
-  - provider-specific parsers。
-- Add read-only debug command:
-  - scan last N days。
-  - print counts by source/model/agent。
-  - no UI yet。
-
-### Phase 2: Codex Scanner
-
-- Read `$CODEX_HOME/sessions` and `$CODEX_HOME/archived_sessions`。
-- Parse JSONL incrementally。
-- Track `session_meta` / `turn_context` / `task_started` / `token_count`。
-- Use `last_token_usage` or total delta。
-- Store native turn_id when available。
-- Reconcile to VibeTime turn_id。
-
-### Phase 3: Claude Scanner
-
-- Read `CLAUDE_CONFIG_DIR` roots plus defaults。
-- Parse assistant message usage only。
-- Deduplicate by `sessionId + message.id + requestId`。
-- Preserve `isSidechain`, `agentId` in meta。
-- Reconcile by session + transcript/time window。
-
-### Phase 4: Aggregation Queries
-
-- Daily/monthly/session/project/model aggregates。
-- Confidence-aware aggregates。
-- Unknown/unassigned audit query。
-- Cost estimate query with pricing snapshot。
-
-### Phase 5: Desktop Usage Page
-
-- Add route/nav item: Usage。
-- Reuse existing ECharts setup。
-- Add date range and filters。
-- Show trust/unknown states explicitly。
-
-### Out Of MVP
-
-- Gemini scanner。
-- Cursor usage/cost surface。
-- Any cloud dashboard/API integration。
-- Online pricing refresh。
-
-## Strict Turn Window Answer
-
-不能统一说“严格对齐每个 turn”，要按 agent 分。
-
-| Agent | 是否可严格对齐 | 原因 |
-| --- | --- | --- |
-| Codex | 基本可以 | native logs 有 turn/task markers，hook 也有 turn_id。 |
-| Claude Code | 高置信但非绝对 | native usage row 没 VibeTime turn_id；靠 session/transcript/time window。 |
-| Cursor | 不进 MVP | hook 有 generation_id；但本地 usage rows 不稳定。 |
-| Gemini CLI | 不进 MVP | hook 有 turn timeline，chat logs 有 tokens，但 token rows 未见 turn_id。 |
-
-“文件里面找 hook 的执行来匹配每一个 turn”不是主方案。
-
-更稳的是：
-
-- hook 负责生成 authoritative turn window。
-- scanner 负责提取 native usage rows。
-- reconciler 用 native id 优先，其次 session + transcript + time window。
-- 每条 usage row 存 attribution method/confidence。
-
-对 Claude 来说，若 transcript 内确实有 hook output 记录，也只能作为辅助线索；不要依赖它作为唯一匹配机制，因为 hook output、格式和保存策略可能变。
-
-## Risks
-
-1. Vendor log format changes.
-   - Mitigation: scanner versioning, parser tests with fixtures, unknown rows preserved.
-
-2. Duplicate usage rows.
-   - Mitigation: provider-specific row keys and final-row-wins policy.
-
-3. Cost inaccuracy.
-   - Mitigation: estimated label, pricing version, null on unknown model.
-
-4. Privacy leaks.
-   - Mitigation: never persist prompt/content/tool args; avoid absolute path persistence; local-only read.
-
-5. Large transcript performance.
-   - Mitigation: scan state by mtime/size/offset; background refresh; date window.
-
-6. Subagents and sidechains.
-   - Mitigation: preserve provider flags and expose include/exclude toggle.
-
-7. Mixed-model turns.
-   - Mitigation: aggregate by usage row model, display mixed at turn level.
-
-8. Ambiguous attribution.
-   - Mitigation: confidence column and unassigned audit table.
-
-## Open Decisions
-
-1. Should subagent/sidechain usage count into parent project totals by default?
-   - Recommendation: yes for project totals, but make it filterable.
-
-2. Should VibeTime store source file paths?
-   - Recommendation: store root-relative path or hash+basename, not full absolute path.
-
-3. Should we fetch pricing online?
-   - Recommendation: not in MVP. Bundle snapshot first; add manual refresh later.
-
-4. Should Cursor `store.db` be reverse-engineered now?
-   - Recommendation: no. Defer until Claude/Codex usage is solid.
-
-5. Should we modify hooks to capture more data now?
-   - Recommendation: only add non-sensitive ids/file fingerprints if needed. Keep hook fast and durable.
-
-## Final Recommendation
-
-Build the usage module.
-
-The product value is strong because VibeTime has what ccusage and CodexBar lack by default: project/turn timeline across multiple agents. But implementation must be honest about data quality:
-
-- Initial usage/cost support should include only Codex and Claude Code.
-- Gemini is promising, but should wait until Claude/Codex are solid.
-- Cursor should wait until a stable local usage source exists.
-
-The correct core abstraction is not “one agent = one parser = exact cost”; it is:
-
-```text
-usage row + attribution confidence + pricing snapshot
-```
-
-This keeps the dashboard useful today and prevents misleading precision.
+### Phase Requirements -> Test Map
+
+| Req ID | Behavior | Test Type | Automated Command | File Exists? |
+|--------|----------|-----------|-------------------|--------------|
+| TOK-01 | Usage rows link to turns when possible. [VERIFIED: .planning/REQUIREMENTS.md] | unit/integration | `rtk pnpm --filter @vibetime/core test -- src/usage/reconcile.test.ts` | No - Wave 0 |
+| TOK-02 | Project/agent token aggregation. [VERIFIED: .planning/REQUIREMENTS.md] | unit | `rtk pnpm --filter @vibetime/core test -- src/usage/aggregate.test.ts` | No - Wave 0 |
+| USAGE-01 | Claude/Codex-only scope. [VERIFIED: .planning/REQUIREMENTS.md] | unit/integration/UI | `rtk pnpm --filter @vibetime/core test -- src/usage/aggregate.test.ts` | No - Wave 0 |
+| USAGE-02 | Idempotent facts and no content persistence. [VERIFIED: .planning/REQUIREMENTS.md] | unit/integration | `rtk pnpm --filter @vibetime/core test -- src/usage/privacy.test.ts` | No - Wave 0 |
+| USAGE-03 | Codex token extraction and deltas. [VERIFIED: .planning/REQUIREMENTS.md] | unit | `rtk pnpm --filter @vibetime/core test -- src/usage/codex-scanner.test.ts` | No - Wave 0 |
+| USAGE-04 | Claude usage extraction and dedupe. [VERIFIED: .planning/REQUIREMENTS.md] | unit | `rtk pnpm --filter @vibetime/core test -- src/usage/claude-scanner.test.ts` | No - Wave 0 |
+| USAGE-05 | Pricing cache, refresh, recompute, unknown price. [VERIFIED: .planning/REQUIREMENTS.md] | unit/integration | `rtk pnpm --filter @vibetime/core test -- src/usage/pricing.test.ts` and desktop usage-service test | No - Wave 0 |
+| USAGE-06 | Mapping artifact exists before chart lock. [VERIFIED: .planning/REQUIREMENTS.md] | artifact/manual gate | `test -f .planning/phases/07-usage-analytics/07-USAGE-MAPPING.md` | No - Wave 0 |
+| USAGE-07 | Dedicated Usage page with totals/breakdowns. [VERIFIED: .planning/REQUIREMENTS.md] | renderer/manual | `rtk pnpm --filter @vibetime/desktop test -- src/renderer/src/usage-store.test.ts` | No - Wave 0 |
+| USAGE-08 | No usage CLI/export. [VERIFIED: .planning/REQUIREMENTS.md] | static/manual | `rtk rg -n "vibetime usage|usage export|exportUsage" packages` | No - Wave 0 |
+
+### Sampling Rate
+
+- **Per task commit:** Run the focused command for touched tier plus `rtk pnpm --filter @vibetime/core test -- src/usage` when scanner/pricing/aggregation changes. [VERIFIED: package.json]
+- **Per wave merge:** Run `rtk pnpm run ci`. [VERIFIED: package.json]
+- **Phase gate:** Full suite green, mapping artifact present, privacy canary tests green, and manual Usage UI smoke verified before `$gsd-verify-work`. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md]
+
+### Wave 0 Gaps
+
+- [ ] `packages/core/src/usage/codex-scanner.test.ts` - covers USAGE-03. [VERIFIED: rg --files packages]
+- [ ] `packages/core/src/usage/claude-scanner.test.ts` - covers USAGE-04. [VERIFIED: rg --files packages]
+- [ ] `packages/core/src/usage/pricing.test.ts` - covers USAGE-05. [VERIFIED: rg --files packages]
+- [ ] `packages/core/src/usage/reconcile.test.ts` - covers TOK-01/USAGE-06 inputs. [VERIFIED: rg --files packages]
+- [ ] `packages/core/src/usage/aggregate.test.ts` - covers TOK-02/USAGE-01/USAGE-07. [VERIFIED: rg --files packages]
+- [ ] `packages/core/src/usage/privacy.test.ts` - covers USAGE-02 privacy canaries. [VERIFIED: rg --files packages]
+- [ ] `packages/desktop/src/main/usage-service.test.ts` - covers background scan, pricing refresh, Settings cadence, typed IPC service behavior. [VERIFIED: rg --files packages]
+- [ ] `packages/desktop/src/renderer/src/usage-store.test.ts` - covers cache-first UI store and refresh failure state. [VERIFIED: rg --files packages]
+- [ ] `.planning/phases/07-usage-analytics/07-USAGE-MAPPING.md` - required mapping artifact before final visualization choices. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md]
+
+## Environment Availability
+
+| Dependency | Required By | Available | Version | Fallback |
+|------------|-------------|-----------|---------|----------|
+| Node.js | TypeScript, Vitest, Electron tooling | yes | v22.12.0 | None needed. [VERIFIED: node --version] |
+| pnpm | Workspace scripts | yes | 9.9.0; packageManager declares pnpm 10.33.2 | Use Corepack or existing `pnpm` if scripts pass. [VERIFIED: pnpm --version; VERIFIED: package.json] |
+| Bun | Hook tests/build | yes | 1.3.8 | None for hook tests. [VERIFIED: bun --version; VERIFIED: packages/hook/package.json] |
+| rtk | Preferred command wrapper | yes | 0.39.0 | Use raw command if wrapper fails. [VERIFIED: rtk --version] |
+| Network access | Pricing refresh tests and npm/docs verification | yes during research | npm/web reachable | Seed pricing cache fixture and mock `fetch` for deterministic tests. [VERIFIED: npm view commands; VERIFIED: packages/desktop/src/main/updater.ts] |
+
+**Missing dependencies with no fallback:** None found. [VERIFIED: environment audit]
+
+**Missing dependencies with fallback:** pnpm local binary is 9.9.0 while `packageManager` declares 10.33.2; planner should avoid assuming pnpm 10-only behavior or include Corepack activation if needed. [VERIFIED: pnpm --version; VERIFIED: package.json]
+
+## Security Domain
+
+### Applicable ASVS Categories
+
+| ASVS Category | Applies | Standard Control |
+|---------------|---------|------------------|
+| V2 Authentication | no | Phase excludes authenticated provider APIs and cloud dashboards. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+| V3 Session Management | no | No web account/session management added. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+| V4 Access Control | yes | Renderer cannot access SQLite/filesystem directly; use typed IPC only. [VERIFIED: .planning/REQUIREMENTS.md; VERIFIED: packages/desktop/src/shared/ipc-types.ts] |
+| V5 Input Validation | yes | Validate IPC args, pricing payload shape, scanner row shape, and settings enum. [VERIFIED: packages/desktop/src/main/ipc-handlers.ts; VERIFIED: .planning/phases/07-usage-analytics/07-UI-SPEC.md] |
+| V6 Cryptography | no | No encryption/signing feature introduced; do not invent crypto. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+| V8 Data Protection | yes | Persist token facts only; never persist prompt/response/tool content. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+| V12 File and Resources | yes | Scanners read local transcript roots read-only and sanitize source paths. [VERIFIED: baseline 07-RESEARCH.md; VERIFIED: packages/desktop/src/main/db.ts] |
+| V14 Configuration | yes | Settings refresh frequency must persist through existing config shape or a validated extension. [VERIFIED: packages/hook/src/config.ts; VERIFIED: .planning/phases/07-usage-analytics/07-UI-SPEC.md] |
+
+### Known Threat Patterns for Usage Analytics
+
+| Pattern | STRIDE | Standard Mitigation |
+|---------|--------|---------------------|
+| Prompt/response/tool argument persistence | Information Disclosure | Allowlist persisted fields, canary tests, static `rg` privacy scan, no raw transcript column. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+| Full local path leakage | Information Disclosure | Store root-relative path or hash+basename; existing Codex recovery stores basename in desktop DB path. [VERIFIED: packages/desktop/src/main/db.ts] |
+| Renderer DB/file access | Elevation of Privilege / Information Disclosure | Typed IPC only; no native modules in renderer. [VERIFIED: .planning/REQUIREMENTS.md; VERIFIED: packages/desktop/src/shared/ipc-types.ts] |
+| Pricing payload tampering | Tampering | Validate pricing JSON shape and keep cost nullable on malformed or unknown model data. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+| Duplicate transcript rows | Tampering / Integrity | Unique source identity and idempotent scan state. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md] |
+
+## Assumptions Log
+
+| # | Claim | Section | Risk if Wrong |
+|---|-------|---------|---------------|
+| A1 | Research validity window is estimated as 7 days for external pricing/log-format assumptions and 30 days for codebase architecture/test commands. [ASSUMED] | Metadata | Planner may rely on pricing/log-format details longer than they remain current. |
+
+All planning-critical implementation claims in this research were verified from project files, npm/Context7, or cited external docs; only the validity window estimate is assumed. [VERIFIED: source list below]
+
+## Open Questions
+
+1. **Exact usage table names and pricing cache columns**
+   - What we know: `usage_records`, `usage_scan_state`, and a pricing cache are required concepts. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md]
+   - What's unclear: Whether cost should be materialized per row or computed on read with a cache snapshot. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md]
+   - Recommendation: Plan an early storage task that chooses one design and updates tests before scanner/UI work. [VERIFIED: .planning/phases/07-usage-analytics/07-CONTEXT.md]
+
+2. **Exact sidechain/subagent default UI**
+   - What we know: UI-SPEC says sidechain/subagent usage is included by default and filterable only if scanner data exposes it. [VERIFIED: .planning/phases/07-usage-analytics/07-UI-SPEC.md]
+   - What's unclear: Claude fixture coverage may reveal provider flags that need clearer naming. [VERIFIED: baseline 07-RESEARCH.md]
+   - Recommendation: Preserve provider flags in sanitized `meta`, add toggle only when scanner proves stable fields. [VERIFIED: .planning/phases/07-usage-analytics/07-UI-SPEC.md]
+
+## Sources
+
+### Primary (HIGH confidence)
+
+- `.planning/phases/07-usage-analytics/07-CONTEXT.md` - locked Phase 07 decisions. [VERIFIED]
+- `.planning/phases/07-usage-analytics/07-SPEC.md` - requirements, constraints, acceptance criteria. [VERIFIED]
+- `.planning/phases/07-usage-analytics/07-UI-SPEC.md` - approved Usage UI contract. [VERIFIED]
+- `.planning/REQUIREMENTS.md`, `.planning/ROADMAP.md`, `.planning/STATE.md` - project requirements and phase scope. [VERIFIED]
+- `packages/core/src/schema.ts`, `packages/core/src/history.ts`, `packages/core/src/codex-transcript.ts` - current core data and parser patterns. [VERIFIED]
+- `packages/desktop/src/main/db.ts`, `ipc-handlers.ts`, `ipc-types.ts`, `store.ts`, `App.tsx`, `Sidebar.tsx`, `updater.ts` - current desktop IPC, DB, store, routing, network-state patterns. [VERIFIED]
+- `packages/hook/src/store.ts`, `packages/hook/src/recovery.ts`, `packages/hook/src/config.ts` - hook hot-path and config patterns. [VERIFIED]
+- Context7 `/vitest-dev/vitest/v3_2_4` - Vitest CLI filtering and mocking documentation. [CITED]
+
+### Secondary (MEDIUM confidence)
+
+- https://ccusage.com/guide/cost-modes - Claude Code cost modes and LiteLLM pricing source. [CITED]
+- https://ccusage.com/guide/codex/ - Codex JSONL source, token delta, pricing formula, model context behavior. [CITED]
+- https://ccusage.com/guide/codex/session - Codex session report, offline/cache pricing option. [CITED]
+- https://code.claude.com/docs/en/hooks - Claude Code hook fields, transcript path, subagent/stop content-bearing fields. [CITED]
+- https://developers.openai.com/api/docs/pricing - OpenAI input/cached input/output pricing shape and reasoning/output pricing context. [CITED]
+- https://platform.claude.com/docs/en/build-with-claude/prompt-caching - Claude prompt cache write/read multipliers. [CITED]
+
+### Tertiary (LOW confidence)
+
+- Baseline `07-RESEARCH.md` local observations about exact Claude JSONL row field names were preserved as MEDIUM/LOW implementation hints unless also locked by SPEC; executor should confirm against fixtures during Wave 0. [VERIFIED: baseline 07-RESEARCH.md]
+
+## Metadata
+
+**Confidence breakdown:**
+- Standard stack: HIGH - verified against package files, pnpm installed versions, npm registry, and Context7 for Vitest. [VERIFIED: package.json; VERIFIED: pnpm list; VERIFIED: npm registry; CITED: /vitest-dev/vitest/v3_2_4]
+- Architecture: HIGH - follows existing VibeTime main-process SQLite, typed IPC, renderer store, and hook hot-path boundaries. [VERIFIED: packages/desktop/src/main/db.ts; VERIFIED: packages/desktop/src/shared/ipc-types.ts; VERIFIED: packages/hook/src/store.ts]
+- Scanner field details: MEDIUM - Codex is documented by ccusage; Claude exact row fields are based on baseline research and must be fixture-verified. [CITED: https://ccusage.com/guide/codex/; VERIFIED: baseline 07-RESEARCH.md]
+- Pitfalls/privacy: HIGH - directly locked by SPEC and project local-first constraints. [VERIFIED: .planning/phases/07-usage-analytics/07-SPEC.md]
+- Validation architecture: HIGH - maps every Phase 07 requirement to concrete tests, fixtures, commands, and negative cases. [VERIFIED: .planning/REQUIREMENTS.md; VERIFIED: package.json]
+
+**Research date:** 2026-05-15 [VERIFIED: system current date]
+**Valid until:** 2026-05-22 for external pricing/log-format assumptions; 2026-06-14 for codebase architecture and test commands if dependencies remain pinned. [ASSUMED]
