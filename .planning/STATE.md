@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 07-01-PLAN.md
-last_updated: "2026-05-15T10:16:50.623Z"
+stopped_at: Completed 07-03-PLAN.md
+last_updated: "2026-05-15T10:29:19.901Z"
 last_activity: 2026-05-15
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 25
-  completed_plans: 21
-  percent: 84
+  completed_plans: 22
+  percent: 88
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-07)
 ## Current Position
 
 Phase: 07 (usage-analytics) — EXECUTING
-Plan: 3 of 6
+Plan: 4 of 6
 Status: Ready to execute
 Last activity: 2026-05-15
 
-Progress: [████████░░] 84%
+Progress: [█████████░] 88%
 
 ## Performance Metrics
 
@@ -63,6 +63,7 @@ Progress: [████████░░] 84%
 | Phase 05 P03 | 25min | 3 tasks | 7 files |
 | Phase 05 P04 | 20min | 4 tasks | 4 files |
 | Phase 07 P01 | 7min | 3 tasks | 11 files |
+| Phase 07 P03 | 9min | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -109,6 +110,10 @@ Recent decisions affecting current work:
 - Pricing is a derived estimate from token facts and a refreshable public pricing cache. Opening the Usage page renders from cache first, then attempts refresh and updates historical estimates.
 - Phase 07 must record how parsed usage data links with existing hook data via a `data capability -> hook linkage -> user value -> visualization` mapping before final chart choices are locked.
 - Phase 07 Plan 01 established Claude/Codex-only usage contracts, idempotent usage DDL, Wave 0 fixtures, and privacy canary tests without adding usage CLI/export or Cursor/Gemini usage scope.
+- [Phase 07]: Unknown model pricing returns null estimated cost and visible tokens, never zero-dollar cost.
+- [Phase 07]: Usage attribution order is turn_id -> session_time_window -> project_time_window -> unmatched.
+- [Phase 07]: MVP Usage visuals are limited to metric tiles, daily trend, token breakdown, project ranking, model efficiency table, unavailable cost/time panel, and audit table.
+- [Phase 07]: Project spend charts are allowed only for hook-linked rows; unassigned usage remains in the audit surface.
 
 ### Pending Todos
 
@@ -134,6 +139,6 @@ None yet. (Phase 1 must produce DECISIONS.md before Phase 1 implementation can a
 
 ## Session Continuity
 
-Last session: 2026-05-15T10:16:50.619Z
-Stopped at: Completed 07-01-PLAN.md
+Last session: 2026-05-15T10:29:19.896Z
+Stopped at: Completed 07-03-PLAN.md
 Resume file: None
