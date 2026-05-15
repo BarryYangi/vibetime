@@ -6,6 +6,7 @@ import Database from 'better-sqlite3'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { initializeDesktopDbSchema } from './db.js'
 import {
+  __usageServiceTestInternals,
   queryUsageSummary,
   readUsageRows,
   runUsageRefresh,
@@ -144,6 +145,22 @@ describe('desktop usage storage', () => {
 })
 
 describe('runUsageRefresh', () => {
+  it('does not mark unreadable source files as scanned', () => {
+    const result = __usageServiceTestInternals.scanSourceFiles([
+      {
+        agent: 'codex',
+        path: join(createTempDir(), 'missing-session.jsonl'),
+        sourceFileKey: 'codex:missing:missing-session.jsonl',
+        sourceFileBasename: 'missing-session.jsonl',
+        mtimeMs: 1,
+        sizeBytes: 123,
+      },
+    ])
+
+    expect(result.records).toEqual([])
+    expect(result.states).toEqual([])
+  })
+
   it('scans configured Claude and Codex roots incrementally and leaves Unassigned usage auditable', async () => {
     const db = createDb()
     initializeDesktopDbSchema(db)
@@ -224,6 +241,54 @@ describe('runUsageRefresh', () => {
         }),
       ]),
     )
+  })
+
+  it('reattributes existing unmatched usage rows after hook events arrive later', async () => {
+    const db = createDb()
+    initializeDesktopDbSchema(db)
+    upsertUsageRecords(db, [
+      usageRecord({
+        sessionId: 'late-session',
+        turnId: null,
+        project: null,
+        ts: 1778814000,
+        attributionMethod: 'unmatched',
+        attributionConfidence: 0,
+      }),
+    ])
+
+    const beforeHook = await runUsageRefresh({
+      db,
+      homeDir: createTempDir(),
+      env: {},
+      refreshPricing: false,
+    })
+    db.prepare(`
+      INSERT INTO events (
+        schema_version, agent, event_type, project, session_id, turn_id, ts, timezone, duration_sec, meta
+      )
+      VALUES (1, 'codex', 'turn_end', 'vibetime', 'late-session', 'late-turn', 1778814060, 'Asia/Shanghai', 120, '{}')
+    `).run()
+    const afterHook = await runUsageRefresh({
+      db,
+      homeDir: createTempDir(),
+      env: {},
+      refreshPricing: false,
+    })
+
+    const [row] = readUsageRows(db, {
+      periodDays: 7,
+      now: new Date('2026-05-15T12:00:00.000Z'),
+    })
+    expect(beforeHook.recordsFound).toBe(0)
+    expect(afterHook.recordsFound).toBe(0)
+    expect(row).toMatchObject({
+      project: 'vibetime',
+      turnId: 'late-turn',
+      sessionId: 'late-session',
+      attributionMethod: 'session_time_window',
+      attributionConfidence: 0.8,
+    })
   })
 
   it('refreshes LiteLLM pricing and falls back to cached or unavailable status on failure', async () => {

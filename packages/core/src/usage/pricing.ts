@@ -157,6 +157,7 @@ export function estimateUsageCostUsd(
   add(tokens.cachedInputTokens, price.cachedInputUsdPerMillion)
   add(tokens.cacheCreationInputTokens, price.cacheCreationInputUsdPerMillion)
   add(tokens.outputTokens, price.outputUsdPerMillion)
+  add(tokens.reasoningOutputTokens, price.reasoningOutputUsdPerMillion)
 
   return pricedAny ? cost : null
 }

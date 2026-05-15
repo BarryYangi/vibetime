@@ -98,7 +98,7 @@ describe('normalizeLiteLlmPricingPayload', () => {
 })
 
 describe('estimateUsageCostUsd', () => {
-  it('uses per-million rates and does not double count reasoning output tokens', () => {
+  it('uses per-million rates including separately priced reasoning output tokens', () => {
     const price: UsagePricingEntry = {
       model: 'priced-model',
       provider: 'test',
@@ -112,7 +112,33 @@ describe('estimateUsageCostUsd', () => {
       rawVersion: 'test',
     }
 
-    expect(estimateUsageCostUsd(tokens(), price)).toBe(7.275)
+    expect(estimateUsageCostUsd(tokens(), price)).toBe(8.025)
+  })
+
+  it('does not double count reasoning output tokens when they are folded into output tokens', () => {
+    const price: UsagePricingEntry = {
+      model: 'priced-model',
+      provider: 'test',
+      inputUsdPerMillion: 3,
+      cachedInputUsdPerMillion: 0.3,
+      cacheCreationInputUsdPerMillion: 3.75,
+      outputUsdPerMillion: 15,
+      reasoningOutputUsdPerMillion: 15,
+      source: 'litellm',
+      fetchedAt: '2026-05-15T00:00:00.000Z',
+      rawVersion: 'test',
+    }
+
+    expect(
+      estimateUsageCostUsd(
+        tokens({
+          outputTokens: 300_000,
+          reasoningOutputTokens: 0,
+          totalTokens: 1_450_000,
+        }),
+        price,
+      ),
+    ).toBe(8.025)
   })
 
   it('returns null for unknown model pricing', () => {

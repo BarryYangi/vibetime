@@ -496,6 +496,7 @@ function scanSourceFiles(files: readonly SourceFile[]): {
 } {
   const scannedAt = nowSeconds()
   const byAgent = new Map<UsageAgent, UsageTranscriptCandidate[]>()
+  const scannedFiles: SourceFile[] = []
   for (const file of files) {
     let content: string
     try {
@@ -503,6 +504,7 @@ function scanSourceFiles(files: readonly SourceFile[]): {
     } catch {
       continue
     }
+    scannedFiles.push(file)
     const candidates = byAgent.get(file.agent) ?? []
     candidates.push({
       sourceFileKey: file.sourceFileKey,
@@ -524,7 +526,7 @@ function scanSourceFiles(files: readonly SourceFile[]): {
 
   return {
     records,
-    states: files.map((file) => ({
+    states: scannedFiles.map((file) => ({
       agent: file.agent,
       sourceFileKey: file.sourceFileKey,
       sourceFileBasename: file.sourceFileBasename,
@@ -665,6 +667,48 @@ export function readUsageRows(
   ).map(rowToRecord)
 }
 
+function readUnattributedUsageRows(db: Database.Database): UsageRecordFact[] {
+  return (
+    db
+      .prepare(`
+        SELECT
+          agent,
+          source_file_key,
+          source_row_key,
+          source_file_basename,
+          session_id,
+          turn_id,
+          project,
+          ts,
+          model,
+          input_tokens,
+          cached_input_tokens,
+          cache_creation_input_tokens,
+          output_tokens,
+          reasoning_output_tokens,
+          total_tokens,
+          attribution_method,
+          attribution_confidence,
+          meta
+        FROM usage_records
+        WHERE attribution_method = 'unmatched'
+           OR project IS NULL
+        ORDER BY ts ASC, id ASC
+      `)
+      .all() as UsageRecordRow[]
+  ).map(rowToRecord)
+}
+
+function attributionChanged(before: UsageRecordFact, after: UsageRecordFact): boolean {
+  return (
+    before.project !== after.project ||
+    before.turnId !== after.turnId ||
+    before.sessionId !== after.sessionId ||
+    before.attributionMethod !== after.attributionMethod ||
+    before.attributionConfidence !== after.attributionConfidence
+  )
+}
+
 function filterUsageRows(
   records: readonly UsageRecordFact[],
   args: DesktopUsageSummaryArgs,
@@ -703,10 +747,18 @@ export async function runUsageRefresh(
   const files = changedSourceFiles(db, discoverSourceFiles(homeDir, options.env ?? process.env))
   const { records, states } = scanSourceFiles(files)
   const hookEvents = readHookUsageEvents(db)
-  const reconciled = reconcileUsageWithHookEvents(records, hookEvents)
+  const reconciledNewRecords = reconcileUsageWithHookEvents(records, hookEvents)
+  const existingUnattributed = readUnattributedUsageRows(db)
+  const reconciledExistingRecords = reconcileUsageWithHookEvents(
+    existingUnattributed,
+    hookEvents,
+  ).filter((record, index) => attributionChanged(existingUnattributed[index], record))
 
   const recordsInserted = db.transaction(() => {
-    const changedRows = upsertUsageRecords(db, reconciled)
+    const changedRows = upsertUsageRecords(db, [
+      ...reconciledNewRecords,
+      ...reconciledExistingRecords,
+    ])
     upsertUsageScanState(db, states)
     return changedRows
   })()
@@ -724,6 +776,10 @@ export async function runUsageRefresh(
     recordsInserted,
     pricingStatus,
   }
+}
+
+export const __usageServiceTestInternals = {
+  scanSourceFiles,
 }
 
 export function startUsageBackgroundRefresh(frequency: UsageRefreshFrequency): void {
