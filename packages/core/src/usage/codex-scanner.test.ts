@@ -1,0 +1,135 @@
+import { readFileSync } from 'node:fs'
+import { describe, expect, it } from 'vitest'
+import { scanCodexUsageTranscript, scanCodexUsageTranscripts } from './codex-scanner.js'
+
+function readFixture(name: string): string {
+  return readFileSync(new URL(`./__fixtures__/${name}`, import.meta.url), 'utf8')
+}
+
+describe('scanCodexUsageTranscript', () => {
+  it('extracts last_token_usage deltas', () => {
+    const result = scanCodexUsageTranscript({
+      sourceFileKey: 'codex/sessions/codex-token-count.jsonl',
+      sourceFileBasename: 'codex-token-count.jsonl',
+      content: readFixture('codex-token-count.jsonl'),
+    })
+
+    const first = result.records.find((record) => record.turnId === 'codex-turn-1')
+
+    expect(first).toMatchObject({
+      agent: 'codex',
+      sourceFileKey: 'codex/sessions/codex-token-count.jsonl',
+      sourceFileBasename: 'codex-token-count.jsonl',
+      sessionId: 'codex-session-1',
+      turnId: 'codex-turn-1',
+      project: null,
+      ts: 1778806812,
+      model: 'gpt-5-codex',
+      attributionMethod: 'unmatched',
+      attributionConfidence: 0,
+      meta: { sourceKind: 'codex-token-count' },
+      tokens: {
+        inputTokens: 1200,
+        cachedInputTokens: 300,
+        cacheCreationInputTokens: 0,
+        outputTokens: 210,
+        reasoningOutputTokens: 48,
+        totalTokens: 1458,
+      },
+    })
+  })
+
+  it('falls back to cumulative total_token_usage deltas', () => {
+    const result = scanCodexUsageTranscript({
+      sourceFileKey: 'codex/sessions/codex-token-count.jsonl',
+      sourceFileBasename: 'codex-token-count.jsonl',
+      content: readFixture('codex-token-count.jsonl'),
+    })
+
+    const deltas = result.records
+      .filter((record) => record.turnId === 'codex-turn-2')
+      .map((record) => record.tokens)
+
+    expect(deltas).toEqual([
+      {
+        inputTokens: 800,
+        cachedInputTokens: 160,
+        cacheCreationInputTokens: 0,
+        outputTokens: 300,
+        reasoningOutputTokens: 72,
+        totalTokens: 1172,
+      },
+      {
+        inputTokens: 550,
+        cachedInputTokens: 60,
+        cacheCreationInputTokens: 0,
+        outputTokens: 180,
+        reasoningOutputTokens: 30,
+        totalTokens: 760,
+      },
+    ])
+  })
+
+  it('preserves cached input output and reasoning tokens', () => {
+    const result = scanCodexUsageTranscript({
+      sourceFileKey: 'codex/sessions/codex-token-count.jsonl',
+      sourceFileBasename: 'codex-token-count.jsonl',
+      content: readFixture('codex-token-count.jsonl'),
+    })
+
+    expect(result.records.map((record) => record.tokens.cachedInputTokens)).toEqual([
+      300, 160, 60, 0,
+    ])
+    expect(result.records.map((record) => record.tokens.outputTokens)).toEqual([210, 300, 180, 96])
+    expect(result.records.map((record) => record.tokens.reasoningOutputTokens)).toEqual([
+      48, 72, 30, 0,
+    ])
+    expect(result.records[0]?.tokens.totalTokens).toBe(1458)
+  })
+
+  it('ignores malformed rows', () => {
+    const result = scanCodexUsageTranscript({
+      sourceFileKey: 'codex/sessions/malformed.jsonl',
+      sourceFileBasename: 'malformed.jsonl',
+      content: [
+        'not-json',
+        JSON.stringify({
+          timestamp: '2026-05-15T03:00:00.000Z',
+          type: 'token_count',
+          session_id: 'codex-session-malformed',
+          turn_id: 'codex-turn-malformed',
+          model: 'gpt-5',
+          last_token_usage: {
+            input_tokens: 10,
+            cached_input_tokens: 0,
+            output_tokens: 5,
+            reasoning_output_tokens: 0,
+            total_tokens: 15,
+          },
+        }),
+      ].join('\n'),
+    })
+
+    expect(result.records).toHaveLength(1)
+    expect(result.records[0]?.sessionId).toBe('codex-session-malformed')
+  })
+
+  it('keeps duplicate source keys stable', () => {
+    const candidate = {
+      sourceFileKey: 'codex/sessions/codex-duplicate-session.jsonl',
+      sourceFileBasename: 'codex-duplicate-session.jsonl',
+      content: readFixture('codex-duplicate-session.jsonl'),
+    }
+
+    const firstScan = scanCodexUsageTranscript(candidate)
+    const secondScan = scanCodexUsageTranscripts([candidate])
+
+    expect(firstScan.records.map((record) => record.sourceRowKey)).toEqual([
+      'codex-session-dup:0001',
+      'codex-session-dup:0002',
+    ])
+    expect(secondScan.records.map((record) => record.sourceRowKey)).toEqual(
+      firstScan.records.map((record) => record.sourceRowKey),
+    )
+  })
+})
