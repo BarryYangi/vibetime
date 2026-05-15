@@ -10,14 +10,30 @@ import type {
   IpcResult,
   MenubarState,
   TodayLiveState,
+  UsageRefreshResult,
+  UsageSummary,
+  UsageSummaryArgs,
 } from '../../shared/ipc-types'
 
 export const store = createStore()
 
 type HistorySummaryCache = Partial<Record<HistoryPeriodDays, HistorySummary>>
+type UsageSummaryCache = Record<string, UsageSummary>
+type UsageRefreshState = {
+  status: 'idle' | 'loading' | 'success' | 'error'
+  error: string | null
+  lastResult: UsageRefreshResult | null
+}
 
 export const todayLiveStateAtom = atom<TodayLiveState | null>(null)
 export const historySummariesAtom = atom<HistorySummaryCache>({})
+export const usageSummariesAtom = atom<UsageSummaryCache>({})
+export const usageRefreshStateAtom = atom<UsageRefreshState>({
+  status: 'idle',
+  error: null,
+  lastResult: null,
+})
+export const activeUsageQueryAtom = atom<UsageSummaryArgs | null>(null)
 export const menubarStateAtom = atom<MenubarState | null>(null)
 export const appPreferencesAtom = atom<AppPreferences | null>(null)
 export const agentStatusAtom = atom<AgentStatus[] | null>(null)
@@ -26,12 +42,34 @@ export const updateStateAtom = atom<AppUpdateState | null>(null)
 
 let refreshSeq = 0
 const historyRefreshSeqByPeriod = new Map<HistoryPeriodDays, number>()
+const usageRefreshSeqByKey = new Map<string, number>()
 let activeHistoryPeriod: HistorySummary['periodDays'] | null = null
 let menubarRefreshSeq = 0
 let appPreferencesRefreshSeq = 0
 let agentStatusRefreshSeq = 0
 let cliStatusRefreshSeq = 0
 let updateStateRefreshSeq = 0
+
+function normalizeUsageSummaryArgs(args: UsageSummaryArgs): UsageSummaryArgs {
+  return {
+    periodDays: args.periodDays,
+    agent: args.agent ?? 'all',
+    project: args.project ?? null,
+    model: args.model ?? null,
+    includeSidechain: args.includeSidechain ?? true,
+  }
+}
+
+function usageSummaryCacheKey(args: UsageSummaryArgs): string {
+  const normalized = normalizeUsageSummaryArgs(args)
+  return JSON.stringify({
+    periodDays: normalized.periodDays,
+    agent: normalized.agent,
+    project: normalized.project,
+    model: normalized.model,
+    includeSidechain: normalized.includeSidechain,
+  })
+}
 
 function activeTurnsEqual(
   a: TodayLiveState['activeTurns'],
@@ -85,10 +123,21 @@ export function clearActiveHistoryPeriod(): void {
   activeHistoryPeriod = null
 }
 
+export function clearActiveUsageQuery(): void {
+  store.set(activeUsageQueryAtom, null)
+}
+
 function setHistorySummary(next: HistorySummary): void {
   store.set(historySummariesAtom, {
     ...store.get(historySummariesAtom),
     [next.periodDays]: next,
+  })
+}
+
+function setUsageSummary(key: string, next: UsageSummary): void {
+  store.set(usageSummariesAtom, {
+    ...store.get(usageSummariesAtom),
+    [key]: next,
   })
 }
 
@@ -107,6 +156,59 @@ export async function refreshHistorySummary(
     return result
   } catch {
     // Page-level queries surface initial load errors; push refresh is best-effort.
+    return null
+  }
+}
+
+export async function refreshUsageSummary(
+  args: UsageSummaryArgs,
+): Promise<IpcResult<UsageSummary> | null> {
+  const normalizedArgs = normalizeUsageSummaryArgs(args)
+  const key = usageSummaryCacheKey(normalizedArgs)
+  store.set(activeUsageQueryAtom, normalizedArgs)
+  const seq = (usageRefreshSeqByKey.get(key) ?? 0) + 1
+  usageRefreshSeqByKey.set(key, seq)
+  try {
+    const result = await window.api.invoke('getUsageSummary', normalizedArgs)
+    if (seq !== usageRefreshSeqByKey.get(key)) return null
+    if (result.ok) {
+      setUsageSummary(key, result.data)
+    }
+    return result
+  } catch {
+    // Usage pages keep stale cache visible and surface explicit refresh errors separately.
+    return null
+  }
+}
+
+export async function runUsageRefresh(): Promise<IpcResult<UsageRefreshResult> | null> {
+  store.set(usageRefreshStateAtom, {
+    ...store.get(usageRefreshStateAtom),
+    status: 'loading',
+    error: null,
+  })
+  try {
+    const result = await window.api.invoke('refreshUsage')
+    if (result.ok) {
+      store.set(usageRefreshStateAtom, {
+        status: 'success',
+        error: null,
+        lastResult: result.data,
+      })
+    } else {
+      store.set(usageRefreshStateAtom, {
+        ...store.get(usageRefreshStateAtom),
+        status: 'error',
+        error: result.error,
+      })
+    }
+    return result
+  } catch (err) {
+    store.set(usageRefreshStateAtom, {
+      ...store.get(usageRefreshStateAtom),
+      status: 'error',
+      error: String(err),
+    })
     return null
   }
 }
@@ -207,6 +309,17 @@ export function handlePush(event: IpcPushEvent): void {
     // This avoids extra IPC work for users who never open History.
     if (activeHistoryPeriod !== null && Object.keys(store.get(historySummariesAtom)).length > 0) {
       void refreshHistorySummary(activeHistoryPeriod)
+    }
+    const activeUsageQuery = store.get(activeUsageQueryAtom)
+    if (activeUsageQuery !== null && Object.keys(store.get(usageSummariesAtom)).length > 0) {
+      void refreshUsageSummary(activeUsageQuery)
+    }
+    return
+  }
+  if (event.type === 'usage-changed') {
+    const activeUsageQuery = store.get(activeUsageQueryAtom)
+    if (activeUsageQuery !== null && Object.keys(store.get(usageSummariesAtom)).length > 0) {
+      void refreshUsageSummary(activeUsageQuery)
     }
     return
   }
