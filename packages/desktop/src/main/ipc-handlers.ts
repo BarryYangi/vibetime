@@ -14,10 +14,19 @@ import type {
   AppPreferences,
   HistoryPeriodDays,
   IpcResult,
+  UsageAgentFilter,
+  UsageSummaryArgs,
+  UsageRefreshResult,
   VibetimeConfig,
 } from '../shared/ipc-types.js'
-import { APP_LANGUAGES, APP_THEMES, HISTORY_PERIODS } from '../shared/ipc-types.js'
 import {
+  APP_LANGUAGES,
+  APP_THEMES,
+  HISTORY_PERIODS,
+  USAGE_AGENT_FILTERS,
+} from '../shared/ipc-types.js'
+import {
+  notifyRenderer,
   queryAgentStatus,
   queryHistorySummary,
   queryMenubarState,
@@ -25,10 +34,12 @@ import {
   writeAndNotify,
 } from './db.js'
 import { getUpdateState, runUpdateAction, runUpdateCheck } from './updater.js'
+import { queryUsageSummary, runUsageRefresh } from './usage-service.js'
 import { normalizeAppRoute } from './window-security.js'
 
 const VALID_AGENTS = new Set(['claude-code', 'codex', 'cursor', 'gemini-cli'])
 const VALID_HISTORY_PERIODS = new Set<number>(HISTORY_PERIODS)
+const VALID_USAGE_AGENT_FILTERS = new Set<string>(USAGE_AGENT_FILTERS)
 const VALID_APP_LANGUAGES = new Set<string>(APP_LANGUAGES)
 const VALID_APP_THEMES = new Set<string>(APP_THEMES)
 const GITHUB_REPOSITORY_URL = 'https://github.com/BarryYangi/vibetime'
@@ -105,6 +116,46 @@ function assertValidHistoryArgs(args: unknown): asserts args is { periodDays: Hi
   }
 }
 
+function assertValidUsageAgentFilter(value: unknown): asserts value is UsageAgentFilter {
+  if (typeof value !== 'string' || !VALID_USAGE_AGENT_FILTERS.has(value)) {
+    throw new Error('Invalid usage agent')
+  }
+}
+
+function assertValidOptionalFilter(value: unknown, name: string): asserts value is string | null {
+  if (value === undefined || value === null) return
+  if (typeof value !== 'string' || value.length > 240) {
+    throw new Error(`Invalid usage ${name}`)
+  }
+}
+
+function assertValidUsageSummaryArgs(args: unknown): asserts args is UsageSummaryArgs {
+  if (!isPlainObject(args)) throw new Error('Invalid usage summary payload')
+
+  const periodDays = args.periodDays
+  if (typeof periodDays !== 'number' || !VALID_HISTORY_PERIODS.has(periodDays)) {
+    throw new Error('Invalid usage period')
+  }
+  if (args.agent !== undefined) assertValidUsageAgentFilter(args.agent)
+  assertValidOptionalFilter(args.project, 'project')
+  assertValidOptionalFilter(args.model, 'model')
+  if (args.includeSidechain !== undefined && typeof args.includeSidechain !== 'boolean') {
+    throw new Error('Invalid usage includeSidechain')
+  }
+}
+
+function usageRefreshResultFromService(
+  result: Awaited<ReturnType<typeof runUsageRefresh>>,
+): UsageRefreshResult {
+  return {
+    ...result,
+    pricingStatus:
+      result.pricingStatus === 'unavailable'
+        ? 'refresh_failed_without_cache'
+        : result.pricingStatus,
+  }
+}
+
 export function registerIpcHandlers(
   actions: { showMainWindow?: (route?: string) => void } = {},
 ): void {
@@ -130,6 +181,27 @@ export function registerIpcHandlers(
       }
     },
   )
+
+  ipcMain.handle('getUsageSummary', async (_event, args): Promise<IpcResult<ReturnType<typeof queryUsageSummary>>> => {
+    try {
+      assertValidUsageSummaryArgs(args)
+      return { ok: true, data: queryUsageSummary(args) }
+    } catch (err) {
+      return { ok: false, error: String(err) }
+    }
+  })
+
+  ipcMain.handle('refreshUsage', async (): Promise<IpcResult<UsageRefreshResult>> => {
+    try {
+      const result = usageRefreshResultFromService(
+        await runUsageRefresh({ refreshPricing: true }),
+      )
+      notifyRenderer({ type: 'usage-changed' })
+      return { ok: true, data: result }
+    } catch (err) {
+      return { ok: false, error: String(err) }
+    }
+  })
 
   ipcMain.handle(
     'getMenubarState',
