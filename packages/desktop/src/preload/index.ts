@@ -1,9 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { IpcChannel, IpcMethods, IpcPushEvent, IpcResult } from '../shared/ipc-types'
 
-const IPC_CHANNELS = new Set<IpcChannel>([
+export const IPC_CHANNELS = new Set<IpcChannel>([
   'getTodayLiveState',
   'getHistorySummary',
+  'getUsageSummary',
+  'refreshUsage',
   'getMenubarState',
   'getAgentStatus',
   'getConfig',

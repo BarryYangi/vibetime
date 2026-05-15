@@ -1,8 +1,19 @@
+import type {
+  UsageAuditRow,
+  UsageDailySummaryRow,
+  UsageSummaryBreakdownRow,
+  UsageSummaryTotals,
+  UsageTokenBreakdown,
+} from '@vibetime/core'
+
 export type IpcResult<T> = { ok: true; data: T } | { ok: false; error: string }
 
 export const APP_LANGUAGES = ['en', 'zh'] as const
 export const APP_THEMES = ['system', 'light', 'dark'] as const
 export const HISTORY_PERIODS = [7, 30, 90, 365] as const
+export const USAGE_AGENTS = ['claude-code', 'codex'] as const
+export const USAGE_AGENT_FILTERS = ['all', 'claude-code', 'codex'] as const
+export const USAGE_REFRESH_FREQUENCIES = ['15m', '30m', '1h', '4h'] as const
 
 export interface TodaySummary {
   date: string
@@ -41,6 +52,15 @@ export interface AgentStatus {
 export type AppLanguage = (typeof APP_LANGUAGES)[number]
 export type AppTheme = (typeof APP_THEMES)[number]
 export type HistoryPeriodDays = (typeof HISTORY_PERIODS)[number]
+export type UsageAgent = (typeof USAGE_AGENTS)[number]
+export type UsageAgentFilter = (typeof USAGE_AGENT_FILTERS)[number]
+export type UsageRefreshFrequency = (typeof USAGE_REFRESH_FREQUENCIES)[number]
+export type UsagePricingStatus =
+  | 'fresh'
+  | 'cached'
+  | 'refresh_failed_with_cache'
+  | 'refresh_failed_without_cache'
+  | 'unknown_model'
 
 export interface VibetimeConfig {
   projects: Record<string, string>
@@ -110,6 +130,41 @@ export interface HistorySummary {
   periodCompare: HistoryPeriodCompare
 }
 
+export interface UsageSummaryArgs {
+  periodDays: HistoryPeriodDays
+  agent?: UsageAgentFilter
+  project?: string | null
+  model?: string | null
+  includeSidechain?: boolean
+}
+
+export interface UsageAvailableFilters {
+  agents: UsageAgent[]
+  models: string[]
+  projects: string[]
+}
+
+export interface UsageSummary {
+  periodDays: HistoryPeriodDays
+  totals: UsageSummaryTotals
+  daily: UsageDailySummaryRow[]
+  pricingStatus: UsagePricingStatus
+  tokenBreakdown: UsageTokenBreakdown
+  byAgent: UsageSummaryBreakdownRow[]
+  byModel: UsageSummaryBreakdownRow[]
+  byProject: UsageSummaryBreakdownRow[]
+  auditRows: UsageAuditRow[]
+  availableFilters: UsageAvailableFilters
+}
+
+export interface UsageRefreshResult {
+  frequency: UsageRefreshFrequency
+  scannedAt: number
+  recordsFound: number
+  recordsInserted: number
+  pricingStatus: UsagePricingStatus
+}
+
 export interface MenubarState {
   todayTotal: number
   active: boolean
@@ -152,6 +207,8 @@ export interface AppUpdateState {
 export interface IpcMethods {
   getTodayLiveState: { args: undefined; result: TodayLiveState }
   getHistorySummary: { args: { periodDays: 7 | 30 | 90 | 365 }; result: HistorySummary }
+  getUsageSummary: { args: UsageSummaryArgs; result: UsageSummary }
+  refreshUsage: { args: void; result: UsageRefreshResult }
   getMenubarState: { args: undefined; result: MenubarState }
   getAgentStatus: { args: undefined; result: AgentStatus[] }
   getConfig: { args: undefined; result: VibetimeConfig }
@@ -174,7 +231,7 @@ export interface IpcMethods {
 export type IpcChannel = keyof IpcMethods
 
 export type IpcPushEvent = {
-  type: 'db-changed' | 'update-state-changed'
+  type: 'db-changed' | 'update-state-changed' | 'usage-changed'
   agent?: string
   event_type?: string
   session_id?: string
