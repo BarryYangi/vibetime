@@ -50,15 +50,20 @@ export type {
 export { allocateDurationByLocalDay, durationWithinWindow, resolveTurnInterval } from './time.js'
 export { scanClaudeUsageTranscript, scanClaudeUsageTranscripts } from './usage/claude-scanner.js'
 export { scanCodexUsageTranscript, scanCodexUsageTranscripts } from './usage/codex-scanner.js'
+export { buildUsageSummary } from './usage/aggregate.js'
 export {
   estimateUsageCostUsd,
   lookupUsagePrice,
   normalizeLiteLlmPricingPayload,
   pricingStatusFromCache,
 } from './usage/pricing.js'
+export { reconcileUsageWithHookEvents } from './usage/reconcile.js'
 export type {
+  UsageAuditRow,
   UsageAgent,
   UsageAttributionMethod,
+  UsageAvailableFilters,
+  UsageDailySummaryRow,
   UsagePersistableMeta,
   UsagePricingEntry,
   UsagePricingStatus,
@@ -70,6 +75,7 @@ export type {
   UsageSummary,
   UsageSummaryArgs,
   UsageSummaryBreakdownRow,
+  UsageSummaryTotals,
   UsageTokenBreakdown,
   UsageTranscriptCandidate,
 } from './usage/types.js'

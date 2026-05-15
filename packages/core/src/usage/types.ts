@@ -86,22 +86,56 @@ export interface UsageSummaryArgs {
   periodDays: 7 | 30 | 90 | 365
   now?: Date
   agents?: UsageAgent[]
+  prices?: UsagePricingEntry[]
+  pricingStatus?: UsagePricingStatus
 }
 
 export interface UsageSummaryBreakdownRow {
   key: string
+  label: string
   tokens: UsageTokenBreakdown
+  totalTokens: number
   estimatedCostUsd: number | null
+  unknownCostTokens: number
+  recordCount: number
+}
+
+export interface UsageSummaryTotals {
+  totalTokens: number
+  estimatedCostUsd: number | null
+  unknownCostTokens: number
+  recordCount: number
+}
+
+export interface UsageDailySummaryRow extends UsageSummaryTotals {
+  date: string
+}
+
+export interface UsageAuditRow extends UsageSummaryTotals {
+  key: string
+  label: string
+  model?: string | null
+  project?: string | null
+  attributionMethod?: UsageAttributionMethod
+}
+
+export interface UsageAvailableFilters {
+  agents: UsageAgent[]
+  models: string[]
+  projects: string[]
 }
 
 export interface UsageSummary {
   periodDays: 7 | 30 | 90 | 365
-  tokens: UsageTokenBreakdown
-  estimatedCostUsd: number | null
+  totals: UsageSummaryTotals
+  daily: UsageDailySummaryRow[]
   pricingStatus: UsagePricingStatus
+  tokenBreakdown: UsageTokenBreakdown
   byAgent: UsageSummaryBreakdownRow[]
   byModel: UsageSummaryBreakdownRow[]
   byProject: UsageSummaryBreakdownRow[]
+  auditRows: UsageAuditRow[]
+  availableFilters: UsageAvailableFilters
 }
 
 export interface UsageRefreshResult {
