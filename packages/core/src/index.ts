@@ -8,6 +8,7 @@ export type {
   FindCodexTurnCompletionInTranscriptsInput,
 } from './codex-transcript.js'
 export { findCodexTurnCompletionInTranscripts } from './codex-transcript.js'
+export { scanClaudeUsageTranscript, scanClaudeUsageTranscripts } from './usage/claude-scanner.js'
 export { scanCodexUsageTranscript, scanCodexUsageTranscripts } from './usage/codex-scanner.js'
 export type { AdapterFn, Agent, EventType, NormalizedEvent } from './events.js'
 export type {
