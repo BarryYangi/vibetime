@@ -70,6 +70,8 @@ export const DDL_USAGE_SCAN_STATE = `CREATE TABLE usage_scan_state (
     size_bytes           INTEGER NOT NULL,
     last_scanned_at      REAL    NOT NULL,
     last_row_key         TEXT,
+    parsed_bytes         INTEGER,
+    scan_context         TEXT,
     PRIMARY KEY(agent, source_file_key)
 );` as const
 
@@ -93,13 +95,16 @@ export const DDL_INDICES = [
   'CREATE INDEX idx_events_session_id ON events(session_id);',
   // Speed up turn reconciliation / `hasTurnEnd` lookups by turn_id.
   'CREATE INDEX idx_events_turn_id ON events(turn_id) WHERE turn_id IS NOT NULL;',
+  'CREATE INDEX idx_events_usage_agent_type_ts ON events(agent, event_type, ts);',
 ] as const
 
 export const DDL_USAGE_INDICES = [
   'CREATE INDEX idx_usage_records_ts ON usage_records(ts) WHERE ts IS NOT NULL;',
   'CREATE INDEX idx_usage_records_agent_ts ON usage_records(agent, ts) WHERE ts IS NOT NULL;',
   'CREATE INDEX idx_usage_records_model ON usage_records(model);',
+  'CREATE INDEX idx_usage_records_model_ts ON usage_records(model, ts) WHERE ts IS NOT NULL;',
   'CREATE INDEX idx_usage_records_project ON usage_records(project) WHERE project IS NOT NULL;',
+  'CREATE INDEX idx_usage_records_project_ts ON usage_records(project, ts) WHERE project IS NOT NULL AND ts IS NOT NULL;',
   'CREATE INDEX idx_usage_records_turn_id ON usage_records(turn_id) WHERE turn_id IS NOT NULL;',
   'CREATE INDEX idx_usage_scan_state_agent ON usage_scan_state(agent);',
 ] as const

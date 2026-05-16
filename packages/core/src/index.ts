@@ -48,14 +48,16 @@ export type {
   TurnIntervalInput,
 } from './time.js'
 export { allocateDurationByLocalDay, durationWithinWindow, resolveTurnInterval } from './time.js'
-export { buildUsageSummary } from './usage/aggregate.js'
+export { buildUsagePeriodCompare, buildUsageSummary } from './usage/aggregate.js'
 export { scanClaudeUsageTranscript, scanClaudeUsageTranscripts } from './usage/claude-scanner.js'
 export { scanCodexUsageTranscript, scanCodexUsageTranscripts } from './usage/codex-scanner.js'
 export {
+  createUsagePriceResolver,
   estimateUsageCostUsd,
   lookupUsagePrice,
   normalizeLiteLlmPricingPayload,
   pricingStatusFromCache,
+  resolveUsagePrice,
 } from './usage/pricing.js'
 export { reconcileUsageWithHookEvents } from './usage/reconcile.js'
 export type {
@@ -63,13 +65,23 @@ export type {
   UsageAttributionMethod,
   UsageAuditRow,
   UsageAvailableFilters,
+  UsageCodexScannerContext,
   UsageDailySummaryRow,
+  UsageEfficiencyBreakdownRow,
+  UsageEfficiencyDailyRow,
+  UsageEfficiencySummary,
+  UsageEfficiencyTotals,
+  UsageMetricPeriodComparison,
+  UsagePeriodComparison,
   UsagePersistableMeta,
+  UsagePriceMatchKind,
+  UsagePriceResolution,
   UsagePricingEntry,
   UsagePricingStatus,
   UsageRecordFact,
   UsageRefreshFrequency,
   UsageRefreshResult,
+  UsageScannerContext,
   UsageScanResult,
   UsageScanState,
   UsageSummary,

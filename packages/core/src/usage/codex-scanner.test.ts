@@ -34,7 +34,7 @@ describe('scanCodexUsageTranscript', () => {
         cacheCreationInputTokens: 0,
         outputTokens: 210,
         reasoningOutputTokens: 48,
-        totalTokens: 1458,
+        totalTokens: 1410,
       },
     })
   })
@@ -57,7 +57,7 @@ describe('scanCodexUsageTranscript', () => {
         cacheCreationInputTokens: 0,
         outputTokens: 300,
         reasoningOutputTokens: 72,
-        totalTokens: 1172,
+        totalTokens: 1100,
       },
       {
         inputTokens: 550,
@@ -65,7 +65,7 @@ describe('scanCodexUsageTranscript', () => {
         cacheCreationInputTokens: 0,
         outputTokens: 180,
         reasoningOutputTokens: 30,
-        totalTokens: 760,
+        totalTokens: 730,
       },
     ])
   })
@@ -84,7 +84,7 @@ describe('scanCodexUsageTranscript', () => {
     expect(result.records.map((record) => record.tokens.reasoningOutputTokens)).toEqual([
       48, 72, 30, 0,
     ])
-    expect(result.records[0]?.tokens.totalTokens).toBe(1458)
+    expect(result.records[0]?.tokens.totalTokens).toBe(1410)
   })
 
   it('includes cache tokens when total_tokens is absent', () => {
@@ -110,10 +110,10 @@ describe('scanCodexUsageTranscript', () => {
     expect(result.records[0]?.tokens).toMatchObject({
       inputTokens: 100,
       cachedInputTokens: 40,
-      cacheCreationInputTokens: 10,
+      cacheCreationInputTokens: 0,
       outputTokens: 20,
       reasoningOutputTokens: 5,
-      totalTokens: 175,
+      totalTokens: 120,
     })
   })
 
@@ -127,6 +127,10 @@ describe('scanCodexUsageTranscript', () => {
           type: 'session_meta',
           payload: {
             id: 'real-codex-session',
+            cwd: '/Users/barry/Documents/Project/i/vibetime',
+            git: {
+              repository_url: 'https://github.com/BarryYangi/vibetime.git',
+            },
             model_provider: 'openai',
           },
         }),
@@ -135,6 +139,7 @@ describe('scanCodexUsageTranscript', () => {
           type: 'turn_context',
           payload: {
             turn_id: 'real-codex-turn',
+            cwd: '/Users/barry/Documents/Project/i/vibetime',
             model: 'gpt-5.5',
           },
         }),
@@ -168,6 +173,7 @@ describe('scanCodexUsageTranscript', () => {
       expect.objectContaining({
         sessionId: 'real-codex-session',
         turnId: 'real-codex-turn',
+        project: 'BarryYangi/vibetime',
         ts: 1778817612,
         model: 'gpt-5.5',
         tokens: {
@@ -176,10 +182,57 @@ describe('scanCodexUsageTranscript', () => {
           cacheCreationInputTokens: 0,
           outputTokens: 30,
           reasoningOutputTokens: 5,
-          totalTokens: 155,
+          totalTokens: 130,
         },
       }),
     ])
+  })
+
+  it('keeps a resolved Codex project label when a later Windows cwd appears', () => {
+    const result = scanCodexUsageTranscript({
+      sourceFileKey: 'codex/sessions/windows-cwd.jsonl',
+      sourceFileBasename: 'windows-cwd.jsonl',
+      content: [
+        JSON.stringify({
+          timestamp: '2026-05-15T03:59:00.000Z',
+          type: 'session_meta',
+          payload: {
+            id: 'codex-session-windows',
+            project: 'vibetime',
+            model_provider: 'openai',
+          },
+        }),
+        JSON.stringify({
+          timestamp: '2026-05-15T04:00:00.000Z',
+          type: 'turn_context',
+          payload: {
+            turn_id: 'codex-turn-windows',
+            cwd: 'C:\\Users\\barry\\Documents\\Project\\i\\vibetime',
+            model: 'gpt-5.5',
+          },
+        }),
+        JSON.stringify({
+          timestamp: '2026-05-15T04:00:12.000Z',
+          type: 'event_msg',
+          payload: {
+            type: 'token_count',
+            info: {
+              last_token_usage: {
+                input_tokens: 100,
+                cached_input_tokens: 20,
+                output_tokens: 30,
+                reasoning_output_tokens: 5,
+              },
+            },
+          },
+        }),
+      ].join('\n'),
+    })
+
+    expect(result.records[0]).toMatchObject({
+      project: 'vibetime',
+      turnId: 'codex-turn-windows',
+    })
   })
 
   it('ignores malformed rows', () => {
@@ -226,5 +279,58 @@ describe('scanCodexUsageTranscript', () => {
     expect(secondScan.records.map((record) => record.sourceRowKey)).toEqual(
       firstScan.records.map((record) => record.sourceRowKey),
     )
+  })
+
+  it('does not deduplicate separate Codex token rows that share a turn id', () => {
+    const result = scanCodexUsageTranscript({
+      sourceFileKey: 'codex/sessions/shared-turn-id.jsonl',
+      sourceFileBasename: 'shared-turn-id.jsonl',
+      content: [
+        JSON.stringify({
+          timestamp: '2026-05-15T03:00:00.000Z',
+          type: 'turn_context',
+          payload: { turn_id: 'codex-turn-shared', model: 'gpt-5.5' },
+        }),
+        JSON.stringify({
+          timestamp: '2026-05-15T03:00:10.000Z',
+          type: 'event_msg',
+          payload: {
+            type: 'token_count',
+            id: 'codex-turn-shared',
+            info: {
+              last_token_usage: {
+                input_tokens: 100,
+                cached_input_tokens: 20,
+                output_tokens: 30,
+                reasoning_output_tokens: 5,
+              },
+            },
+          },
+        }),
+        JSON.stringify({
+          timestamp: '2026-05-15T03:00:20.000Z',
+          type: 'event_msg',
+          payload: {
+            type: 'token_count',
+            id: 'codex-turn-shared',
+            info: {
+              last_token_usage: {
+                input_tokens: 50,
+                cached_input_tokens: 10,
+                output_tokens: 15,
+                reasoning_output_tokens: 2,
+              },
+            },
+          },
+        }),
+      ].join('\n'),
+    })
+
+    expect(result.records).toHaveLength(2)
+    expect(result.records.map((record) => record.turnId)).toEqual([
+      'codex-turn-shared',
+      'codex-turn-shared',
+    ])
+    expect(result.records.map((record) => record.tokens.totalTokens)).toEqual([130, 65])
   })
 })

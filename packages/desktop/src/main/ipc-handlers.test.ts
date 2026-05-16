@@ -8,9 +8,10 @@ const configMocks = vi.hoisted(() => ({
 }))
 const mocks = vi.hoisted(() => ({
   notifyRenderer: vi.fn(),
+  queryUsageRefreshState: vi.fn(),
   queryUsageSummary: vi.fn(),
-  runUsageRefresh: vi.fn(),
   startUsageBackgroundRefresh: vi.fn(),
+  startUsageRefreshJob: vi.fn(),
 }))
 
 vi.mock('electron', () => ({
@@ -57,9 +58,10 @@ vi.mock('./updater.js', () => ({
 }))
 
 vi.mock('./usage-service.js', () => ({
+  queryUsageRefreshState: mocks.queryUsageRefreshState,
   queryUsageSummary: mocks.queryUsageSummary,
-  runUsageRefresh: mocks.runUsageRefresh,
   startUsageBackgroundRefresh: mocks.startUsageBackgroundRefresh,
+  startUsageRefreshJob: mocks.startUsageRefreshJob,
 }))
 
 const summary: UsageSummary = {
@@ -83,7 +85,7 @@ const summary: UsageSummary = {
 }
 
 const refreshResult: UsageRefreshResult = {
-  frequency: '30m',
+  frequency: '15m',
   scannedAt: 1778814000,
   recordsFound: 0,
   recordsInserted: 0,
@@ -108,7 +110,7 @@ describe('usage IPC handlers', () => {
         open_at_login: false,
         theme: 'system',
         last_view: '/',
-        usage_refresh_frequency: '30m',
+        usage_refresh_frequency: '15m',
       },
     })
     const { registerIpcHandlers } = await import('./ipc-handlers.js')
@@ -153,41 +155,51 @@ describe('usage IPC handlers', () => {
     })
   })
 
-  it('refreshes usage with pricing and emits usage-changed after success', async () => {
-    mocks.runUsageRefresh.mockResolvedValue(refreshResult)
+  it('starts usage refresh with pricing without waiting for the background job', async () => {
+    mocks.startUsageRefreshJob.mockReturnValue(refreshResult)
 
     await expect(invoke('refreshUsage')).resolves.toEqual({ ok: true, data: refreshResult })
-    expect(mocks.runUsageRefresh).toHaveBeenCalledWith({ refreshPricing: true })
-    expect(mocks.notifyRenderer).toHaveBeenCalledWith({ type: 'usage-changed' })
+    expect(mocks.startUsageRefreshJob).toHaveBeenCalledWith({ refreshPricing: true })
+    expect(mocks.notifyRenderer).not.toHaveBeenCalledWith({ type: 'usage-changed' })
+  })
+
+  it('returns the current background usage refresh state', async () => {
+    const refreshState = { status: 'loading', error: null, lastResult: refreshResult }
+    mocks.queryUsageRefreshState.mockReturnValue(refreshState)
+
+    await expect(invoke('getUsageRefreshState')).resolves.toEqual({
+      ok: true,
+      data: refreshState,
+    })
   })
 
   it('maps usage refresh frequency through app preferences', async () => {
     await expect(invoke('getAppPreferences')).resolves.toEqual(
       expect.objectContaining({
         ok: true,
-        data: expect.objectContaining({ usageRefreshFrequency: '30m' }),
+        data: expect.objectContaining({ usageRefreshFrequency: '15m' }),
       }),
     )
   })
 
   it('persists valid usage refresh frequency and reschedules background refresh immediately', async () => {
-    await expect(invoke('updateAppPreferences', { usageRefreshFrequency: '15m' })).resolves.toEqual(
+    await expect(invoke('updateAppPreferences', { usageRefreshFrequency: '1m' })).resolves.toEqual(
       expect.objectContaining({
         ok: true,
-        data: expect.objectContaining({ usageRefreshFrequency: '15m' }),
+        data: expect.objectContaining({ usageRefreshFrequency: '1m' }),
       }),
     )
 
     expect(configMocks.writeConfig).toHaveBeenCalledWith(
       expect.objectContaining({
-        app: expect.objectContaining({ usage_refresh_frequency: '15m' }),
+        app: expect.objectContaining({ usage_refresh_frequency: '1m' }),
       }),
     )
-    expect(mocks.startUsageBackgroundRefresh).toHaveBeenCalledWith('15m')
+    expect(mocks.startUsageBackgroundRefresh).toHaveBeenCalledWith('1m')
   })
 
   it('rejects invalid usageRefreshFrequency preferences without persisting', async () => {
-    await expect(invoke('updateAppPreferences', { usageRefreshFrequency: '5m' })).resolves.toEqual(
+    await expect(invoke('updateAppPreferences', { usageRefreshFrequency: '4h' })).resolves.toEqual(
       expect.objectContaining({ ok: false, error: expect.stringMatching(/usageRefreshFrequency/) }),
     )
 

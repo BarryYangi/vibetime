@@ -3,12 +3,18 @@ import { getAgentColorHex } from '@vibetime/core'
 import type {
   CustomSeriesRenderItemAPI,
   CustomSeriesRenderItemParams,
+  EChartsCoreOption,
 } from 'echarts/types/dist/echarts'
 import { useAtomValue } from 'jotai'
 import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useResolvedColorScheme } from '@/appearance'
-import { type EChartsCoreOption, echarts } from '@/charts/echarts'
+import { useChart } from '@/charts/useEChart'
+import {
+  AnalyticsPanelSkeleton,
+  AnalyticsSummarySkeleton,
+  AnalyticsTableSkeleton,
+} from '@/components/analytics/AnalyticsSkeleton'
 import { PageShell } from '@/components/PageShell'
 import { getAgentTheme, StackedProgress } from '@/components/StackedProgress'
 import { Spinner } from '@/components/ui/spinner'
@@ -21,6 +27,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsList, TabsTab } from '@/components/ui/tabs'
+import { useStaleCachedQuery } from '@/hooks/useStaleCachedQuery'
 import {
   calendarDayLabels,
   calendarMonthLabels,
@@ -238,36 +245,6 @@ function quantile(values: number[], q: number): number {
   const next = values[base + 1]
   if (next === undefined) return values[base] ?? 0
   return (values[base] ?? 0) + rest * (next - (values[base] ?? 0))
-}
-
-function useChart(
-  ref: React.RefObject<HTMLDivElement | null>,
-  options: EChartsCoreOption | null,
-  themeName: string,
-) {
-  const chartRef = useRef<ReturnType<typeof echarts.init> | null>(null)
-  const optionsRef = useRef(options)
-  optionsRef.current = options
-
-  useEffect(() => {
-    if (!ref.current) return
-    const chart = echarts.init(ref.current, themeName)
-    chartRef.current = chart
-    if (optionsRef.current) chart.setOption(optionsRef.current, true)
-    const resize = () => chart.resize()
-    window.addEventListener('resize', resize)
-    return () => {
-      window.removeEventListener('resize', resize)
-      chartRef.current = null
-      chart.dispose()
-    }
-  }, [ref, themeName])
-
-  useEffect(() => {
-    const chart = chartRef.current
-    if (!chart || !options) return
-    chart.setOption(options, true)
-  }, [options])
 }
 
 function CalendarHeatmap({
@@ -957,41 +934,92 @@ function InsightBar({ items }: { items: Array<{ label: string; value: string }> 
   )
 }
 
+function HistoryLoadingSkeleton({
+  locale,
+  periodDays,
+  setPeriodDays,
+  t,
+}: {
+  locale: string
+  periodDays: HistorySummary['periodDays']
+  setPeriodDays: (periodDays: HistorySummary['periodDays']) => void
+  t: TFunction
+}) {
+  return (
+    <PageShell className="flex flex-col gap-5 py-7 sm:px-7 sm:py-8" fluid>
+      <header className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-[13px] text-muted-foreground">{t('history.retrospective')}</p>
+          <h1 className="font-heading text-2xl font-semibold">{t('history.title')}</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <Spinner className="h-3.5 w-3.5 text-muted-foreground" />
+          <Tabs
+            value={periodDays.toString()}
+            onValueChange={(v) => setPeriodDays(Number(v) as (typeof PERIODS)[number])}
+          >
+            <TabsList>
+              {PERIODS.map((period) => (
+                <TabsTab
+                  key={period}
+                  value={period.toString()}
+                  className="h-6 px-2.5 font-heading text-[11.5px] tracking-tight tabular-nums"
+                >
+                  {formatPeriodLabel(period, locale)}
+                </TabsTab>
+              ))}
+            </TabsList>
+          </Tabs>
+        </div>
+      </header>
+
+      <AnalyticsSummarySkeleton
+        detailClassName="h-3 w-36"
+        itemClassName="rounded-[18px]"
+        valueClassName="h-8 w-28"
+      />
+
+      <AnalyticsPanelSkeleton chartHeightClassName="h-[138px]" showInsights />
+      <AnalyticsPanelSkeleton chartHeightClassName="h-[220px]" showInsights />
+      <AnalyticsPanelSkeleton chartHeightClassName="h-[260px]" showInsights />
+
+      <section className="grid gap-5 xl:grid-cols-2">
+        <AnalyticsPanelSkeleton chartHeightClassName="h-[220px]" showInsights />
+        <AnalyticsPanelSkeleton chartHeightClassName="h-[220px]" showInsights />
+      </section>
+
+      <AnalyticsTableSkeleton />
+    </PageShell>
+  )
+}
+
 export default function History() {
   const colorScheme = useResolvedColorScheme()
   const { locale, t } = useI18n()
   const [periodDays, setPeriodDays] = useState<HistorySummary['periodDays']>(30)
   const summaries = useAtomValue(historySummariesAtom)
   const exactSummary = summaries[periodDays] ?? null
-  const [visibleSummary, setVisibleSummary] = useState<HistorySummary | null>(null)
-  const summary = exactSummary ?? visibleSummary
-  const isLoadingPeriod = summary !== null && exactSummary === null
-  const [error, setError] = useState<string | null>(null)
+  const refreshSummary = useCallback(() => refreshHistorySummary(periodDays), [periodDays])
+  const {
+    error,
+    isInitialLoading,
+    isStaleLoading: isLoadingPeriod,
+    visibleValue: summary,
+  } = useStaleCachedQuery({
+    cacheKey: String(periodDays),
+    cachedValue: exactSummary,
+    refresh: refreshSummary,
+  })
   const [sortKey, setSortKey] = useState<SortKey>('total')
   const [sortAsc, setSortAsc] = useState(false)
   const chartThemeName = getChartThemeName(colorScheme)
   const tokens = getChartTokens(colorScheme)
 
   useEffect(() => {
-    if (exactSummary) setVisibleSummary(exactSummary)
-  }, [exactSummary])
-
-  useEffect(() => {
-    let alive = true
-    setError(null)
-    refreshHistorySummary(periodDays)
-      .then((result) => {
-        if (!alive) return
-        if (result && !result.ok) setError(result.error)
-      })
-      .catch((err) => {
-        if (alive) setError(String(err))
-      })
     return () => {
-      alive = false
       clearActiveHistoryPeriod()
     }
-  }, [periodDays])
+  }, [])
 
   const sortedRows = useMemo(() => {
     if (!summary) return []
@@ -1104,8 +1132,15 @@ export default function History() {
     }
   }, [stats, summary])
 
-  if (!summary && !error) {
-    return <div className="h-full bg-background" />
+  if (isInitialLoading) {
+    return (
+      <HistoryLoadingSkeleton
+        locale={locale}
+        periodDays={periodDays}
+        setPeriodDays={setPeriodDays}
+        t={t}
+      />
+    )
   }
 
   if (!summary || summary.topProjects.length === 0) {

@@ -1,5 +1,4 @@
 import type { ResolvedColorScheme } from '../appearance'
-import { echarts } from './echarts'
 
 const chartFontFamily =
   '"SN Pro", -apple-system, BlinkMacSystemFont, system-ui, ui-sans-serif, sans-serif'
@@ -65,6 +64,11 @@ const cossNeutralDarkTheme = {
   },
 }
 
+export const CHART_THEME_DEFINITIONS = [
+  { name: 'cossNeutral', theme: cossNeutralTheme },
+  { name: 'cossNeutralDark', theme: cossNeutralDarkTheme },
+] as const
+
 const chartTokens = {
   light: {
     axisLabel: '#737373',
@@ -109,9 +113,6 @@ const chartTokens = {
     weakAxisLabel: '#737373',
   },
 } as const
-
-echarts.registerTheme('cossNeutral', cossNeutralTheme)
-echarts.registerTheme('cossNeutralDark', cossNeutralDarkTheme)
 
 export function getChartThemeName(colorScheme: ResolvedColorScheme) {
   return chartThemeNames[colorScheme]

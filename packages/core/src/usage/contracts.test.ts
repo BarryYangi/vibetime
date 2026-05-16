@@ -8,7 +8,7 @@ describe('usage contracts', () => {
   })
 
   it('defines supported usage refresh frequencies', () => {
-    expect(USAGE_REFRESH_FREQUENCIES).toEqual(['15m', '30m', '1h', '4h'])
+    expect(USAGE_REFRESH_FREQUENCIES).toEqual(['manual', '1m', '2m', '5m', '15m', '30m'])
   })
 
   it('defines idempotent usage storage ddl without transcript fields', () => {

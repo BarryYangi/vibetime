@@ -12,6 +12,7 @@ import {
   refreshUsageSummary,
   runUsageRefresh,
   store,
+  syncUsageRefreshState,
   usageRefreshStateAtom,
   usageSummariesAtom,
   usageSummaryCacheKey,
@@ -176,10 +177,32 @@ describe('usage renderer store', () => {
     expect(invoke).toHaveBeenCalledOnce()
     expect(invoke).toHaveBeenCalledWith('refreshUsage')
     expect(store.get(usageRefreshStateAtom)).toEqual({
+      status: 'loading',
+      error: null,
+      lastResult: refreshResult,
+    })
+
+    handlePush({ type: 'usage-refresh-finished', usageRefresh: refreshResult })
+
+    expect(store.get(usageRefreshStateAtom)).toEqual({
       status: 'success',
       error: null,
       lastResult: refreshResult,
     })
+  })
+
+  it('syncs background Usage refresh state from the main process', async () => {
+    const refreshResult = makeUsageRefreshResult()
+    const refreshState = { status: 'loading' as const, error: null, lastResult: refreshResult }
+    const invoke = vi.fn(async (channel: string) => {
+      if (channel === 'getUsageRefreshState') return { ok: true, data: refreshState }
+      return { ok: false, error: 'unexpected channel' }
+    })
+    vi.stubGlobal('window', { api: { invoke } })
+
+    await expect(syncUsageRefreshState()).resolves.toEqual({ ok: true, data: refreshState })
+
+    expect(store.get(usageRefreshStateAtom)).toEqual(refreshState)
   })
 
   it('refreshes Usage on push only after Usage has loaded once', async () => {
@@ -202,8 +225,75 @@ describe('usage renderer store', () => {
 
     await refreshUsageSummary(baseArgs)
     handlePush({ type: 'usage-changed' })
-    await flushPromises()
+    await new Promise((resolve) => setTimeout(resolve, 400))
 
     expect(calls).toEqual(['getUsageSummary', 'getUsageSummary'])
+  })
+
+  it('keeps Usage refresh loading until the background refresh finishes', async () => {
+    const refreshResult = makeUsageRefreshResult()
+    const calls: string[] = []
+    const invoke = vi.fn(async (channel: string) => {
+      calls.push(channel)
+      if (channel === 'refreshUsage') return { ok: true, data: refreshResult }
+      if (channel === 'getUsageSummary') return { ok: true, data: makeUsageSummary(30, 88) }
+      return { ok: false, error: 'unexpected channel' }
+    })
+    vi.stubGlobal('window', { api: { invoke } })
+
+    await refreshUsageSummary(baseArgs)
+    await runUsageRefresh()
+    handlePush({ type: 'usage-changed' })
+    await new Promise((resolve) => setTimeout(resolve, 1600))
+
+    expect(calls).toEqual(['getUsageSummary', 'refreshUsage', 'getUsageSummary'])
+    expect(store.get(usageRefreshStateAtom).status).toBe('loading')
+
+    handlePush({ type: 'usage-refresh-finished', usageRefresh: refreshResult })
+    await new Promise((resolve) => setTimeout(resolve, 400))
+
+    expect(calls).toEqual(['getUsageSummary', 'refreshUsage', 'getUsageSummary', 'getUsageSummary'])
+    expect(store.get(usageRefreshStateAtom).status).toBe('success')
+  })
+
+  it('caches partial first-sync summaries while refresh is loading', async () => {
+    const refreshResult = makeUsageRefreshResult()
+    const calls: string[] = []
+    const invoke = vi.fn(async (channel: string) => {
+      calls.push(channel)
+      if (channel === 'getUsageSummary') {
+        return {
+          ok: true,
+          data: makeUsageSummary(30, calls.length === 1 ? 10 : 1000),
+        }
+      }
+      return { ok: false, error: 'unexpected channel' }
+    })
+    vi.stubGlobal('window', { api: { invoke } })
+    store.set(usageRefreshStateAtom, { status: 'loading', error: null, lastResult: null })
+
+    await refreshUsageSummary(baseArgs)
+
+    expect(store.get(usageSummariesAtom)[usageSummaryCacheKey(baseArgs)]?.totals.totalTokens).toBe(
+      10,
+    )
+
+    handlePush({ type: 'usage-changed' })
+    await new Promise((resolve) => setTimeout(resolve, 1600))
+
+    expect(calls).toEqual(['getUsageSummary', 'getUsageSummary'])
+    expect(store.get(usageSummariesAtom)[usageSummaryCacheKey(baseArgs)]?.totals.totalTokens).toBe(
+      1000,
+    )
+    expect(store.get(usageRefreshStateAtom).status).toBe('loading')
+
+    handlePush({ type: 'usage-refresh-finished', usageRefresh: refreshResult })
+    await new Promise((resolve) => setTimeout(resolve, 400))
+
+    expect(calls).toEqual(['getUsageSummary', 'getUsageSummary', 'getUsageSummary'])
+    expect(store.get(usageSummariesAtom)[usageSummaryCacheKey(baseArgs)]?.totals.totalTokens).toBe(
+      1000,
+    )
+    expect(store.get(usageRefreshStateAtom).status).toBe('success')
   })
 })

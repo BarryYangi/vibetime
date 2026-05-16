@@ -21,11 +21,11 @@ export interface VibetimeConfig {
     open_at_login: boolean
     theme: 'system' | 'light' | 'dark'
     last_view: string
-    usage_refresh_frequency: '15m' | '30m' | '1h' | '4h'
+    usage_refresh_frequency: 'manual' | '1m' | '2m' | '5m' | '15m' | '30m'
   }
 }
 
-const USAGE_REFRESH_FREQUENCIES = ['15m', '30m', '1h', '4h'] as const
+const USAGE_REFRESH_FREQUENCIES = ['manual', '1m', '2m', '5m', '15m', '30m'] as const
 
 const DEFAULT_CONFIG: VibetimeConfig = {
   projects: {},
@@ -37,7 +37,7 @@ const DEFAULT_CONFIG: VibetimeConfig = {
     open_at_login: false,
     theme: 'system',
     last_view: '/',
-    usage_refresh_frequency: '30m',
+    usage_refresh_frequency: '15m',
   },
 }
 

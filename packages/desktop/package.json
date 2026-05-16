@@ -18,7 +18,9 @@
     "pack:win": "pnpm run generate:icons && pnpm run build && electron-builder --win --x64 --dir",
     "dist:win": "pnpm run generate:icons && pnpm run build && electron-builder --win --x64 --publish never",
     "preview": "electron-vite preview",
-    "rebuild:native": "electron-rebuild -f -w better-sqlite3",
+    "rebuild:native": "pnpm run rebuild:native:electron",
+    "rebuild:native:electron": "electron-rebuild -f -w better-sqlite3",
+    "rebuild:native:node": "pnpm rebuild better-sqlite3",
     "test": "vitest run"
   },
   "dependencies": {

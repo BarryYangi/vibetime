@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { buildUsageSummary } from './aggregate.js'
+import { buildUsagePeriodCompare, buildUsageSummary } from './aggregate.js'
 import { normalizeLiteLlmPricingPayload } from './pricing.js'
 import type { UsageRecordFact, UsageTokenBreakdown } from './types.js'
 
@@ -95,7 +95,7 @@ describe('buildUsageSummary', () => {
     expect(summary.daily.at(-1)).toMatchObject({ totalTokens: 150, recordCount: 1 })
   })
 
-  it('keeps unknown price and Unassigned usage rows visible in audit output', () => {
+  it('uses ccusage zero-cost fallback while keeping Unassigned usage auditable', () => {
     const summary = buildUsageSummary(
       [
         record({
@@ -114,20 +114,22 @@ describe('buildUsageSummary', () => {
       },
     )
 
-    expect(summary.totals.estimatedCostUsd).toBeNull()
-    expect(summary.totals.unknownCostTokens).toBe(580)
+    expect(summary.totals.estimatedCostUsd).toBe(0)
+    expect(summary.totals.unknownCostTokens).toBe(0)
     expect(summary.auditRows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           label: 'Cost unknown for this model',
           model: 'unknown-future-model',
+          estimatedCostUsd: 0,
+          unknownCostTokens: 0,
         }),
         expect.objectContaining({ label: 'Unassigned usage', attributionMethod: 'unmatched' }),
       ]),
     )
   })
 
-  it('treats partial pricing as unknown when used token categories are unpriced', () => {
+  it('treats unpriced token categories as zero cost like ccusage', () => {
     const summary = buildUsageSummary(
       [
         record({
@@ -162,18 +164,9 @@ describe('buildUsageSummary', () => {
       },
     )
 
-    expect(summary.totals.estimatedCostUsd).toBeNull()
-    expect(summary.totals.unknownCostTokens).toBe(150)
-    expect(summary.auditRows).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          key: 'unknown-price:partial-model',
-          label: 'Some token categories lack pricing',
-          model: 'partial-model',
-          unknownCostTokens: 150,
-        }),
-      ]),
-    )
+    expect(summary.totals.estimatedCostUsd).toBe(0.00075)
+    expect(summary.totals.unknownCostTokens).toBe(0)
+    expect(summary.auditRows).toEqual([])
   })
 
   it('sorts project model and agent breakdowns by tokens descending', () => {
@@ -203,5 +196,61 @@ describe('buildUsageSummary', () => {
     expect(summary.byProject.map((row) => row.key)).toEqual(['big-project', 'small-project'])
     expect(summary.byModel.map((row) => row.key)).toEqual(['gpt-5-codex', 'claude-sonnet-4-5'])
     expect(summary.byAgent.map((row) => row.key)).toEqual(['codex', 'claude-code'])
+  })
+
+  it('builds previous-period comparisons only when comparable values exist', () => {
+    const prices = normalizeLiteLlmPricingPayload(pricingFixture(), '2026-05-15T00:00:00.000Z')
+    const current = buildUsageSummary(
+      [record({ tokens: tokens({ inputTokens: 200, outputTokens: 100, totalTokens: 300 }) })],
+      {
+        periodDays: 7,
+        now: new Date('2026-05-15T12:00:00.000Z'),
+        prices,
+        pricingStatus: 'fresh',
+      },
+    )
+    const previous = buildUsageSummary(
+      [
+        record({
+          ts: Date.parse('2026-05-08T12:00:00.000Z') / 1000,
+          tokens: tokens({ inputTokens: 100, outputTokens: 50, totalTokens: 150 }),
+        }),
+      ],
+      {
+        periodDays: 7,
+        now: new Date('2026-05-08T12:00:00.000Z'),
+        prices,
+        pricingStatus: 'fresh',
+      },
+    )
+
+    const comparison = buildUsagePeriodCompare(
+      {
+        ...current,
+        efficiency: {
+          ...current.efficiency,
+          totals: { ...current.efficiency.totals, costPerHourUsd: 4 },
+        },
+      },
+      {
+        ...previous,
+        efficiency: {
+          ...previous.efficiency,
+          totals: { ...previous.efficiency.totals, durationSec: 3600, costPerHourUsd: 2 },
+        },
+      },
+    )
+
+    expect(comparison.estimatedCostUsd.previousValue).toBe(previous.totals.estimatedCostUsd)
+    expect(comparison.estimatedCostUsd.deltaRatio).toBeCloseTo(1)
+    expect(comparison.costPerHourUsd.delta).toBe(2)
+
+    const emptyPrevious = buildUsageSummary([], {
+      periodDays: 7,
+      now: new Date('2026-05-08T12:00:00.000Z'),
+      prices,
+      pricingStatus: 'fresh',
+    })
+    expect(buildUsagePeriodCompare(current, emptyPrevious).estimatedCostUsd.delta).toBeNull()
   })
 })

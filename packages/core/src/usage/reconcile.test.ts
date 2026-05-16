@@ -107,7 +107,7 @@ describe('reconcileUsageWithHookEvents', () => {
           agent: 'codex',
           sessionId: 'no-hook-session',
           turnId: 'no-hook-turn',
-          project: 'not-real',
+          project: null,
           ts: 1778800000,
         }),
       ],
@@ -116,6 +116,27 @@ describe('reconcileUsageWithHookEvents', () => {
 
     expect(attributed).toMatchObject({
       project: null,
+      attributionMethod: 'unmatched',
+      attributionConfidence: 0,
+    })
+  })
+
+  it('preserves scanner-provided project on unmatched rows', () => {
+    const [attributed] = reconcileUsageWithHookEvents(
+      [
+        record({
+          agent: 'claude-code',
+          sessionId: 'no-hook-session',
+          turnId: null,
+          project: 'repo-from-cwd',
+          ts: 1778800000,
+        }),
+      ],
+      HOOK_USAGE_EVENTS,
+    )
+
+    expect(attributed).toMatchObject({
+      project: 'repo-from-cwd',
       attributionMethod: 'unmatched',
       attributionConfidence: 0,
     })

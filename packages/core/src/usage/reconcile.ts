@@ -43,42 +43,67 @@ function applyAttribution(
   }
 }
 
+function scopedKey(agent: string, value: string | null | undefined): string | null {
+  return value ? `${agent}:${value}` : null
+}
+
+function pushWindow(
+  index: Map<string, HookWindow[]>,
+  key: string | null,
+  window: HookWindow,
+): void {
+  if (!key) return
+  const windows = index.get(key) ?? []
+  windows.push(window)
+  index.set(key, windows)
+}
+
 export function reconcileUsageWithHookEvents(
   records: readonly UsageRecordFact[],
   hookEvents: readonly HookEvent[],
 ): UsageRecordFact[] {
-  const windows = hookEvents.map(eventWindow)
+  const eventsByTurnId = new Map<string, HookEvent>()
+  const sessionWindows = new Map<string, HookWindow[]>()
+  const projectWindows = new Map<string, HookWindow[]>()
+
+  for (const event of hookEvents) {
+    const turnKey = scopedKey(event.agent, event.turn_id)
+    if (turnKey && !eventsByTurnId.has(turnKey)) eventsByTurnId.set(turnKey, event)
+
+    const window = eventWindow(event)
+    pushWindow(sessionWindows, scopedKey(event.agent, event.session_id), window)
+    if (event.project !== '_unknown') {
+      pushWindow(projectWindows, scopedKey(event.agent, event.project), window)
+    }
+  }
 
   return records.map((record) => {
-    const byTurnId =
-      record.turnId &&
-      hookEvents.find((event) => event.agent === record.agent && event.turn_id === record.turnId)
+    const byTurnId = record.turnId
+      ? eventsByTurnId.get(`${record.agent}:${record.turnId}`)
+      : undefined
     if (byTurnId) return applyAttribution(record, byTurnId, 'turn_id', 1)
 
-    const bySessionWindow = windows.find(
-      ({ event }) =>
-        event.agent === record.agent &&
-        event.session_id === record.sessionId &&
-        containsTs(eventWindow(event), record.ts),
-    )
+    const bySessionWindow = record.sessionId
+      ? sessionWindows
+          .get(`${record.agent}:${record.sessionId}`)
+          ?.find((window) => containsTs(window, record.ts))
+      : undefined
     if (bySessionWindow) {
       return applyAttribution(record, bySessionWindow.event, 'session_time_window', 0.8)
     }
 
-    const byProjectWindow = windows.find(
-      ({ event }) =>
-        event.agent === record.agent &&
-        event.project !== '_unknown' &&
-        event.project === record.project &&
-        containsTs(eventWindow(event), record.ts),
-    )
+    const byProjectWindow = record.project
+      ? projectWindows
+          .get(`${record.agent}:${record.project}`)
+          ?.find((window) => containsTs(window, record.ts))
+      : undefined
     if (byProjectWindow) {
       return applyAttribution(record, byProjectWindow.event, 'project_time_window', 0.5)
     }
 
     return {
       ...record,
-      project: null,
+      project: record.project ?? null,
       attributionMethod: 'unmatched',
       attributionConfidence: 0,
       meta: {

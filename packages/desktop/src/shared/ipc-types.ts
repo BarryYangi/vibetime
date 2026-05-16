@@ -1,6 +1,10 @@
 import type {
   UsageAuditRow,
   UsageDailySummaryRow,
+  UsageDataQualitySummary,
+  UsageEfficiencySummary,
+  UsagePeriodComparison,
+  UsageProjectModelMatrixCell,
   UsageSummaryBreakdownRow,
   UsageSummaryTotals,
   UsageTokenBreakdown,
@@ -13,7 +17,7 @@ export const APP_THEMES = ['system', 'light', 'dark'] as const
 export const HISTORY_PERIODS = [7, 30, 90, 365] as const
 export const USAGE_AGENTS = ['claude-code', 'codex'] as const
 export const USAGE_AGENT_FILTERS = ['all', 'claude-code', 'codex'] as const
-export const USAGE_REFRESH_FREQUENCIES = ['15m', '30m', '1h', '4h'] as const
+export const USAGE_REFRESH_FREQUENCIES = ['manual', '1m', '2m', '5m', '15m', '30m'] as const
 
 export interface TodaySummary {
   date: string
@@ -154,6 +158,10 @@ export interface UsageSummary {
   byAgent: UsageSummaryBreakdownRow[]
   byModel: UsageSummaryBreakdownRow[]
   byProject: UsageSummaryBreakdownRow[]
+  projectModelMatrix: UsageProjectModelMatrixCell[]
+  efficiency: UsageEfficiencySummary
+  periodCompare?: UsagePeriodComparison
+  dataQuality: UsageDataQualitySummary
   auditRows: UsageAuditRow[]
   availableFilters: UsageAvailableFilters
 }
@@ -164,6 +172,12 @@ export interface UsageRefreshResult {
   recordsFound: number
   recordsInserted: number
   pricingStatus: UsagePricingStatus
+}
+
+export interface UsageRefreshStateSnapshot {
+  status: 'idle' | 'loading' | 'success' | 'error'
+  error: string | null
+  lastResult: UsageRefreshResult | null
 }
 
 export interface MenubarState {
@@ -210,6 +224,7 @@ export interface IpcMethods {
   getTodayLiveState: { args: undefined; result: TodayLiveState }
   getHistorySummary: { args: { periodDays: 7 | 30 | 90 | 365 }; result: HistorySummary }
   getUsageSummary: { args: UsageSummaryArgs; result: UsageSummary }
+  getUsageRefreshState: { args: undefined; result: UsageRefreshStateSnapshot }
   refreshUsage: { args: undefined; result: UsageRefreshResult }
   getMenubarState: { args: undefined; result: MenubarState }
   getAgentStatus: { args: undefined; result: AgentStatus[] }
@@ -233,10 +248,17 @@ export interface IpcMethods {
 export type IpcChannel = keyof IpcMethods
 
 export type IpcPushEvent = {
-  type: 'db-changed' | 'update-state-changed' | 'usage-changed'
+  type:
+    | 'db-changed'
+    | 'update-state-changed'
+    | 'usage-changed'
+    | 'usage-refresh-started'
+    | 'usage-refresh-finished'
   agent?: string
   event_type?: string
   session_id?: string
   project?: string
   ts?: number
+  usageRefresh?: UsageRefreshResult
+  error?: string
 }

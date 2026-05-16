@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { mkdirSync, mkdtempSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -167,6 +168,97 @@ describe('runUsageRefresh', () => {
     expect(result.states).toEqual([])
   })
 
+  it('parses only appended Codex bytes after a file has scan state', () => {
+    const homeDir = createTempDir()
+    const sessionPath = join(homeDir, 'append-codex.jsonl')
+    const sourceFileKey = testSourceFileKey('codex', sessionPath)
+    const initialContent = [
+      JSON.stringify({
+        timestamp: '2026-05-15T10:00:00.000Z',
+        type: 'session_meta',
+        payload: { id: 'append-session' },
+      }),
+      JSON.stringify({
+        timestamp: '2026-05-15T10:00:05.000Z',
+        type: 'turn_context',
+        payload: { turn_id: 'append-turn', model: 'gpt-5.5' },
+      }),
+      JSON.stringify({
+        timestamp: '2026-05-15T10:00:12.000Z',
+        type: 'event_msg',
+        payload: {
+          type: 'token_count',
+          info: { last_token_usage: { input_tokens: 100, output_tokens: 40 } },
+        },
+      }),
+    ].join('\n')
+    writeFileSync(sessionPath, initialContent)
+
+    const firstStat = statSync(sessionPath)
+    const first = __usageServiceTestInternals.scanSourceFiles([
+      {
+        agent: 'codex',
+        path: sessionPath,
+        sourceFileKey,
+        sourceFileBasename: basename(sessionPath),
+        mtimeMs: firstStat.mtimeMs,
+        sizeBytes: firstStat.size,
+      },
+    ])
+    const firstState = first.states[0]
+    expect(first.records).toHaveLength(1)
+    expect(firstState?.parsedBytes).toBe(firstStat.size)
+
+    const appendedLine = JSON.stringify({
+      timestamp: '2026-05-15T10:00:20.000Z',
+      type: 'event_msg',
+      payload: {
+        type: 'token_count',
+        info: { last_token_usage: { input_tokens: 25, output_tokens: 5 } },
+      },
+    })
+    writeFileSync(sessionPath, `${initialContent}\n${appendedLine}`)
+    const secondStat = statSync(sessionPath)
+    const previousStates: NonNullable<
+      Parameters<typeof __usageServiceTestInternals.scanSourceFiles>[1]
+    > = new Map([
+      [
+        `${firstState.agent}:${firstState.sourceFileKey}`,
+        {
+          agent: firstState.agent,
+          source_file_key: firstState.sourceFileKey,
+          source_file_basename: firstState.sourceFileBasename,
+          mtime_ms: firstState.mtimeMs,
+          size_bytes: firstState.sizeBytes,
+          last_scanned_at: firstState.lastScannedAt,
+          last_row_key: firstState.lastRowKey ?? null,
+          parsed_bytes: firstState.parsedBytes ?? null,
+          scan_context: firstState.scanContext ? JSON.stringify(firstState.scanContext) : null,
+        },
+      ],
+    ])
+
+    const second = __usageServiceTestInternals.scanSourceFiles(
+      [
+        {
+          agent: 'codex',
+          path: sessionPath,
+          sourceFileKey,
+          sourceFileBasename: basename(sessionPath),
+          mtimeMs: secondStat.mtimeMs,
+          sizeBytes: secondStat.size,
+        },
+      ],
+      previousStates,
+    )
+
+    expect(second.records).toHaveLength(1)
+    expect(second.records[0]?.tokens).toMatchObject({ inputTokens: 25, outputTokens: 5 })
+    expect(second.records[0]?.sourceRowKey).toBe(`${sourceFileKey}:3`)
+    expect(second.replaceStates).toHaveLength(0)
+    expect(second.states[0]?.parsedBytes).toBe(secondStat.size)
+  })
+
   it('scans configured Claude and Codex roots incrementally and leaves Unassigned usage auditable', async () => {
     const db = createDb()
     initializeDesktopDbSchema(db)
@@ -247,6 +339,101 @@ describe('runUsageRefresh', () => {
         }),
       ]),
     )
+  })
+
+  it('scopes Codex roots to CODEX_HOME when configured', () => {
+    const homeDir = createTempDir()
+    const configuredCodexHome = join(homeDir, 'managed-codex')
+
+    expect(__usageServiceTestInternals.codexTranscriptRoots(homeDir, {})).toEqual([
+      join(homeDir, '.codex', 'sessions'),
+      join(homeDir, '.codex', 'archived_sessions'),
+    ])
+    expect(
+      __usageServiceTestInternals.codexTranscriptRoots(homeDir, {
+        CODEX_HOME: configuredCodexHome,
+      }),
+    ).toEqual([
+      join(configuredCodexHome, 'sessions'),
+      join(configuredCodexHome, 'archived_sessions'),
+    ])
+    expect(
+      __usageServiceTestInternals.codexTranscriptRoots(homeDir, {
+        CODEX_HOME: '~\\managed-codex',
+      }),
+    ).toEqual([
+      join(homeDir, 'managed-codex', 'sessions'),
+      join(homeDir, 'managed-codex', 'archived_sessions'),
+    ])
+  })
+
+  it('limits refresh scans to changed files unless Codex fork context is required', () => {
+    const homeDir = createTempDir()
+    const claudeA = join(homeDir, 'claude-a.jsonl')
+    const claudeB = join(homeDir, 'claude-b.jsonl')
+    const codexA = join(homeDir, 'codex-a.jsonl')
+    const codexFork = join(homeDir, 'codex-fork.jsonl')
+    writeFileSync(claudeA, '')
+    writeFileSync(claudeB, '')
+    writeFileSync(codexA, JSON.stringify({ type: 'session_meta', payload: { id: 'codex-a' } }))
+    writeFileSync(
+      codexFork,
+      JSON.stringify({
+        type: 'session_meta',
+        payload: { id: 'codex-fork', forked_from_id: 'codex-a' },
+      }),
+    )
+
+    const files = [
+      {
+        agent: 'claude-code' as const,
+        path: claudeA,
+        sourceFileKey: 'claude-a',
+        sourceFileBasename: basename(claudeA),
+        mtimeMs: 1,
+        sizeBytes: 1,
+      },
+      {
+        agent: 'claude-code' as const,
+        path: claudeB,
+        sourceFileKey: 'claude-b',
+        sourceFileBasename: basename(claudeB),
+        mtimeMs: 1,
+        sizeBytes: 1,
+      },
+      {
+        agent: 'codex' as const,
+        path: codexA,
+        sourceFileKey: 'codex-a',
+        sourceFileBasename: basename(codexA),
+        mtimeMs: 1,
+        sizeBytes: 1,
+      },
+      {
+        agent: 'codex' as const,
+        path: codexFork,
+        sourceFileKey: 'codex-fork',
+        sourceFileBasename: basename(codexFork),
+        mtimeMs: 1,
+        sizeBytes: 1,
+      },
+    ]
+
+    expect(
+      __usageServiceTestInternals
+        .scanScopeSourceFiles(files, [files[0]])
+        .map((file) => file.sourceFileKey),
+    ).toEqual(['claude-a'])
+    expect(
+      __usageServiceTestInternals
+        .scanScopeSourceFiles(files, [files[2]])
+        .map((file) => file.sourceFileKey),
+    ).toEqual(['codex-a'])
+    expect(
+      __usageServiceTestInternals
+        .scanScopeSourceFiles(files, [files[3]])
+        .map((file) => file.sourceFileKey),
+    ).toEqual(['codex-a', 'codex-fork'])
   })
 
   it('reattributes existing unmatched usage rows after hook events arrive later', async () => {
@@ -373,9 +560,493 @@ describe('runUsageRefresh', () => {
       sessionId: 'old-null-scan-session',
       turnId: 'old-null-scan-turn',
       model: 'gpt-5.5',
-      tokens: expect.objectContaining({ totalTokens: 155 }),
+      tokens: expect.objectContaining({ totalTokens: 130 }),
     })
     expect(state.last_row_key).not.toBeNull()
+  })
+
+  it('rescans old Claude files, drops synthetic rows, and resolves cwd projects', async () => {
+    const db = createDb()
+    initializeDesktopDbSchema(db)
+
+    const homeDir = createTempDir()
+    const claudeConfigDir = join(homeDir, '.claude')
+    const claudeProjectsDir = join(claudeConfigDir, 'projects', 'vibetime')
+    const projectDir = join(homeDir, 'workspace', 'real-project')
+    const subagentWorktreeDir = join(projectDir, '.claude', 'worktrees', 'agent-a6e43753')
+    mkdirSync(claudeProjectsDir, { recursive: true })
+    mkdirSync(subagentWorktreeDir, { recursive: true })
+    const sessionPath = join(claudeProjectsDir, 'claude-session.jsonl')
+    writeFileSync(
+      sessionPath,
+      [
+        JSON.stringify({
+          timestamp: '2026-05-15T10:00:00.000Z',
+          cwd: subagentWorktreeDir,
+          sessionId: 'claude-session',
+          requestId: 'request-synthetic',
+          type: 'assistant',
+          message: {
+            id: 'message-synthetic',
+            model: '<synthetic>',
+            usage: { input_tokens: 0, output_tokens: 0 },
+          },
+        }),
+        JSON.stringify({
+          timestamp: '2026-05-15T10:01:00.000Z',
+          cwd: subagentWorktreeDir,
+          sessionId: 'claude-session',
+          requestId: 'request-real',
+          type: 'assistant',
+          message: {
+            id: 'message-real',
+            model: 'claude-sonnet-4-5',
+            usage: {
+              input_tokens: 100,
+              cache_read_input_tokens: 25,
+              output_tokens: 40,
+            },
+          },
+        }),
+      ].join('\n'),
+    )
+
+    const stat = statSync(sessionPath)
+    const sourceKey = testSourceFileKey('claude-code', sessionPath)
+    db.prepare(`
+      INSERT INTO usage_scan_state (
+        agent, source_file_key, source_file_basename, mtime_ms, size_bytes, last_scanned_at, last_row_key
+      )
+      VALUES ('claude-code', ?, ?, ?, ?, 1778840000, NULL)
+    `).run(sourceKey, basename(sessionPath), stat.mtimeMs, stat.size)
+    upsertUsageRecords(db, [
+      usageRecord({
+        agent: 'claude-code',
+        sourceFileKey: sourceKey,
+        sourceFileBasename: basename(sessionPath),
+        sourceRowKey: 'claude-session:message-synthetic:request-synthetic',
+        sessionId: 'claude-session',
+        turnId: null,
+        project: null,
+        ts: 1778839200,
+        model: '<synthetic>',
+        tokens: {
+          inputTokens: 0,
+          cachedInputTokens: 0,
+          cacheCreationInputTokens: 0,
+          outputTokens: 0,
+          reasoningOutputTokens: 0,
+          totalTokens: 0,
+        },
+      }),
+    ])
+
+    const first = await runUsageRefresh({
+      db,
+      homeDir,
+      env: { CLAUDE_CONFIG_DIR: claudeConfigDir },
+      refreshPricing: false,
+    })
+    const second = await runUsageRefresh({
+      db,
+      homeDir,
+      env: { CLAUDE_CONFIG_DIR: claudeConfigDir },
+      refreshPricing: false,
+    })
+    const rows = readUsageRows(db, {
+      periodDays: 7,
+      now: new Date('2026-05-15T12:00:00.000Z'),
+    })
+    const state = db
+      .prepare('SELECT last_row_key FROM usage_scan_state WHERE agent = ? AND source_file_key = ?')
+      .get('claude-code', sourceKey) as { last_row_key: string | null }
+
+    expect(first.recordsFound).toBe(1)
+    expect(second.recordsFound).toBe(0)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      agent: 'claude-code',
+      sessionId: 'claude-session',
+      project: 'real-project',
+      model: 'claude-sonnet-4-5',
+      attributionMethod: 'unmatched',
+      tokens: expect.objectContaining({ totalTokens: 165 }),
+    })
+    expect(state.last_row_key).toContain('claude-usage-v7:')
+  })
+
+  it('accepts CLAUDE_CONFIG_DIR values that already point at projects directories', async () => {
+    const db = createDb()
+    initializeDesktopDbSchema(db)
+
+    const homeDir = createTempDir()
+    const projectsDir = join(homeDir, 'custom-claude', 'projects')
+    mkdirSync(projectsDir, { recursive: true })
+    writeFileSync(
+      join(projectsDir, 'direct-projects-root.jsonl'),
+      JSON.stringify({
+        timestamp: '2026-05-15T10:01:00.000Z',
+        sessionId: 'direct-projects-session',
+        requestId: 'request-direct-projects',
+        type: 'assistant',
+        message: {
+          id: 'message-direct-projects',
+          model: 'claude-opus-4-6',
+          usage: { input_tokens: 100, output_tokens: 40 },
+        },
+      }),
+    )
+
+    const result = await runUsageRefresh({
+      db,
+      homeDir,
+      env: { CLAUDE_CONFIG_DIR: `${join(homeDir, 'missing')}, ${projectsDir}` },
+      refreshPricing: false,
+    })
+    const [row] = readUsageRows(db, {
+      periodDays: 7,
+      now: new Date('2026-05-15T12:00:00.000Z'),
+    })
+
+    expect(result.recordsFound).toBe(1)
+    expect(row).toMatchObject({
+      agent: 'claude-code',
+      sessionId: 'direct-projects-session',
+      model: 'claude-opus-4-6',
+      tokens: expect.objectContaining({ totalTokens: 140 }),
+    })
+  })
+
+  it('groups Craft Agent session directories by their stable workspace parent', async () => {
+    const db = createDb()
+    initializeDesktopDbSchema(db)
+
+    const homeDir = createTempDir()
+    const claudeConfigDir = join(homeDir, '.claude')
+    const claudeProjectsDir = join(claudeConfigDir, 'projects', 'craft-session')
+    const craftWorkspaceDir = join(homeDir, '.craft-agent', 'workspaces', 'research')
+    const craftSessionDir = join(craftWorkspaceDir, 'sessions', '260422-apt-star')
+    mkdirSync(claudeProjectsDir, { recursive: true })
+    mkdirSync(craftSessionDir, { recursive: true })
+    writeFileSync(
+      join(craftWorkspaceDir, 'config.json'),
+      JSON.stringify({
+        id: 'ws_research',
+        name: 'Research Workspace',
+        slug: 'research',
+      }),
+    )
+    writeFileSync(
+      join(craftSessionDir, 'session.jsonl'),
+      `${JSON.stringify({
+        id: '260422-apt-star',
+        name: 'Skill Installation Help',
+        workspaceRootPath: '~/.craft-agent/workspaces/research',
+        sdkSessionId: 'craft-sdk-session',
+        sdkCwd: '~/.craft-agent/workspaces/research/sessions/260422-apt-star',
+      })}\n`,
+    )
+    writeFileSync(
+      join(claudeProjectsDir, 'craft-sdk-session.jsonl'),
+      JSON.stringify({
+        timestamp: '2026-05-15T10:01:00.000Z',
+        cwd: craftSessionDir,
+        sessionId: 'craft-sdk-session',
+        requestId: 'request-craft',
+        type: 'assistant',
+        message: {
+          id: 'message-craft',
+          model: 'claude-opus-4-6',
+          usage: {
+            input_tokens: 100,
+            cache_read_input_tokens: 25,
+            output_tokens: 40,
+          },
+        },
+      }),
+    )
+
+    await runUsageRefresh({
+      db,
+      homeDir,
+      env: { CLAUDE_CONFIG_DIR: claudeConfigDir },
+      refreshPricing: false,
+    })
+    const [row] = readUsageRows(db, {
+      periodDays: 7,
+      now: new Date('2026-05-15T12:00:00.000Z'),
+    })
+
+    expect(row).toMatchObject({
+      agent: 'claude-code',
+      project: 'Craft Agent / Research Workspace',
+      meta: expect.objectContaining({
+        projectResolutionKind: 'wrapper_workspace',
+        projectResolutionSource: 'craft-agent-session',
+        wrapperName: 'Craft Agent',
+        wrapperWorkspaceId: 'ws_research',
+        wrapperWorkspaceName: 'Research Workspace',
+        wrapperWorkspaceSlug: 'research',
+        wrapperSessionId: '260422-apt-star',
+        wrapperSessionName: 'Skill Installation Help',
+        wrapperSessionMatch: 'sdk_session_id',
+      }),
+    })
+  })
+
+  it('lifts generated workspace leaf directories to their stable parent project', async () => {
+    const db = createDb()
+    initializeDesktopDbSchema(db)
+
+    const homeDir = createTempDir()
+    const claudeConfigDir = join(homeDir, '.claude')
+    const claudeProjectsDir = join(claudeConfigDir, 'projects', 'generated-workspace')
+    const projectDir = join(homeDir, 'workspace', 'real-project')
+    const generatedDir = join(projectDir, 'workspace', '1dd6acf8-9ec2-4197-8f2c-05ceb446d8e6')
+    mkdirSync(claudeProjectsDir, { recursive: true })
+    mkdirSync(generatedDir, { recursive: true })
+    writeFileSync(
+      join(claudeProjectsDir, 'generated.jsonl'),
+      JSON.stringify({
+        timestamp: '2026-05-15T10:01:00.000Z',
+        cwd: generatedDir,
+        sessionId: 'generated-session',
+        requestId: 'request-generated',
+        type: 'assistant',
+        message: {
+          id: 'message-generated',
+          model: 'claude-opus-4-6',
+          usage: {
+            input_tokens: 100,
+            output_tokens: 40,
+          },
+        },
+      }),
+    )
+
+    await runUsageRefresh({
+      db,
+      homeDir,
+      env: { CLAUDE_CONFIG_DIR: claudeConfigDir },
+      refreshPricing: false,
+    })
+    const [row] = readUsageRows(db, {
+      periodDays: 7,
+      now: new Date('2026-05-15T12:00:00.000Z'),
+    })
+
+    expect(row).toMatchObject({
+      agent: 'claude-code',
+      project: 'real-project',
+      meta: expect.objectContaining({
+        projectResolutionKind: 'generated_parent',
+        projectResolutionSource: 'generated-workspace-parent',
+      }),
+    })
+  })
+
+  it('scans Codex archived_sessions alongside active sessions', async () => {
+    const db = createDb()
+    initializeDesktopDbSchema(db)
+
+    const homeDir = createTempDir()
+    const codexHome = join(homeDir, '.codex')
+    const activeDir = join(codexHome, 'sessions', '2026', '05', '15')
+    const archivedDir = join(codexHome, 'archived_sessions', '2026', '05', '14')
+    mkdirSync(activeDir, { recursive: true })
+    mkdirSync(archivedDir, { recursive: true })
+    writeFileSync(
+      join(activeDir, 'active.jsonl'),
+      JSON.stringify({
+        timestamp: '2026-05-15T10:20:12.000Z',
+        type: 'token_count',
+        session_id: 'active-session',
+        turn_id: 'active-turn',
+        model: 'gpt-5.5',
+        last_token_usage: { input_tokens: 100, output_tokens: 40 },
+      }),
+    )
+    writeFileSync(
+      join(archivedDir, 'archived.jsonl'),
+      JSON.stringify({
+        timestamp: '2026-05-14T10:20:12.000Z',
+        type: 'token_count',
+        session_id: 'archived-session',
+        turn_id: 'archived-turn',
+        model: 'gpt-5.5',
+        last_token_usage: { input_tokens: 200, output_tokens: 50 },
+      }),
+    )
+
+    const result = await runUsageRefresh({
+      db,
+      homeDir,
+      env: { CODEX_HOME: codexHome },
+      refreshPricing: false,
+    })
+    const rows = readUsageRows(db, { periodDays: 7, now: new Date('2026-05-15T12:00:00.000Z') })
+
+    expect(result.recordsFound).toBe(2)
+    expect(rows.map((row) => row.sessionId).sort()).toEqual(['active-session', 'archived-session'])
+  })
+
+  it('rescans Codex with parent context when a new forked session appears', async () => {
+    const db = createDb()
+    initializeDesktopDbSchema(db)
+
+    const homeDir = createTempDir()
+    const codexHome = join(homeDir, '.codex')
+    const sessionDir = join(codexHome, 'sessions', '2026', '05', '15')
+    mkdirSync(sessionDir, { recursive: true })
+    writeFileSync(
+      join(sessionDir, 'parent.jsonl'),
+      [
+        JSON.stringify({
+          timestamp: '2026-05-15T10:00:00.000Z',
+          type: 'session_meta',
+          payload: { id: 'parent-session' },
+        }),
+        JSON.stringify({
+          timestamp: '2026-05-15T10:00:05.000Z',
+          type: 'turn_context',
+          payload: { turn_id: 'parent-turn', model: 'gpt-5.5' },
+        }),
+        JSON.stringify({
+          timestamp: '2026-05-15T10:00:12.000Z',
+          type: 'event_msg',
+          payload: {
+            type: 'token_count',
+            info: {
+              total_token_usage: {
+                input_tokens: 100,
+                cached_input_tokens: 20,
+                output_tokens: 10,
+              },
+            },
+          },
+        }),
+      ].join('\n'),
+    )
+
+    await runUsageRefresh({
+      db,
+      homeDir,
+      env: { CODEX_HOME: codexHome },
+      refreshPricing: false,
+    })
+    writeFileSync(
+      join(sessionDir, 'child.jsonl'),
+      [
+        JSON.stringify({
+          timestamp: '2026-05-15T10:05:00.000Z',
+          type: 'session_meta',
+          payload: {
+            id: 'child-session',
+            forked_from_id: 'parent-session',
+            timestamp: '2026-05-15T10:05:00.000Z',
+          },
+        }),
+        JSON.stringify({
+          timestamp: '2026-05-15T10:05:05.000Z',
+          type: 'turn_context',
+          payload: { turn_id: 'child-turn', model: 'gpt-5.5' },
+        }),
+        JSON.stringify({
+          timestamp: '2026-05-15T10:05:12.000Z',
+          type: 'event_msg',
+          payload: {
+            type: 'token_count',
+            info: {
+              total_token_usage: {
+                input_tokens: 130,
+                cached_input_tokens: 20,
+                output_tokens: 15,
+              },
+            },
+          },
+        }),
+      ].join('\n'),
+    )
+
+    const second = await runUsageRefresh({
+      db,
+      homeDir,
+      env: { CODEX_HOME: codexHome },
+      refreshPricing: false,
+    })
+    const rows = readUsageRows(db, { periodDays: 7, now: new Date('2026-05-15T12:00:00.000Z') })
+
+    expect(second.recordsFound).toBe(2)
+    expect(rows.map((row) => [row.sessionId, row.tokens.totalTokens])).toEqual([
+      ['parent-session', 110],
+      ['child-session', 35],
+    ])
+    expect(rows.reduce((sum, row) => sum + row.tokens.totalTokens, 0)).toBe(145)
+  })
+
+  it('resolves git projects when the primary remote is not named origin', async () => {
+    const db = createDb()
+    initializeDesktopDbSchema(db)
+
+    const homeDir = createTempDir()
+    const codexHome = join(homeDir, '.codex')
+    const archivedDir = join(codexHome, 'archived_sessions')
+    const projectDir = join(homeDir, 'workspace', 'sider-video-agent')
+    mkdirSync(archivedDir, { recursive: true })
+    mkdirSync(projectDir, { recursive: true })
+    execFileSync('git', ['-C', projectDir, 'init'], { stdio: 'ignore' })
+    execFileSync(
+      'git',
+      [
+        '-C',
+        projectDir,
+        'remote',
+        'add',
+        'sider-video-agent',
+        'https://github.com/Sider-ai/sider-video-agent.git',
+      ],
+      { stdio: 'ignore' },
+    )
+    writeFileSync(
+      join(archivedDir, 'non-origin-remote.jsonl'),
+      [
+        JSON.stringify({
+          timestamp: '2026-05-15T10:00:00.000Z',
+          type: 'session_meta',
+          payload: {
+            id: 'codex-session',
+            cwd: projectDir,
+          },
+        }),
+        JSON.stringify({
+          timestamp: '2026-05-15T10:20:12.000Z',
+          type: 'token_count',
+          session_id: 'codex-session',
+          turn_id: 'codex-turn',
+          model: 'gpt-5.5',
+          last_token_usage: { input_tokens: 100, output_tokens: 40 },
+        }),
+      ].join('\n'),
+    )
+
+    await runUsageRefresh({
+      db,
+      homeDir,
+      env: { CODEX_HOME: codexHome },
+      refreshPricing: false,
+    })
+    const [row] = readUsageRows(db, {
+      periodDays: 7,
+      now: new Date('2026-05-15T12:00:00.000Z'),
+    })
+
+    expect(row).toMatchObject({
+      project: 'Sider-ai/sider-video-agent',
+      meta: expect.objectContaining({
+        projectResolutionKind: 'git',
+        projectResolutionSource: 'nearest-git-remote',
+      }),
+    })
   })
 
   it('refreshes LiteLLM pricing and falls back to cached or unavailable status on failure', async () => {
@@ -430,7 +1101,7 @@ describe('runUsageRefresh', () => {
 })
 
 describe('queryUsageSummary', () => {
-  it('uses cached pricing while preserving unknown model tokens', () => {
+  it('uses cached pricing while preserving unknown-price audit rows', () => {
     const db = createDb()
     initializeDesktopDbSchema(db)
     upsertUsagePricingCache(db, [pricingEntry()])
@@ -466,10 +1137,10 @@ describe('queryUsageSummary', () => {
 
     expect(summary.totals.totalTokens).toBe(285)
     expect(summary.totals.estimatedCostUsd).toBeGreaterThan(0)
-    expect(summary.totals.unknownCostTokens).toBe(110)
+    expect(summary.totals.unknownCostTokens).toBe(0)
     expect(summary.auditRows).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ model: 'unknown-future-model' }),
+        expect.objectContaining({ label: 'Cost unknown for this model' }),
         expect.objectContaining({ label: 'Unassigned usage' }),
       ]),
     )
@@ -578,14 +1249,25 @@ describe('usage background refresh cadence', () => {
     const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout')
     const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval')
 
-    startUsageBackgroundRefresh('15m')
-    expect(setTimeoutSpy).toHaveBeenLastCalledWith(expect.any(Function), 0)
-    expect(setIntervalSpy).toHaveBeenLastCalledWith(expect.any(Function), 15 * 60 * 1000)
+    startUsageBackgroundRefresh('2m')
+    expect(setTimeoutSpy).toHaveBeenLastCalledWith(expect.any(Function), 60_000)
+    expect(setIntervalSpy).toHaveBeenLastCalledWith(expect.any(Function), 2 * 60 * 1000)
 
-    startUsageBackgroundRefresh('1h')
+    startUsageBackgroundRefresh('5m')
     expect(clearTimeoutSpy).toHaveBeenCalled()
     expect(clearIntervalSpy).toHaveBeenCalled()
-    expect(setTimeoutSpy).toHaveBeenLastCalledWith(expect.any(Function), 0)
-    expect(setIntervalSpy).toHaveBeenLastCalledWith(expect.any(Function), 60 * 60 * 1000)
+    expect(setTimeoutSpy).toHaveBeenLastCalledWith(expect.any(Function), 60_000)
+    expect(setIntervalSpy).toHaveBeenLastCalledWith(expect.any(Function), 5 * 60 * 1000)
+  })
+
+  it('disables background timers for manual usage refresh', () => {
+    vi.useFakeTimers()
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
+    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval')
+
+    startUsageBackgroundRefresh('manual')
+
+    expect(setTimeoutSpy).not.toHaveBeenCalled()
+    expect(setIntervalSpy).not.toHaveBeenCalled()
   })
 })

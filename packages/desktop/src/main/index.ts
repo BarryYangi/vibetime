@@ -1,10 +1,13 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { readConfig } from '@vibetime/hook/config'
 import type { MenuItemConstructorOptions } from 'electron'
 import { app, BrowserWindow, Menu, nativeTheme } from 'electron'
 import {
+  getDb,
+  notifyRenderer,
   setDbChangeListener,
   startDbChangeWatcher,
   startReconcileLoop,
@@ -16,7 +19,15 @@ import { logger } from './logger.js'
 import { startNotifyServer, stopNotifyServer } from './notify-server.js'
 import { createMenubarTray, destroyMenubarTray, refreshMenubarTray } from './tray.js'
 import { startAutomaticUpdateChecks, stopAutomaticUpdateChecks } from './updater.js'
-import { startUsageBackgroundRefresh, stopUsageBackgroundRefresh } from './usage-service.js'
+import {
+  runUsageRefreshInUtilityProcess,
+  stopUsageRefreshUtilityProcess,
+} from './usage-refresh-process.js'
+import {
+  configureUsageServiceRuntime,
+  startUsageBackgroundRefresh,
+  stopUsageBackgroundRefresh,
+} from './usage-service.js'
 import {
   configureSessionSecurity,
   hardenWindow,
@@ -27,6 +38,7 @@ import {
 const APP_NAME = 'VibeTime'
 const MIN_WINDOW_WIDTH = 960
 const MIN_WINDOW_HEIGHT = 640
+const MAIN_MODULE_DIR = dirname(fileURLToPath(import.meta.url))
 
 let mainWindow: BrowserWindow | null = null
 let isQuitting = false
@@ -138,7 +150,7 @@ function loadRendererRoute(win: BrowserWindow, route: string): void {
   if (rendererUrl) {
     void win.loadURL(`${rendererUrl}#${hash}`)
   } else {
-    void win.loadFile(join(__dirname, '../renderer/index.html'), { hash })
+    void win.loadFile(join(MAIN_MODULE_DIR, '../renderer/index.html'), { hash })
   }
 }
 
@@ -161,7 +173,7 @@ function createMainWindow(route = lastViewRoute()): BrowserWindow {
         }
       : { autoHideMenuBar: true }),
     webPreferences: {
-      preload: join(__dirname, '../preload/index.mjs'),
+      preload: join(MAIN_MODULE_DIR, '../preload/index.mjs'),
       contextIsolation: true,
       // NOTE: sandbox stays false until preload is shipped as CJS. Electron
       // forbids ESM preload (.mjs) under sandbox: true and silently fails to
@@ -259,8 +271,8 @@ function resolvePackagedCliBinary(): string | null {
   return firstExistingPath([
     ...(process.env.VIBETIME_CLI_BINARY ? [process.env.VIBETIME_CLI_BINARY] : []),
     ...(resourcesPath ? [join(resourcesPath, 'bin', binaryName)] : []),
-    join(__dirname, '../../../hook', binaryName),
-    join(__dirname, '../../../hook/vibetime'),
+    join(MAIN_MODULE_DIR, '../../../hook', binaryName),
+    join(MAIN_MODULE_DIR, '../../../hook/vibetime'),
   ])
 }
 
@@ -291,6 +303,11 @@ if (isCliMode) {
   app.whenReady().then(() => {
     configureApplicationMenu()
     configureSessionSecurity()
+    configureUsageServiceRuntime({
+      getDb,
+      notifyRenderer,
+      runRefreshOutOfProcess: runUsageRefreshInUtilityProcess,
+    })
     registerIpcHandlers({ showMainWindow })
     startNotifyServer()
     startDbChangeWatcher()
@@ -315,6 +332,7 @@ if (isCliMode) {
     setDbChangeListener(null)
     stopAutomaticUpdateChecks()
     stopUsageBackgroundRefresh()
+    stopUsageRefreshUtilityProcess()
     destroyMenubarTray()
     stopNotifyServer()
     stopDbChangeWatcher()

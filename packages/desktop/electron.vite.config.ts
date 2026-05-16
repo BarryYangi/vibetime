@@ -25,6 +25,13 @@ export default defineConfig({
       externalizeDeps: {
         exclude: ['@vibetime/hook/config', '@vibetime/hook/install'],
       },
+      rollupOptions: {
+        external: ['better-sqlite3', 'electron'],
+        input: {
+          index: resolve('src/main/index.ts'),
+          'usage-refresh-worker': resolve('src/main/usage-refresh-worker.ts'),
+        },
+      },
     },
     resolve: {
       alias: {

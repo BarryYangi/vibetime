@@ -26,9 +26,9 @@ describe('readConfig — happy paths', () => {
     expect(config.projects).toEqual({})
     expect(typeof config.display.timezone).toBe('string')
     expect(config.display.timezone.length).toBeGreaterThan(0)
-    expect(config.app.usage_refresh_frequency).toBe('30m')
+    expect(config.app.usage_refresh_frequency).toBe('15m')
     expect(readFileSync(`${tempHome}/.vibetime/config.toml`, 'utf-8')).toContain(
-      'usage_refresh_frequency = "30m"',
+      'usage_refresh_frequency = "15m"',
     )
   })
 
@@ -47,7 +47,7 @@ describe('readConfig — happy paths', () => {
         open_at_login: true,
         theme: 'dark',
         last_view: '/history',
-        usage_refresh_frequency: '1h',
+        usage_refresh_frequency: 'manual',
       },
     }
     writeConfig(cfg)
@@ -58,7 +58,7 @@ describe('readConfig — happy paths', () => {
     expect(result.app.theme).toBe('dark')
     expect(result.app.language).toBe('zh')
     expect(result.app.last_view).toBe('/history')
-    expect(result.app.usage_refresh_frequency).toBe('1h')
+    expect(result.app.usage_refresh_frequency).toBe('manual')
   })
 
   it('round-trips quoted project paths and display names', () => {
@@ -94,7 +94,7 @@ describe('readConfig — adversarial inputs', () => {
         open_at_login: false,
         theme: 'system',
         last_view: '/',
-        usage_refresh_frequency: '30m',
+        usage_refresh_frequency: '15m',
       },
     })
     // Overwrite with garbage
@@ -108,7 +108,7 @@ describe('readConfig — adversarial inputs', () => {
     expect(() => readConfig()).not.toThrow()
   })
 
-  it('falls back to 30m for unsupported usage refresh frequency values', () => {
+  it('falls back to 15m for unsupported usage refresh frequency values', () => {
     readConfig()
     writeFileSync(
       `${tempHome}/.vibetime/config.toml`,
@@ -123,17 +123,17 @@ describe('readConfig — adversarial inputs', () => {
         'open_at_login = false',
         'theme = "system"',
         'last_view = "/"',
-        'usage_refresh_frequency = "5m"',
+        'usage_refresh_frequency = "4h"',
       ].join('\n'),
       'utf-8',
     )
 
-    expect(readConfig().app.usage_refresh_frequency).toBe('30m')
+    expect(readConfig().app.usage_refresh_frequency).toBe('15m')
   })
 })
 
 describe('readConfig — usage refresh frequency', () => {
-  for (const frequency of ['15m', '1h', '4h'] as const) {
+  for (const frequency of ['manual', '1m', '2m', '5m', '15m', '30m'] as const) {
     it(`preserves custom ${frequency} usage refresh frequency`, () => {
       readConfig()
       writeFileSync(
@@ -169,7 +169,7 @@ describe('writeConfig — happy paths', () => {
         open_at_login: false,
         theme: 'system',
         last_view: '/',
-        usage_refresh_frequency: '30m',
+        usage_refresh_frequency: '15m',
       },
     })
     expect(existsSync(`${tempHome}/.vibetime/config.toml`)).toBe(true)
@@ -184,7 +184,7 @@ describe('writeConfig — happy paths', () => {
         open_at_login: true,
         theme: 'dark',
         last_view: '/live',
-        usage_refresh_frequency: '4h',
+        usage_refresh_frequency: '2m',
       },
     }
     writeConfig(cfg)
@@ -198,6 +198,6 @@ describe('writeConfig — happy paths', () => {
     expect(raw).toContain('open_at_login = true')
     expect(raw).toContain('theme = "dark"')
     expect(raw).toContain('last_view = "/live"')
-    expect(raw).toContain('usage_refresh_frequency = "4h"')
+    expect(raw).toContain('usage_refresh_frequency = "2m"')
   })
 })

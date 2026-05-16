@@ -7,6 +7,7 @@ import { lazy, Suspense, useEffect, useLayoutEffect, useRef } from 'react'
 import { HashRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { useResolvedColorScheme } from './appearance'
+import { preloadECharts } from './charts/useEChart'
 import Sidebar from './components/Sidebar'
 import { APP_LOCALES, i18n } from './i18n'
 import { appPreferencesAtom, handlePush, prefetchSettingsData } from './store'
@@ -16,8 +17,32 @@ import Today from './views/Today'
 
 const isMac = window.api.platform === 'darwin'
 const LAST_VIEW_ROUTES = new Set(['/', '/live', '/history', '/usage', '/settings'])
-const History = lazy(() => import('./views/History'))
-const Usage = lazy(() => import('./views/Usage'))
+const loadHistory = () => import('./views/History')
+const loadUsage = () => import('./views/Usage')
+const History = lazy(loadHistory)
+const Usage = lazy(loadUsage)
+
+type IdleGlobal = typeof globalThis & {
+  cancelIdleCallback?: (handle: number) => void
+  requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number
+}
+
+function preloadAnalyticsModules(): void {
+  void loadHistory()
+  void loadUsage()
+  void preloadECharts()
+}
+
+function scheduleIdleTask(callback: () => void): () => void {
+  const idleGlobal = globalThis as IdleGlobal
+  if (typeof idleGlobal.requestIdleCallback === 'function') {
+    const handle = idleGlobal.requestIdleCallback(callback, { timeout: 2500 })
+    return () => idleGlobal.cancelIdleCallback?.(handle)
+  }
+
+  const handle = globalThis.setTimeout(callback, 1000)
+  return () => globalThis.clearTimeout(handle)
+}
 
 function RouteFallback() {
   return <div className="h-full bg-background" />
@@ -87,7 +112,12 @@ export default function App() {
 
   useEffect(() => {
     prefetchSettingsData()
-    return window.api.onPush(handlePush)
+    const cancelPreload = scheduleIdleTask(preloadAnalyticsModules)
+    const unsubscribe = window.api.onPush(handlePush)
+    return () => {
+      cancelPreload()
+      unsubscribe()
+    }
   }, [])
 
   useEffect(() => {

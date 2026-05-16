@@ -315,7 +315,7 @@ function AppPreferencesSection() {
   }
 
   const openAtLogin = preferences?.openAtLogin ?? false
-  const usageRefreshFrequency = preferences?.usageRefreshFrequency ?? '30m'
+  const usageRefreshFrequency = preferences?.usageRefreshFrequency ?? '15m'
   const usageFrequencyItems = USAGE_FREQUENCY_OPTIONS.map((item) => ({
     label: t(item.labelKey),
     value: item.value,

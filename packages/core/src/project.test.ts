@@ -66,6 +66,10 @@ describe('resolveProject (first-match-wins per DEC-010)', () => {
     expect(resolveProject({ cwd: '/Users/a/code/my-project' })).toBe('my-project')
   })
 
+  it('3. cwd basename from a Windows path when no git remote', () => {
+    expect(resolveProject({ cwd: 'C:\\Users\\a\\code\\my-project' })).toBe('my-project')
+  })
+
   it('3. cwd basename when gitRemoteUrl is null', () => {
     expect(resolveProject({ cwd: '/Users/a/code/my-project', gitRemoteUrl: null })).toBe(
       'my-project',

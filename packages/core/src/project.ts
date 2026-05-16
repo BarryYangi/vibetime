@@ -54,7 +54,7 @@ export interface ResolveProjectInput {
  * First-match-wins project name resolver per DEC-010:
  *   1. aliases[cwd]               (user-defined alias)
  *   2. parseGitRemoteUrl(gitRemoteUrl)   (owner/repo)
- *   3. basename(cwd)              (POSIX split — V0 is macOS-only)
+ *   3. basename(cwd)              (slash/backslash split for local paths)
  *   4. "_unknown"                 (always-string fallback)
  *
  * Never throws. Returns a non-empty string for every input.
@@ -80,9 +80,9 @@ export function resolveProject(input: ResolveProjectInput): string {
     const fromGit = parseGitRemoteUrl(gitRemoteUrl)
     if (fromGit) return fromGit
 
-    // 3. cwd basename — POSIX split (no node:path import per DEC-006)
+    // 3. cwd basename — slash/backslash split (no node:path import per DEC-006)
     if (cwd && typeof cwd === 'string') {
-      const parts = cwd.split('/').filter((s) => s.length > 0)
+      const parts = cwd.split(/[\\/]/).filter((s) => s.length > 0)
       const base = parts[parts.length - 1]
       if (base) return base
     }

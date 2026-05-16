@@ -5,6 +5,7 @@ export const IPC_CHANNELS = new Set<IpcChannel>([
   'getTodayLiveState',
   'getHistorySummary',
   'getUsageSummary',
+  'getUsageRefreshState',
   'refreshUsage',
   'getMenubarState',
   'getAgentStatus',

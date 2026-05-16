@@ -1,5 +1,5 @@
 export const USAGE_AGENTS = ['claude-code', 'codex'] as const
-export const USAGE_REFRESH_FREQUENCIES = ['15m', '30m', '1h', '4h'] as const
+export const USAGE_REFRESH_FREQUENCIES = ['manual', '1m', '2m', '5m', '15m', '30m'] as const
 
 export type UsageAgent = (typeof USAGE_AGENTS)[number]
 export type UsageRefreshFrequency = (typeof USAGE_REFRESH_FREQUENCIES)[number]
@@ -22,14 +22,29 @@ export interface UsageTokenBreakdown {
 export interface UsageTranscriptCandidate {
   sourceFileKey: string
   sourceFileBasename: string
+  sourcePath?: string
   content: string
+  rowIndexOffset?: number
+  scanContext?: UsageScannerContext | null
 }
 
 export interface UsagePersistableMeta {
   isSidechain?: boolean
   subagentType?: string
+  claudePathRole?: 'parent' | 'subagent'
   attributionReason?: string
   sourceKind?: string
+  codexServiceTier?: 'priority'
+  modelProvider?: string
+  projectResolutionKind?: 'git' | 'local' | 'wrapper_workspace' | 'generated_parent'
+  projectResolutionSource?: string
+  wrapperName?: string
+  wrapperWorkspaceId?: string
+  wrapperWorkspaceName?: string
+  wrapperWorkspaceSlug?: string
+  wrapperSessionId?: string
+  wrapperSessionName?: string
+  wrapperSessionMatch?: 'cwd' | 'sdk_session_id'
 }
 
 export interface UsageRecordFact {
@@ -50,6 +65,7 @@ export interface UsageRecordFact {
 
 export interface UsageScanResult {
   records: UsageRecordFact[]
+  scanContext?: UsageScannerContext | null
 }
 
 export interface UsageScanState {
@@ -60,6 +76,24 @@ export interface UsageScanState {
   sizeBytes: number
   lastScannedAt: number
   lastRowKey?: string | null
+  parsedBytes?: number | null
+  scanContext?: UsageScannerContext | null
+}
+
+export interface UsageScannerContext {
+  rowIndexOffset?: number
+  codex?: UsageCodexScannerContext | null
+}
+
+export interface UsageCodexScannerContext {
+  model?: string | null
+  modelProvider?: string | null
+  sessionId?: string | null
+  turnId?: string | null
+  project?: string | null
+  previousTotal?: UsageTokenBreakdown | null
+  inheritedTotal?: UsageTokenBreakdown | null
+  remainingInheritedTotal?: UsageTokenBreakdown | null
 }
 
 export interface UsagePricingEntry {
@@ -73,6 +107,25 @@ export interface UsagePricingEntry {
   source: string
   fetchedAt: string
   rawVersion: string
+}
+
+export type UsagePriceMatchKind =
+  | 'exact'
+  | 'provider-prefix'
+  | 'alias'
+  | 'suffix'
+  | 'normalized'
+  | 'contains'
+  | 'unknown'
+
+export interface UsagePriceResolution {
+  requestedModel: string
+  matchedModel: string | null
+  price: UsagePricingEntry | null
+  matchKind: UsagePriceMatchKind
+  source: string | null
+  reason: string
+  candidateCount: number
 }
 
 export type UsagePricingStatus =
@@ -109,6 +162,61 @@ export interface UsageSummaryTotals {
 
 export interface UsageDailySummaryRow extends UsageSummaryTotals {
   date: string
+  tokens: UsageTokenBreakdown
+}
+
+export interface UsageProjectModelMatrixCell extends UsageSummaryTotals {
+  project: string
+  model: string
+}
+
+export interface UsageEfficiencyTotals {
+  durationSec: number
+  turnCount: number
+  costPerHourUsd: number | null
+  costPerTurnUsd: number | null
+  tokensPerTurn: number | null
+}
+
+export interface UsageEfficiencyDailyRow extends UsageEfficiencyTotals {
+  date: string
+}
+
+export interface UsageEfficiencyBreakdownRow extends UsageEfficiencyTotals {
+  key: string
+  label: string
+  totalTokens: number
+  estimatedCostUsd: number | null
+}
+
+export interface UsageEfficiencySummary {
+  totals: UsageEfficiencyTotals
+  daily: UsageEfficiencyDailyRow[]
+  byAgent: UsageEfficiencyBreakdownRow[]
+  byModel: UsageEfficiencyBreakdownRow[]
+  byProject: UsageEfficiencyBreakdownRow[]
+}
+
+export interface UsageMetricPeriodComparison {
+  previousValue: number | null
+  delta: number | null
+  deltaRatio: number | null
+}
+
+export interface UsagePeriodComparison {
+  estimatedCostUsd: UsageMetricPeriodComparison
+  costPerHourUsd: UsageMetricPeriodComparison
+}
+
+export interface UsageAttributionSummaryRow extends UsageSummaryTotals {
+  method: UsageAttributionMethod
+}
+
+export interface UsageDataQualitySummary {
+  assignedRecordCount: number
+  unassigned: UsageSummaryTotals
+  unknownPrice: UsageSummaryTotals
+  attribution: UsageAttributionSummaryRow[]
 }
 
 export interface UsageAuditRow extends UsageSummaryTotals {
@@ -134,6 +242,10 @@ export interface UsageSummary {
   byAgent: UsageSummaryBreakdownRow[]
   byModel: UsageSummaryBreakdownRow[]
   byProject: UsageSummaryBreakdownRow[]
+  projectModelMatrix: UsageProjectModelMatrixCell[]
+  efficiency: UsageEfficiencySummary
+  periodCompare?: UsagePeriodComparison
+  dataQuality: UsageDataQualitySummary
   auditRows: UsageAuditRow[]
   availableFilters: UsageAvailableFilters
 }
@@ -164,10 +276,44 @@ export function sanitizeUsageMeta(meta: unknown): UsagePersistableMeta {
 
   if (typeof input.isSidechain === 'boolean') sanitized.isSidechain = input.isSidechain
   if (typeof input.subagentType === 'string') sanitized.subagentType = input.subagentType
+  if (input.claudePathRole === 'parent' || input.claudePathRole === 'subagent') {
+    sanitized.claudePathRole = input.claudePathRole
+  }
   if (typeof input.attributionReason === 'string') {
     sanitized.attributionReason = input.attributionReason
   }
   if (typeof input.sourceKind === 'string') sanitized.sourceKind = input.sourceKind
+  if (input.codexServiceTier === 'priority') sanitized.codexServiceTier = 'priority'
+  if (typeof input.modelProvider === 'string') sanitized.modelProvider = input.modelProvider
+  if (
+    input.projectResolutionKind === 'git' ||
+    input.projectResolutionKind === 'local' ||
+    input.projectResolutionKind === 'wrapper_workspace' ||
+    input.projectResolutionKind === 'generated_parent'
+  ) {
+    sanitized.projectResolutionKind = input.projectResolutionKind
+  }
+  if (typeof input.projectResolutionSource === 'string') {
+    sanitized.projectResolutionSource = input.projectResolutionSource
+  }
+  if (typeof input.wrapperName === 'string') sanitized.wrapperName = input.wrapperName
+  if (typeof input.wrapperWorkspaceId === 'string') {
+    sanitized.wrapperWorkspaceId = input.wrapperWorkspaceId
+  }
+  if (typeof input.wrapperWorkspaceName === 'string') {
+    sanitized.wrapperWorkspaceName = input.wrapperWorkspaceName
+  }
+  if (typeof input.wrapperWorkspaceSlug === 'string') {
+    sanitized.wrapperWorkspaceSlug = input.wrapperWorkspaceSlug
+  }
+  if (typeof input.wrapperSessionId === 'string')
+    sanitized.wrapperSessionId = input.wrapperSessionId
+  if (typeof input.wrapperSessionName === 'string') {
+    sanitized.wrapperSessionName = input.wrapperSessionName
+  }
+  if (input.wrapperSessionMatch === 'cwd' || input.wrapperSessionMatch === 'sdk_session_id') {
+    sanitized.wrapperSessionMatch = input.wrapperSessionMatch
+  }
 
   return sanitized
 }

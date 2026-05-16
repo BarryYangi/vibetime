@@ -48,6 +48,8 @@ describe('usage persistence privacy', () => {
     expect(isUsageAgent('claude-code')).toBe(true)
     expect(isUsageAgent('codex')).toBe(true)
     expect(isUsageAgent('cursor')).toBe(false)
+    expect(isUsageRefreshFrequency('manual')).toBe(true)
+    expect(isUsageRefreshFrequency('5m')).toBe(true)
     expect(isUsageRefreshFrequency('30m')).toBe(true)
     expect(isUsageRefreshFrequency('2h')).toBe(false)
   })

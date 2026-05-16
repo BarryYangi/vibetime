@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-stopped_at: Completed 07-06-PLAN.md
-last_updated: "2026-05-15T11:46:21.402Z"
-last_activity: 2026-05-15
+status: complete
+stopped_at: Phase 07 implementation and performance hardening complete; fresh local scan retest pending
+last_updated: "2026-05-16T10:18:31Z"
+last_activity: 2026-05-16
 progress:
   total_phases: 7
   completed_phases: 7
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-05-07)
 
 ## Current Position
 
-Phase: 07 (usage-analytics) — EXECUTING
+Phase: 07 (usage-analytics) — COMPLETE
 Plan: 6 of 6
-Status: Ready to execute
-Last activity: 2026-05-15
+Status: Implementation, UI, pricing alignment, tray summary, Windows path support, and CodexBar-style incremental scan hardening complete. Ready for fresh local scan retest after clearing usage tables.
+Last activity: 2026-05-16
 
 Progress: [██████████] 100%
 
@@ -50,7 +50,7 @@ Progress: [██████████] 100%
 | 4. Desktop Shell, Today & CLI   | 6 | ~30 min | ~5 min   |
 | 5. Live, History, Menubar & Lifecycle | 4 | ~100 min | ~25 min |
 | 6. Packaging & V0 Acceptance | 1 | ~1 day elapsed | integrated release plan |
-| 7. Usage Analytics | pending | pending | pending |
+| 7. Usage Analytics | 6 plans + hardening | implementation complete | fresh local scan retest pending |
 
 **Recent Trend:**
 
@@ -120,16 +120,18 @@ Recent decisions affecting current work:
 - [Phase 07]: Unsupported app.usage_refresh_frequency TOML values fall back to 30m; invalid IPC preference writes are rejected.
 - [Phase 07]: Background Usage refresh starts from Electron desktop lifecycle and is never wired into hook invocation paths.
 - [Phase 07]: Usage route is a dedicated page directly after History with cache-first renderer refresh.
-- [Phase 07]: Usage refresh cadence Settings values are limited to 15m, 30m, 1h, and 4h.
+- [Phase 07]: Usage refresh cadence defaults to 15m and supports manual, 1m, 2m, 5m, 15m, and 30m for CodexBar-aligned refresh behavior.
+- [Phase 07]: Usage scanning now follows a CodexBar-style performance strategy: unchanged files are skipped, append-only files resume from persisted `parsed_bytes`, Codex scanner state is persisted in `scan_context`, scan work runs in a worker, worker reads in 1MB newline-safe chunks, and DB writes are chunked.
+- [Phase 07]: Usage cold-scan responsiveness now avoids main-thread sync discovery/prefix reads on the normal app path, reconciles hook events by fingerprint + usage time window, and deliberately uses smaller batches plus worker-side yielding to reduce CPU spikes even if total first-sync time is longer.
+- [Phase 07]: Default app Usage ingestion now runs in an Electron utility process. The main process schedules refreshes and relays progress/finished events, while the utility process handles transcript discovery, scanning, project attribution, hook reconciliation, pricing refresh, and SQLite writes.
 
 ### Pending Todos
 
-- Run `$gsd-discuss-phase 07` to lock implementation decisions from `07-SPEC.md`.
-- Run `$gsd-plan-phase 07 --skip-research` after discussion to produce executable plans.
+- Fresh local Usage scan retest after clearing usage tables, with attention to first-scan responsiveness and subsequent refresh smoothness.
 
 ### Blockers/Concerns
 
-None yet. (Phase 1 must produce DECISIONS.md before Phase 1 implementation can advance past scaffolding — this is by design, not a blocker.)
+None.
 
 ## Deferred Items
 
@@ -146,6 +148,6 @@ None yet. (Phase 1 must produce DECISIONS.md before Phase 1 implementation can a
 
 ## Session Continuity
 
-Last session: 2026-05-15T11:45:28.171Z
-Stopped at: Completed 07-06-PLAN.md
+Last session: 2026-05-16T13:08:15Z
+Stopped at: Phase 07 utility-process Usage ingestion split complete; fresh local scan retest pending
 Resume file: None

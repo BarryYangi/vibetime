@@ -11,6 +11,7 @@ import type {
   MenubarState,
   TodayLiveState,
   UsageRefreshResult,
+  UsageRefreshStateSnapshot,
   UsageSummary,
   UsageSummaryArgs,
 } from '../../shared/ipc-types'
@@ -24,6 +25,7 @@ type UsageRefreshState = {
   error: string | null
   lastResult: UsageRefreshResult | null
 }
+type UsageRefreshSnapshot = UsageRefreshStateSnapshot
 
 export const todayLiveStateAtom = atom<TodayLiveState | null>(null)
 export const historySummariesAtom = atom<HistorySummaryCache>({})
@@ -43,12 +45,15 @@ export const updateStateAtom = atom<AppUpdateState | null>(null)
 let refreshSeq = 0
 const historyRefreshSeqByPeriod = new Map<HistoryPeriodDays, number>()
 const usageRefreshSeqByKey = new Map<string, number>()
+const USAGE_PUSH_REFRESH_DEBOUNCE_MS = 350
+const USAGE_PUSH_REFRESH_LOADING_DEBOUNCE_MS = 1500
 let activeHistoryPeriod: HistorySummary['periodDays'] | null = null
 let menubarRefreshSeq = 0
 let appPreferencesRefreshSeq = 0
 let agentStatusRefreshSeq = 0
 let cliStatusRefreshSeq = 0
 let updateStateRefreshSeq = 0
+let usagePushRefreshTimer: ReturnType<typeof setTimeout> | null = null
 
 function normalizeUsageSummaryArgs(args: UsageSummaryArgs): UsageSummaryArgs {
   return {
@@ -180,6 +185,41 @@ export async function refreshUsageSummary(
   }
 }
 
+function scheduleActiveUsageSummaryRefresh({ force = false }: { force?: boolean } = {}): void {
+  const activeUsageQuery = store.get(activeUsageQueryAtom)
+  if (
+    activeUsageQuery === null ||
+    (!force && Object.keys(store.get(usageSummariesAtom)).length === 0)
+  ) {
+    return
+  }
+
+  if (usagePushRefreshTimer) clearTimeout(usagePushRefreshTimer)
+  const delayMs =
+    store.get(usageRefreshStateAtom).status === 'loading'
+      ? USAGE_PUSH_REFRESH_LOADING_DEBOUNCE_MS
+      : USAGE_PUSH_REFRESH_DEBOUNCE_MS
+  usagePushRefreshTimer = setTimeout(() => {
+    usagePushRefreshTimer = null
+    const latestQuery = store.get(activeUsageQueryAtom)
+    if (latestQuery !== null && (force || Object.keys(store.get(usageSummariesAtom)).length > 0)) {
+      void refreshUsageSummary(latestQuery)
+    }
+  }, delayMs)
+}
+
+export async function syncUsageRefreshState(): Promise<IpcResult<UsageRefreshSnapshot> | null> {
+  try {
+    const result = await window.api.invoke('getUsageRefreshState')
+    if (result.ok) {
+      store.set(usageRefreshStateAtom, result.data)
+    }
+    return result
+  } catch (err) {
+    return { ok: false, error: String(err) }
+  }
+}
+
 export async function runUsageRefresh(): Promise<IpcResult<UsageRefreshResult> | null> {
   store.set(usageRefreshStateAtom, {
     ...store.get(usageRefreshStateAtom),
@@ -190,7 +230,7 @@ export async function runUsageRefresh(): Promise<IpcResult<UsageRefreshResult> |
     const result = await window.api.invoke('refreshUsage')
     if (result.ok) {
       store.set(usageRefreshStateAtom, {
-        status: 'success',
+        status: 'loading',
         error: null,
         lastResult: result.data,
       })
@@ -309,17 +349,36 @@ export function handlePush(event: IpcPushEvent): void {
     if (activeHistoryPeriod !== null && Object.keys(store.get(historySummariesAtom)).length > 0) {
       void refreshHistorySummary(activeHistoryPeriod)
     }
-    const activeUsageQuery = store.get(activeUsageQueryAtom)
-    if (activeUsageQuery !== null && Object.keys(store.get(usageSummariesAtom)).length > 0) {
-      void refreshUsageSummary(activeUsageQuery)
+    return
+  }
+  if (event.type === 'usage-refresh-started') {
+    store.set(usageRefreshStateAtom, {
+      ...store.get(usageRefreshStateAtom),
+      status: 'loading',
+      error: null,
+    })
+    return
+  }
+  if (event.type === 'usage-refresh-finished') {
+    const current = store.get(usageRefreshStateAtom)
+    if (event.error) {
+      store.set(usageRefreshStateAtom, {
+        ...current,
+        status: 'error',
+        error: event.error,
+      })
+    } else {
+      store.set(usageRefreshStateAtom, {
+        status: 'success',
+        error: null,
+        lastResult: event.usageRefresh ?? current.lastResult,
+      })
+      scheduleActiveUsageSummaryRefresh({ force: true })
     }
     return
   }
   if (event.type === 'usage-changed') {
-    const activeUsageQuery = store.get(activeUsageQueryAtom)
-    if (activeUsageQuery !== null && Object.keys(store.get(usageSummariesAtom)).length > 0) {
-      void refreshUsageSummary(activeUsageQuery)
-    }
+    scheduleActiveUsageSummaryRefresh({ force: true })
     return
   }
   if (event.type === 'update-state-changed') {

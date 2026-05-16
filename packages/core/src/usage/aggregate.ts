@@ -1,9 +1,15 @@
-import { estimateUsageCostUsd, lookupUsagePrice } from './pricing.js'
+import { createUsagePriceResolver, estimateUsageCostUsd } from './pricing.js'
 import {
   USAGE_AGENTS,
   type UsageAgent,
+  type UsageAttributionSummaryRow,
   type UsageAuditRow,
+  type UsageDataQualitySummary,
+  type UsageEfficiencySummary,
+  type UsageMetricPeriodComparison,
+  type UsagePeriodComparison,
   type UsagePricingEntry,
+  type UsageProjectModelMatrixCell,
   type UsageRecordFact,
   type UsageSummary,
   type UsageSummaryArgs,
@@ -19,6 +25,20 @@ const EMPTY_TOKENS: UsageTokenBreakdown = {
   outputTokens: 0,
   reasoningOutputTokens: 0,
   totalTokens: 0,
+}
+
+const EMPTY_EFFICIENCY: UsageEfficiencySummary = {
+  totals: {
+    durationSec: 0,
+    turnCount: 0,
+    costPerHourUsd: null,
+    costPerTurnUsd: null,
+    tokensPerTurn: null,
+  },
+  daily: [],
+  byAgent: [],
+  byModel: [],
+  byProject: [],
 }
 
 type Accumulator = {
@@ -51,12 +71,18 @@ function addTokens(target: UsageTokenBreakdown, source: UsageTokenBreakdown): vo
 function addRecord(
   accumulator: Accumulator,
   record: UsageRecordFact,
-  prices: readonly UsagePricingEntry[],
+  resolvePrice: ReturnType<typeof createUsagePriceResolver>,
 ): void {
   addTokens(accumulator.tokens, record.tokens)
   accumulator.recordCount += 1
 
-  const cost = estimateUsageCostUsd(record.tokens, lookupUsagePrice(record.model, prices))
+  const resolved = resolvePrice(record.model, {
+    agent: record.agent,
+    provider: record.meta?.modelProvider ?? null,
+  })
+  const cost = estimateUsageCostUsd(record.tokens, resolved.price, {
+    codexServiceTier: record.meta?.codexServiceTier ?? null,
+  })
   if (cost === null) {
     accumulator.unknownCostTokens += record.tokens.totalTokens
     return
@@ -89,6 +115,39 @@ function toBreakdownRows(groups: Map<string, Accumulator>): UsageSummaryBreakdow
     .sort((a, b) => b.totalTokens - a.totalTokens || a.key.localeCompare(b.key))
 }
 
+function toProjectModelMatrixRows(
+  groups: Map<string, { project: string; model: string; accumulator: Accumulator }>,
+): UsageProjectModelMatrixCell[] {
+  return Array.from(groups.values())
+    .map(({ project, model, accumulator }) => ({
+      project,
+      model,
+      totalTokens: accumulator.tokens.totalTokens,
+      estimatedCostUsd: accumulator.hasKnownCost ? accumulator.estimatedCostUsd : null,
+      unknownCostTokens: accumulator.unknownCostTokens,
+      recordCount: accumulator.recordCount,
+    }))
+    .sort(
+      (a, b) =>
+        (b.estimatedCostUsd ?? 0) - (a.estimatedCostUsd ?? 0) ||
+        b.totalTokens - a.totalTokens ||
+        a.project.localeCompare(b.project) ||
+        a.model.localeCompare(b.model),
+    )
+}
+
+function toAttributionRows(groups: Map<string, Accumulator>): UsageAttributionSummaryRow[] {
+  return Array.from(groups.entries())
+    .map(([method, accumulator]) => ({
+      method: method as UsageAttributionSummaryRow['method'],
+      totalTokens: accumulator.tokens.totalTokens,
+      estimatedCostUsd: accumulator.hasKnownCost ? accumulator.estimatedCostUsd : null,
+      unknownCostTokens: accumulator.unknownCostTokens,
+      recordCount: accumulator.recordCount,
+    }))
+    .sort((a, b) => b.totalTokens - a.totalTokens || a.method.localeCompare(b.method))
+}
+
 function startOfLocalDay(date: Date): number {
   return Math.floor(new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime() / 1000)
 }
@@ -116,6 +175,20 @@ function upsertGroup(groups: Map<string, Accumulator>, key: string): Accumulator
   return group
 }
 
+function upsertProjectModelGroup(
+  groups: Map<string, { project: string; model: string; accumulator: Accumulator }>,
+  project: string,
+  model: string,
+): Accumulator {
+  const key = `${project}\u0000${model}`
+  let group = groups.get(key)
+  if (!group) {
+    group = { project, model, accumulator: createAccumulator() }
+    groups.set(key, group)
+  }
+  return group.accumulator
+}
+
 function hasAnyUsablePrice(price: UsagePricingEntry | null): boolean {
   return (
     price !== null &&
@@ -127,6 +200,41 @@ function hasAnyUsablePrice(price: UsagePricingEntry | null): boolean {
   )
 }
 
+function compareNullableMetric(
+  currentValue: number | null,
+  previousValue: number | null,
+  hasPreviousData: boolean,
+): UsageMetricPeriodComparison {
+  if (!hasPreviousData || currentValue === null || previousValue === null) {
+    return { previousValue: null, delta: null, deltaRatio: null }
+  }
+
+  const delta = currentValue - previousValue
+  return {
+    previousValue,
+    delta,
+    deltaRatio: previousValue === 0 ? null : delta / previousValue,
+  }
+}
+
+export function buildUsagePeriodCompare(
+  current: UsageSummary,
+  previous: UsageSummary,
+): UsagePeriodComparison {
+  return {
+    estimatedCostUsd: compareNullableMetric(
+      current.totals.estimatedCostUsd,
+      previous.totals.estimatedCostUsd,
+      previous.totals.recordCount > 0,
+    ),
+    costPerHourUsd: compareNullableMetric(
+      current.efficiency.totals.costPerHourUsd,
+      previous.efficiency.totals.costPerHourUsd,
+      previous.efficiency.totals.durationSec > 0,
+    ),
+  }
+}
+
 export function buildUsageSummary(
   records: UsageRecordFact[],
   options: UsageSummaryArgs,
@@ -134,6 +242,7 @@ export function buildUsageSummary(
   const now = options.now ?? new Date()
   const agents = options.agents ?? USAGE_AGENTS
   const prices = options.prices ?? []
+  const resolvePrice = createUsagePriceResolver(prices)
   const rangeEnd = startOfLocalDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1))
   const rangeStart = rangeEnd - options.periodDays * 86400
   const totals = createAccumulator()
@@ -143,6 +252,11 @@ export function buildUsageSummary(
   const byAgent = new Map<string, Accumulator>()
   const byModel = new Map<string, Accumulator>()
   const byProject = new Map<string, Accumulator>()
+  const byProjectModel = new Map<
+    string,
+    { project: string; model: string; accumulator: Accumulator }
+  >()
+  const byAttribution = new Map<string, Accumulator>()
   const unknownPriceByModel = new Map<string, Accumulator>()
   const unassigned = createAccumulator()
   const availableAgents = new Set<UsageAgent>()
@@ -153,30 +267,59 @@ export function buildUsageSummary(
     if (!isAllowedUsageAgent(record.agent, agents)) continue
     if (typeof record.ts !== 'number' || record.ts < rangeStart || record.ts >= rangeEnd) continue
 
-    addRecord(totals, record, prices)
-    addRecord(upsertGroup(byAgent, record.agent), record, prices)
-    addRecord(upsertGroup(byModel, record.model), record, prices)
+    addRecord(totals, record, resolvePrice)
+    addRecord(upsertGroup(byAgent, record.agent), record, resolvePrice)
+    addRecord(upsertGroup(byModel, record.model), record, resolvePrice)
+    addRecord(upsertGroup(byAttribution, record.attributionMethod), record, resolvePrice)
     availableAgents.add(record.agent)
     availableModels.add(record.model)
 
     const date = toDateKey(record.ts)
     const day = daily.get(date)
-    if (day) addRecord(day, record, prices)
+    if (day) addRecord(day, record, resolvePrice)
 
     if (record.project) {
-      addRecord(upsertGroup(byProject, record.project), record, prices)
+      addRecord(upsertGroup(byProject, record.project), record, resolvePrice)
+      addRecord(
+        upsertProjectModelGroup(byProjectModel, record.project, record.model),
+        record,
+        resolvePrice,
+      )
       availableProjects.add(record.project)
     } else {
-      addRecord(unassigned, record, prices)
+      addRecord(unassigned, record, resolvePrice)
     }
 
-    if (estimateUsageCostUsd(record.tokens, lookupUsagePrice(record.model, prices)) === null) {
-      addRecord(upsertGroup(unknownPriceByModel, record.model), record, prices)
+    const priceResolution = resolvePrice(record.model, {
+      agent: record.agent,
+      provider: record.meta?.modelProvider ?? null,
+    })
+    if (priceResolution.matchKind === 'unknown') {
+      addRecord(upsertGroup(unknownPriceByModel, record.model), record, resolvePrice)
     }
   }
 
+  const unknownPriceTotals = Array.from(unknownPriceByModel.values()).reduce(
+    (accumulator, group) => {
+      addTokens(accumulator.tokens, group.tokens)
+      accumulator.recordCount += group.recordCount
+      accumulator.unknownCostTokens += group.unknownCostTokens
+      accumulator.estimatedCostUsd += group.estimatedCostUsd
+      accumulator.hasKnownCost = accumulator.hasKnownCost || group.hasKnownCost
+      return accumulator
+    },
+    createAccumulator(),
+  )
+
+  const dataQuality: UsageDataQualitySummary = {
+    assignedRecordCount: totals.recordCount - unassigned.recordCount,
+    unassigned: totalsFromAccumulator(unassigned),
+    unknownPrice: totalsFromAccumulator(unknownPriceTotals),
+    attribution: toAttributionRows(byAttribution),
+  }
+
   const auditRows: UsageAuditRow[] = toBreakdownRows(unknownPriceByModel).map((row) => {
-    const hasModelPrice = hasAnyUsablePrice(lookupUsagePrice(row.key, prices))
+    const hasModelPrice = hasAnyUsablePrice(resolvePrice(row.key).price)
     return {
       key: `unknown-price:${row.key}`,
       label: hasModelPrice ? 'Some token categories lack pricing' : 'Cost unknown for this model',
@@ -204,12 +347,16 @@ export function buildUsageSummary(
     daily: Array.from(daily.entries()).map(([date, accumulator]) => ({
       date,
       ...totalsFromAccumulator(accumulator),
+      tokens: accumulator.tokens,
     })),
     pricingStatus: options.pricingStatus ?? 'refresh_failed_without_cache',
     tokenBreakdown: totals.tokens,
     byAgent: toBreakdownRows(byAgent),
     byModel: toBreakdownRows(byModel),
     byProject: toBreakdownRows(byProject),
+    projectModelMatrix: toProjectModelMatrixRows(byProjectModel),
+    efficiency: EMPTY_EFFICIENCY,
+    dataQuality,
     auditRows,
     availableFilters: {
       agents: USAGE_AGENTS.filter((agent) => availableAgents.has(agent)),

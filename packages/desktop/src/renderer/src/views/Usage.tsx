@@ -1,15 +1,19 @@
-import type { UsageSummaryBreakdownRow, UsageTokenBreakdown } from '@vibetime/core'
+import type {
+  UsageMetricPeriodComparison,
+  UsageSummaryBreakdownRow,
+  UsageTokenBreakdown,
+} from '@vibetime/core'
+import type { EChartsCoreOption } from 'echarts/types/dist/echarts'
 import { useAtomValue } from 'jotai'
-import {
-  ArrowDownIcon,
-  ArrowUpIcon,
-  CircleAlertIcon,
-  DatabaseIcon,
-  RefreshCwIcon,
-} from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowDownIcon, ArrowUpIcon, CircleAlertIcon, RefreshCwIcon } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useResolvedColorScheme } from '@/appearance'
-import { type EChartsCoreOption, echarts } from '@/charts/echarts'
+import { useChart } from '@/charts/useEChart'
+import {
+  AnalyticsHighlightSkeleton,
+  AnalyticsPanelSkeleton,
+  AnalyticsSummarySkeleton,
+} from '@/components/analytics/AnalyticsSkeleton'
 import { PageShell } from '@/components/PageShell'
 import { Button } from '@/components/ui/button'
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -23,7 +27,8 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsList, TabsTab } from '@/components/ui/tabs'
-import { formatPeriodLabel } from '@/lib/format'
+import { useStaleCachedQuery } from '@/hooks/useStaleCachedQuery'
+import { formatDurationFull, formatDurationSummary, formatPeriodLabel } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { UsageAgentFilter, UsageSummary, UsageSummaryArgs } from '../../../shared/ipc-types'
 import { HISTORY_PERIODS } from '../../../shared/ipc-types'
@@ -33,6 +38,7 @@ import {
   clearActiveUsageQuery,
   refreshUsageSummary,
   runUsageRefresh,
+  syncUsageRefreshState,
   usageRefreshStateAtom,
   usageSummariesAtom,
   usageSummaryCacheKey,
@@ -40,8 +46,18 @@ import {
 
 type ChartTokens = ReturnType<typeof getChartTokens>
 type TFunction = ReturnType<typeof useI18n>['t']
-type SortKey = 'label' | 'totalTokens' | 'estimatedCostUsd' | 'unknownCostTokens' | 'recordCount'
-type TableRowKind = 'agent' | 'model' | 'project'
+type SortKey = 'label' | 'totalTokens' | 'estimatedCostUsd' | 'recordCount'
+type RankMetric = 'cost' | 'tokens'
+type SpendBreakdownKind = 'agent' | 'model' | 'project'
+
+const EMPTY_USAGE_TOKENS: UsageTokenBreakdown = {
+  inputTokens: 0,
+  cachedInputTokens: 0,
+  cacheCreationInputTokens: 0,
+  outputTokens: 0,
+  reasoningOutputTokens: 0,
+  totalTokens: 0,
+}
 
 const AGENT_FILTERS: Array<{ value: UsageAgentFilter; labelKey?: TranslationKey; label?: string }> =
   [
@@ -60,36 +76,6 @@ function splitLineStyle(tokens: ChartTokens) {
 
 function tooltipExtraCss(tokens: ChartTokens) {
   return `box-shadow: 0 8px 24px ${tokens.tooltipShadow}; border-radius: 8px;`
-}
-
-function useChart(
-  ref: React.RefObject<HTMLDivElement | null>,
-  options: EChartsCoreOption | null,
-  themeName: string,
-) {
-  const chartRef = useRef<ReturnType<typeof echarts.init> | null>(null)
-  const optionsRef = useRef(options)
-  optionsRef.current = options
-
-  useEffect(() => {
-    if (!ref.current) return
-    const chart = echarts.init(ref.current, themeName)
-    chartRef.current = chart
-    if (optionsRef.current) chart.setOption(optionsRef.current, true)
-    const resize = () => chart.resize()
-    window.addEventListener('resize', resize)
-    return () => {
-      window.removeEventListener('resize', resize)
-      chartRef.current = null
-      chart.dispose()
-    }
-  }, [ref, themeName])
-
-  useEffect(() => {
-    const chart = chartRef.current
-    if (!chart || !options) return
-    chart.setOption(options, true)
-  }, [options])
 }
 
 function formatUsd(value: number | null, locale: string, unknownLabel: string): string {
@@ -112,16 +98,84 @@ function formatPercent(value: number): string {
   return `${Math.round(value * 100)}%`
 }
 
+function formatDateLabel(value: string, locale: string): string {
+  const [year, month, day] = value.split('-').map(Number)
+  if (!year || !month || !day) return value
+  return new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short' }).format(
+    new Date(year, month - 1, day),
+  )
+}
+
+function formatNullableUsd(value: number | null, locale: string, unknownLabel: string): string {
+  return value === null ? unknownLabel : formatUsd(value, locale, unknownLabel)
+}
+
+function formatSignedUsd(value: number, locale: string): string {
+  return new Intl.NumberFormat(locale, {
+    currency: 'USD',
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 2,
+    signDisplay: 'exceptZero',
+    style: 'currency',
+  }).format(value)
+}
+
+function formatSignedPercent(value: number): string {
+  const rounded = Math.round(value * 100)
+  return rounded > 0 ? `+${rounded}%` : `${rounded}%`
+}
+
+function previousPeriodPrefix(periodDays: number, locale: string): string {
+  const period = formatPeriodLabel(periodDays, locale)
+  return locale === 'zh-CN' ? `较前 ${period}` : `vs previous ${period}`
+}
+
+function formatEstimatedCostComparison(
+  comparison: UsageMetricPeriodComparison | undefined,
+  periodDays: number,
+  locale: string,
+): string | null {
+  if (!comparison || comparison.delta === null) return null
+  const delta =
+    comparison.deltaRatio !== null
+      ? formatSignedPercent(comparison.deltaRatio)
+      : formatSignedUsd(comparison.delta, locale)
+  return `${previousPeriodPrefix(periodDays, locale)} ${delta}`
+}
+
+function formatHourlyCostComparison(
+  comparison: UsageMetricPeriodComparison | undefined,
+  periodDays: number,
+  locale: string,
+  t: TFunction,
+): string | null {
+  if (!comparison || comparison.delta === null) return null
+  return `${previousPeriodPrefix(periodDays, locale)} ${formatSignedUsd(comparison.delta, locale)}/${t('usage.hour')}`
+}
+
 function cacheHitRate(tokens: UsageTokenBreakdown): number {
   const inputRelatedTokens =
     tokens.inputTokens + tokens.cachedInputTokens + tokens.cacheCreationInputTokens
   return inputRelatedTokens > 0 ? Math.min(1, tokens.cachedInputTokens / inputRelatedTokens) : 0
 }
 
-function agentLabel(agent: string): string {
+function inputRelatedTokens(tokens: UsageTokenBreakdown): number {
+  return tokens.inputTokens + tokens.cachedInputTokens + tokens.cacheCreationInputTokens
+}
+
+function inputTokenRate(tokens: UsageTokenBreakdown): number {
+  const total = inputRelatedTokens(tokens)
+  return total > 0 ? Math.min(1, tokens.inputTokens / total) : 0
+}
+
+function agentDisplayName(agent: string): string {
   if (agent === 'claude-code') return 'Claude Code'
   if (agent === 'codex') return 'Codex'
   return agent
+}
+
+function costValue(value: number | null): number {
+  return value ?? 0
 }
 
 function pricingStatusText(status: UsageSummary['pricingStatus'], t: TFunction): string {
@@ -133,11 +187,67 @@ function pricingStatusText(status: UsageSummary['pricingStatus'], t: TFunction):
   return t('usage.pricingUnavailable')
 }
 
-function auditLabel(row: UsageSummary['auditRows'][number], t: TFunction): string {
-  if (row.key === 'unassigned') return t('usage.unassigned')
-  if (row.label === 'Some token categories lack pricing') return t('usage.partialModelPrice')
-  if (row.label === 'Cost unknown for this model') return t('usage.unknownModelPrice')
-  return row.label
+function usagePricingDetail(summary: UsageSummary, t: TFunction): string {
+  return `${t('usage.disclaimer')} · ${pricingStatusText(summary.pricingStatus, t)}`
+}
+
+function formatRankMetricValue(
+  metric: RankMetric,
+  value: number,
+  locale: string,
+  unknownLabel: string,
+): string {
+  if (metric === 'cost') return formatUsd(value, locale, unknownLabel)
+  return formatTokens(value, locale)
+}
+
+function topRowsWithOther(
+  rows: UsageSummaryBreakdownRow[],
+  limit: number,
+): UsageSummaryBreakdownRow[] {
+  if (rows.length <= limit) return rows
+  const top = rows.slice(0, limit)
+  const other: UsageSummaryBreakdownRow = {
+    key: 'other',
+    label: 'Other',
+    tokens: { ...EMPTY_USAGE_TOKENS },
+    totalTokens: 0,
+    estimatedCostUsd: null,
+    unknownCostTokens: 0,
+    recordCount: 0,
+  }
+  for (const row of rows.slice(limit)) {
+    other.tokens.inputTokens += row.tokens.inputTokens
+    other.tokens.cachedInputTokens += row.tokens.cachedInputTokens
+    other.tokens.cacheCreationInputTokens += row.tokens.cacheCreationInputTokens
+    other.tokens.outputTokens += row.tokens.outputTokens
+    other.tokens.reasoningOutputTokens += row.tokens.reasoningOutputTokens
+    other.tokens.totalTokens += row.tokens.totalTokens
+    other.totalTokens += row.totalTokens
+    other.estimatedCostUsd =
+      other.estimatedCostUsd === null && row.estimatedCostUsd === null
+        ? null
+        : costValue(other.estimatedCostUsd) + costValue(row.estimatedCostUsd)
+    other.unknownCostTokens += row.unknownCostTokens
+    other.recordCount += row.recordCount
+  }
+  return other.recordCount > 0 ? [...top, other] : top
+}
+
+function topRowByCostOrTokens(rows: UsageSummaryBreakdownRow[]): UsageSummaryBreakdownRow | null {
+  let best: UsageSummaryBreakdownRow | null = null
+  for (const row of rows) {
+    if (!best) {
+      best = row
+      continue
+    }
+    const rowCost = costValue(row.estimatedCostUsd)
+    const bestCost = costValue(best.estimatedCostUsd)
+    if (rowCost > bestCost || (rowCost === bestCost && row.totalTokens > best.totalTokens)) {
+      best = row
+    }
+  }
+  return best
 }
 
 function DashboardPanel({
@@ -145,18 +255,25 @@ function DashboardPanel({
   description,
   children,
   className,
+  action,
 }: {
   title: string
   description?: string
   children: React.ReactNode
   className?: string
+  action?: React.ReactNode
 }) {
   return (
     <section className={cn('flex min-w-0 flex-col pt-1', className)}>
-      <header className="mb-2.5 px-1">
-        <h2 className="text-[14px] font-semibold tracking-tight text-foreground">{title}</h2>
-        {description && (
-          <p className="mt-1 text-[13px] text-muted-foreground leading-snug">{description}</p>
+      <header className="mb-2.5 flex items-start justify-between gap-3 px-1">
+        <div className="min-w-0">
+          <h2 className="text-[14px] font-semibold tracking-tight text-foreground">{title}</h2>
+          {description && (
+            <p className="mt-1 text-[13px] text-muted-foreground leading-snug">{description}</p>
+          )}
+        </div>
+        {action && (
+          <div className="electron-no-drag flex shrink-0 items-center justify-end">{action}</div>
         )}
       </header>
       <div className="flex-1 overflow-hidden rounded-xl border border-border/60 bg-card/40 shadow-sm shadow-black/[0.01]">
@@ -188,87 +305,93 @@ function StatTile({
   )
 }
 
-function DailyUsageTrend({
-  chartThemeName,
-  locale,
-  summary,
-  t,
-  tokens,
-}: {
-  chartThemeName: string
-  locale: string
-  summary: UsageSummary
-  t: TFunction
-  tokens: ChartTokens
-}) {
-  const ref = useRef<HTMLDivElement>(null)
-  const option = useMemo<EChartsCoreOption>(() => {
-    const labels = axisLabelStyle(tokens)
-    const hasAnyCost = summary.daily.some((day) => day.estimatedCostUsd !== null)
-    const metricName = hasAnyCost ? t('usage.estimatedCost') : t('usage.tokens')
-    return {
-      color: [tokens.seriesPalette[0]],
-      tooltip: {
-        trigger: 'axis',
-        borderWidth: 0,
-        confine: true,
-        extraCssText: tooltipExtraCss(tokens),
-        backgroundColor: tokens.tooltipBg,
-        axisPointer: { type: 'shadow', z: 0, shadowStyle: { color: tokens.axisPointer } },
-        formatter: (
-          params: Array<{
-            data: { value: number; tokens: number; cost: number | null }
-            name: string
-          }>,
-        ) => {
-          const item = params[0]
-          if (!item) return ''
-          const cost = item.data.cost
-          return `<div style="font-size:12px;color:${tokens.tooltipMuted}">${item.name}</div><div style="margin-top:2px;font-size:13px;font-weight:600;color:${tokens.text}">${hasAnyCost ? formatUsd(cost, locale, t('usage.unknown')) : formatTokens(item.data.tokens, locale)}</div><div style="margin-top:2px;color:${tokens.tooltipMuted}">${t('usage.disclaimer')}</div>`
-        },
-      },
-      grid: { left: 44, right: 12, top: 18, bottom: 28 },
-      xAxis: {
-        type: 'category',
-        data: summary.daily.map((day) => day.date.slice(5)),
-        axisLine: { show: false },
-        axisTick: { show: false },
-        axisLabel: {
-          ...labels,
-          interval: Math.max(0, Math.floor(summary.daily.length / 8)),
-        },
-      },
-      yAxis: {
-        type: 'value',
-        axisLine: { show: false },
-        axisTick: { show: false },
-        axisLabel: {
-          ...labels,
-          formatter: (value: number) =>
-            hasAnyCost ? formatUsd(value, locale, t('usage.unknown')) : formatTokens(value, locale),
-        },
-        splitLine: { lineStyle: splitLineStyle(tokens) },
-      },
-      series: [
-        {
-          name: metricName,
-          type: 'bar',
-          barMaxWidth: 18,
-          data: summary.daily.map((day) => ({
-            value: hasAnyCost ? (day.estimatedCostUsd ?? 0) : day.totalTokens,
-            tokens: day.totalTokens,
-            cost: day.estimatedCostUsd,
-          })),
-          itemStyle: { borderRadius: [3, 3, 0, 0] },
-        },
-      ],
-    }
-  }, [locale, summary.daily, t, tokens])
-  useChart(ref, option, chartThemeName)
-  return <div ref={ref} className="h-[260px] w-full" />
+function UsageLoadingSkeleton() {
+  return (
+    <>
+      <AnalyticsSummarySkeleton className="grid-cols-4" />
+      <AnalyticsHighlightSkeleton />
+
+      <div className="grid gap-5">
+        <AnalyticsPanelSkeleton />
+        <div className="grid gap-5 xl:grid-cols-2">
+          <AnalyticsPanelSkeleton />
+          <AnalyticsPanelSkeleton />
+        </div>
+      </div>
+    </>
+  )
 }
 
-function TokenBreakdownChart({
+function UsageHighlights({
+  locale,
+  summary,
+  t,
+}: {
+  locale: string
+  summary: UsageSummary
+  t: TFunction
+}) {
+  const highlights = useMemo(() => {
+    let peakDay: UsageSummary['daily'][number] | null = null
+    for (const day of summary.daily) {
+      if (!peakDay || costValue(day.estimatedCostUsd) > costValue(peakDay.estimatedCostUsd)) {
+        peakDay = day
+      }
+    }
+
+    const topProject = topRowByCostOrTokens(summary.byProject)
+    const topModel = topRowByCostOrTokens(summary.byModel)
+    const inputRate = inputTokenRate(summary.tokenBreakdown)
+
+    return [
+      {
+        label: t('usage.peakSpendDay'),
+        value: peakDay ? formatDateLabel(peakDay.date, locale) : t('usage.unknown'),
+        detail: peakDay
+          ? `${formatUsd(peakDay.estimatedCostUsd, locale, t('usage.unknown'))} · ${formatTokens(peakDay.totalTokens, locale)}`
+          : t('usage.noTableData'),
+      },
+      {
+        label: t('usage.topProject'),
+        value: topProject?.label ?? t('usage.unknown'),
+        detail: topProject
+          ? `${formatUsd(topProject.estimatedCostUsd, locale, t('usage.unknown'))} · ${formatTokens(topProject.totalTokens, locale)}`
+          : t('usage.noTableData'),
+      },
+      {
+        label: t('usage.topModel'),
+        value: topModel?.label ?? t('usage.unknown'),
+        detail: topModel
+          ? `${formatUsd(topModel.estimatedCostUsd, locale, t('usage.unknown'))} · ${formatTokens(topModel.totalTokens, locale)}`
+          : t('usage.noTableData'),
+      },
+      {
+        label: t('usage.inputTokens'),
+        value: formatTokens(summary.tokenBreakdown.inputTokens, locale),
+        detail: `${t('usage.inputRelatedShare')} ${formatPercent(inputRate)}`,
+      },
+    ]
+  }, [locale, summary.byModel, summary.byProject, summary.daily, summary.tokenBreakdown, t])
+
+  return (
+    <section className="grid gap-2 lg:grid-cols-4">
+      {highlights.map((item) => (
+        <div
+          className="min-w-0 rounded-xl border border-border/50 bg-card/30 px-4 py-3"
+          key={item.label}
+        >
+          <div className="text-[12px] font-medium text-muted-foreground">{item.label}</div>
+          <div className="mt-1 truncate font-heading text-[15px] font-semibold text-foreground">
+            {item.value}
+          </div>
+          <div className="mt-1 truncate text-[12px] text-muted-foreground">{item.detail}</div>
+        </div>
+      ))}
+    </section>
+  )
+}
+
+function CostTimeTrendChart({
   chartThemeName,
   locale,
   summary,
@@ -282,50 +405,48 @@ function TokenBreakdownChart({
   tokens: ChartTokens
 }) {
   const ref = useRef<HTMLDivElement>(null)
-  const rows = useMemo(
-    () => [
-      { key: 'input', label: t('usage.inputTokens'), value: summary.tokenBreakdown.inputTokens },
-      {
-        key: 'cached',
-        label: t('usage.cachedInputTokens'),
-        value: summary.tokenBreakdown.cachedInputTokens,
-      },
-      {
-        key: 'cache-create',
-        label: t('usage.cacheCreationTokens'),
-        value: summary.tokenBreakdown.cacheCreationInputTokens,
-      },
-      { key: 'output', label: t('usage.outputTokens'), value: summary.tokenBreakdown.outputTokens },
-      {
-        key: 'reasoning',
-        label: t('usage.reasoningTokens'),
-        value: summary.tokenBreakdown.reasoningOutputTokens,
-      },
-    ],
-    [summary.tokenBreakdown, t],
-  )
   const option = useMemo<EChartsCoreOption>(() => {
     const labels = axisLabelStyle(tokens)
+    const efficiencyByDate = new Map(summary.efficiency.daily.map((day) => [day.date, day]))
+    const source = summary.daily.map((day) => {
+      const efficiency = efficiencyByDate.get(day.date)
+      return {
+        date: day.date.slice(5),
+        cost: costValue(day.estimatedCostUsd),
+        duration: efficiency?.durationSec ?? 0,
+        hourlyCost: efficiency?.costPerHourUsd ?? null,
+        tokens: day.totalTokens,
+        cache: cacheHitRate(day.tokens),
+      }
+    })
+
     return {
-      color: [...tokens.seriesPalette],
+      animation: false,
+      color: [tokens.seriesPalette[0], tokens.seriesPalette[2]],
+      dataset: {
+        dimensions: ['date', 'cost', 'duration', 'hourlyCost', 'tokens', 'cache'],
+        source,
+      },
       tooltip: {
         trigger: 'axis',
-        axisPointer: { type: 'shadow', z: 0, shadowStyle: { color: tokens.axisPointer } },
+        axisPointer: { type: 'cross', z: 0, crossStyle: { color: tokens.axisPointer } },
         borderWidth: 0,
         confine: true,
         extraCssText: tooltipExtraCss(tokens),
         backgroundColor: tokens.tooltipBg,
-        formatter: (params: Array<{ marker: string; seriesName: string; value: number }>) => {
-          const rowsHtml = params
-            .filter((item) => item.value > 0)
-            .map(
-              (item) =>
-                `<div style="display:flex;align-items:center;justify-content:space-between;gap:24px;margin-top:4px">${item.marker}<span style="color:${tokens.tooltipRow}">${item.seriesName}</span><span style="font-weight:600;color:${tokens.text}">${formatTokens(item.value, locale)}</span></div>`,
-            )
-            .join('')
-          return (
-            rowsHtml || `<div style="color:${tokens.tooltipMuted}">${t('usage.emptyTitle')}</div>`
-          )
+        formatter: (params: Array<{ data: Record<string, unknown> }>) => {
+          const row = params[0]?.data as
+            | {
+                date: string
+                cost: number
+                duration: number
+                hourlyCost: number | null
+                tokens: number
+                cache: number
+              }
+            | undefined
+          if (!row) return ''
+          return `<div style="font-size:12px;color:${tokens.tooltipMuted}">${row.date}</div><div style="margin-top:2px;font-size:13px;font-weight:600;color:${tokens.text}">${formatUsd(row.cost, locale, t('usage.unknown'))} · ${formatDurationFull(row.duration, locale)}</div><div style="margin-top:2px;color:${tokens.tooltipMuted}">${formatNullableUsd(row.hourlyCost, locale, t('usage.unknown'))}/${t('usage.hour')} · ${formatTokens(row.tokens, locale)} · ${formatPercent(row.cache)}</div>`
         },
       },
       legend: {
@@ -336,35 +457,518 @@ function TokenBreakdownChart({
         itemWidth: 14,
         textStyle: labels,
       },
-      grid: { left: 8, right: 10, top: 38, bottom: 18, containLabel: true },
+      grid: { left: 8, right: 8, top: 38, bottom: 24, containLabel: true },
       xAxis: {
+        type: 'category',
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: {
+          ...labels,
+          interval: Math.max(0, Math.floor(summary.daily.length / 8)),
+        },
+      },
+      yAxis: [
+        {
+          type: 'value',
+          axisLine: { show: false },
+          axisTick: { show: false },
+          axisLabel: {
+            ...labels,
+            formatter: (value: number) => formatUsd(value, locale, t('usage.unknown')),
+          },
+          splitLine: { lineStyle: splitLineStyle(tokens) },
+        },
+        {
+          type: 'value',
+          axisLine: { show: false },
+          axisTick: { show: false },
+          axisLabel: {
+            ...labels,
+            formatter: (value: number) => formatDurationSummary(value, locale),
+          },
+          splitLine: { show: false },
+        },
+      ],
+      series: [
+        {
+          name: t('usage.cost'),
+          type: 'bar',
+          barMaxWidth: 16,
+          encode: { x: 'date', y: 'cost' },
+          itemStyle: { borderRadius: [3, 3, 0, 0] },
+          yAxisIndex: 0,
+        },
+        {
+          name: t('usage.agentTime'),
+          type: 'line',
+          encode: { x: 'date', y: 'duration' },
+          lineStyle: { width: 2 },
+          showSymbol: summary.periodDays <= 30,
+          yAxisIndex: 1,
+        },
+      ],
+    }
+  }, [locale, summary.daily, summary.efficiency.daily, summary.periodDays, t, tokens])
+  useChart(ref, option, chartThemeName)
+  return <div ref={ref} className="h-[300px] w-full" />
+}
+
+function DailyTokenCompositionChart({
+  chartThemeName,
+  locale,
+  summary,
+  t,
+  tokens,
+}: {
+  chartThemeName: string
+  locale: string
+  summary: UsageSummary
+  t: TFunction
+  tokens: ChartTokens
+}) {
+  const inputRef = useRef<HTMLDivElement>(null)
+  const outputRef = useRef<HTMLDivElement>(null)
+  const dates = useMemo(() => summary.daily.map((day) => day.date.slice(5)), [summary.daily])
+  const makeOption = useMemo(() => {
+    return (
+      rows: Array<{ key: keyof UsageTokenBreakdown; label: string; colorIndex: number }>,
+    ): EChartsCoreOption => {
+      const labels = axisLabelStyle(tokens)
+      return {
+        animation: false,
+        color: rows.map(
+          (row) => tokens.seriesPalette[row.colorIndex % tokens.seriesPalette.length],
+        ),
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: { type: 'shadow', z: 0, shadowStyle: { color: tokens.axisPointer } },
+          borderWidth: 0,
+          confine: true,
+          extraCssText: tooltipExtraCss(tokens),
+          backgroundColor: tokens.tooltipBg,
+          formatter: (
+            params: Array<{ marker: string; name: string; seriesName: string; value: number }>,
+          ) => {
+            const date = params[0]?.name ?? ''
+            const rowsHtml = params
+              .filter((item) => Number(item.value) > 0)
+              .map(
+                (item) =>
+                  `<div style="display:flex;align-items:center;justify-content:space-between;gap:24px;margin-top:4px">${item.marker}<span style="color:${tokens.tooltipRow}">${item.seriesName}</span><span style="font-weight:600;color:${tokens.text}">${formatTokens(Number(item.value), locale)}</span></div>`,
+              )
+              .join('')
+            return `<div style="font-size:12px;color:${tokens.tooltipMuted}">${date}</div>${rowsHtml || `<div style="margin-top:4px;color:${tokens.tooltipMuted}">${t('usage.emptyTitle')}</div>`}`
+          },
+        },
+        legend: {
+          top: 0,
+          right: 0,
+          icon: 'roundRect',
+          itemHeight: 8,
+          itemWidth: 14,
+          textStyle: labels,
+        },
+        grid: { left: 8, right: 10, top: 38, bottom: 18, containLabel: true },
+        xAxis: {
+          type: 'category',
+          data: dates,
+          axisLine: { show: false },
+          axisTick: { show: false },
+          axisLabel: {
+            ...labels,
+            interval: Math.max(0, Math.floor(summary.daily.length / 8)),
+          },
+        },
+        yAxis: {
+          type: 'value',
+          axisLine: { show: false },
+          axisTick: { show: false },
+          axisLabel: { ...labels, formatter: (value: number) => formatTokens(value, locale) },
+          splitLine: { lineStyle: splitLineStyle(tokens) },
+        },
+        dataZoom:
+          summary.periodDays >= 90
+            ? [{ type: 'inside', filterMode: 'none', start: 0, end: 100 }]
+            : undefined,
+        series: rows.map((row, index) => ({
+          name: row.label,
+          type: 'bar',
+          stack: 'tokens',
+          barMaxWidth: 16,
+          data: summary.daily.map((day) => day.tokens[row.key]),
+          itemStyle: {
+            borderRadius: index === rows.length - 1 ? [3, 3, 0, 0] : 0,
+          },
+        })),
+      }
+    }
+  }, [dates, locale, summary.daily, summary.periodDays, t, tokens])
+  const inputOption = useMemo<EChartsCoreOption>(() => {
+    return makeOption([
+      { key: 'inputTokens', label: t('usage.inputTokens'), colorIndex: 0 },
+      { key: 'cachedInputTokens', label: t('usage.cachedInputTokens'), colorIndex: 1 },
+      { key: 'cacheCreationInputTokens', label: t('usage.cacheCreationTokens'), colorIndex: 2 },
+    ])
+  }, [makeOption, t])
+  const outputOption = useMemo<EChartsCoreOption>(() => {
+    return makeOption([
+      { key: 'outputTokens', label: t('usage.outputTokens'), colorIndex: 3 },
+      { key: 'reasoningOutputTokens', label: t('usage.reasoningTokens'), colorIndex: 4 },
+    ])
+  }, [makeOption, t])
+  useChart(inputRef, inputOption, chartThemeName)
+  useChart(outputRef, outputOption, chartThemeName)
+  return (
+    <div className="grid gap-5 xl:grid-cols-2">
+      <div className="min-w-0">
+        <div className="mb-1 px-1 text-[12px] font-medium text-muted-foreground">
+          {t('usage.inputCacheTokens')}
+        </div>
+        <div ref={inputRef} className="h-[260px] w-full" />
+      </div>
+      <div className="min-w-0">
+        <div className="mb-1 px-1 text-[12px] font-medium text-muted-foreground">
+          {t('usage.outputReasoningTokens')}
+        </div>
+        <div ref={outputRef} className="h-[260px] w-full" />
+      </div>
+    </div>
+  )
+}
+
+function AgentContributionChart({
+  chartThemeName,
+  locale,
+  summary,
+  t,
+  tokens,
+}: {
+  chartThemeName: string
+  locale: string
+  summary: UsageSummary
+  t: TFunction
+  tokens: ChartTokens
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const option = useMemo<EChartsCoreOption>(() => {
+    const labels = axisLabelStyle(tokens)
+    const efficiencyByAgent = new Map(summary.efficiency.byAgent.map((row) => [row.key, row]))
+    const agents = summary.byAgent.map((row) => ({
+      key: row.key,
+      label: agentDisplayName(row.key),
+      cost: costValue(row.estimatedCostUsd),
+      tokens: row.totalTokens,
+      duration: efficiencyByAgent.get(row.key)?.durationSec ?? 0,
+      turns: efficiencyByAgent.get(row.key)?.turnCount ?? 0,
+    }))
+    const totals = {
+      cost: agents.reduce((sum, row) => sum + row.cost, 0),
+      tokens: agents.reduce((sum, row) => sum + row.tokens, 0),
+      duration: agents.reduce((sum, row) => sum + row.duration, 0),
+    }
+    const metrics = [
+      { key: 'cost', label: t('usage.cost') },
+      { key: 'tokens', label: t('usage.tokens') },
+      { key: 'duration', label: t('usage.agentTime') },
+    ] as const
+    const valueFor = (agent: (typeof agents)[number], key: (typeof metrics)[number]['key']) => {
+      if (key === 'cost') return agent.cost
+      if (key === 'tokens') return agent.tokens
+      return agent.duration
+    }
+    const totalFor = (key: (typeof metrics)[number]['key']) => {
+      if (key === 'cost') return totals.cost
+      if (key === 'tokens') return totals.tokens
+      return totals.duration
+    }
+    const formatActual = (key: (typeof metrics)[number]['key'], value: number) => {
+      if (key === 'cost') return formatUsd(value, locale, t('usage.unknown'))
+      if (key === 'tokens') return formatTokens(value, locale)
+      return formatDurationFull(value, locale)
+    }
+
+    return {
+      animation: false,
+      color: agents.map((_, index) => tokens.seriesPalette[index % tokens.seriesPalette.length]),
+      legend: {
+        top: 0,
+        right: 0,
+        icon: 'roundRect',
+        itemHeight: 8,
+        itemWidth: 14,
+        textStyle: labels,
+      },
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'shadow', z: 0, shadowStyle: { color: tokens.axisPointer } },
+        borderWidth: 0,
+        confine: true,
+        extraCssText: tooltipExtraCss(tokens),
+        backgroundColor: tokens.tooltipBg,
+        formatter: (
+          params: Array<{
+            dataIndex: number
+            marker: string
+            seriesName: string
+            value: number
+          }>,
+        ) => {
+          const metric = metrics[params[0]?.dataIndex ?? 0]
+          if (!metric) return ''
+          const rowsHtml = params
+            .map((item) => {
+              const agent = agents.find((row) => row.label === item.seriesName)
+              if (!agent) return ''
+              const actual = valueFor(agent, metric.key)
+              const turns =
+                metric.key === 'duration' && agent.turns > 0
+                  ? ` · ${agent.turns} ${t('history.turns')}`
+                  : ''
+              return `<div style="display:flex;align-items:center;justify-content:space-between;gap:24px;margin-top:4px">${item.marker}<span style="color:${tokens.tooltipRow}">${item.seriesName}</span><span style="font-weight:600;color:${tokens.text}">${formatActual(metric.key, actual)} · ${formatPercent(Number(item.value) / 100)}${turns}</span></div>`
+            })
+            .join('')
+          return `<div style="font-size:12px;color:${tokens.tooltipMuted}">${metric.label}</div>${rowsHtml}`
+        },
+      },
+      grid: { left: 8, right: 8, top: 34, bottom: 8, containLabel: true },
+      xAxis: {
+        max: 100,
+        min: 0,
         type: 'value',
         axisLine: { show: false },
         axisTick: { show: false },
-        axisLabel: { ...labels, formatter: (value: number) => formatTokens(value, locale) },
+        axisLabel: { ...labels, formatter: (value: number) => `${value}%` },
         splitLine: { lineStyle: splitLineStyle(tokens) },
       },
       yAxis: {
         type: 'category',
-        data: [t('usage.tokens')],
+        data: metrics.map((metric) => metric.label),
         axisLine: { show: false },
         axisTick: { show: false },
         axisLabel: labels,
       },
-      series: rows.map((row, index) => ({
-        name: row.label,
+      series: agents.map((agent) => ({
+        name: agent.label,
         type: 'bar',
-        stack: 'tokens',
-        data: [row.value],
-        itemStyle: {
-          color: tokens.seriesPalette[index % tokens.seriesPalette.length],
-          borderRadius: index === rows.length - 1 ? [0, 4, 4, 0] : 0,
+        stack: 'agent',
+        barMaxWidth: 18,
+        data: metrics.map((metric) => {
+          const total = totalFor(metric.key)
+          return total > 0 ? (valueFor(agent, metric.key) / total) * 100 : 0
+        }),
+        label: {
+          show: true,
+          formatter: (params: { value: number }) =>
+            Number(params.value) >= 12 ? `${Math.round(Number(params.value))}%` : '',
+          color: tokens.text,
+          fontSize: 11,
+          fontWeight: 600,
         },
+        itemStyle: { borderRadius: 3 },
       })),
     }
-  }, [locale, rows, t, tokens])
+  }, [locale, summary.byAgent, summary.efficiency.byAgent, t, tokens])
   useChart(ref, option, chartThemeName)
-  return <div ref={ref} className="h-[220px] w-full" />
+  return <div ref={ref} className="h-[200px] w-full" />
+}
+
+function SpendBreakdown({
+  locale,
+  summary,
+  t,
+  tokens,
+}: {
+  locale: string
+  summary: UsageSummary
+  t: TFunction
+  tokens: ChartTokens
+}) {
+  const groups = useMemo(() => {
+    const makeGroup = (
+      kind: SpendBreakdownKind,
+      label: string,
+      rows: UsageSummaryBreakdownRow[],
+      limit: number,
+    ) => {
+      const normalizedRows = topRowsWithOther(rows, limit).map((row) =>
+        row.key === 'other'
+          ? { ...row, label: t('usage.other') }
+          : kind === 'agent'
+            ? { ...row, label: agentDisplayName(row.key) }
+            : row,
+      )
+      const totalCost = normalizedRows.reduce(
+        (sum, row) => sum + costValue(row.estimatedCostUsd),
+        0,
+      )
+      const totalTokens = normalizedRows.reduce((sum, row) => sum + row.totalTokens, 0)
+      const segments = normalizedRows.map((row, index) => {
+        const cost = costValue(row.estimatedCostUsd)
+        return {
+          color: tokens.seriesPalette[index % tokens.seriesPalette.length],
+          cost,
+          key: row.key,
+          label: row.label,
+          percent: totalCost > 0 ? cost / totalCost : 0,
+          tokens: row.totalTokens,
+        }
+      })
+      const leader = segments[0] ?? null
+      return { kind, label, leader, segments, totalCost, totalTokens }
+    }
+
+    return [
+      makeGroup('project', t('usage.projects'), summary.byProject, 5),
+      makeGroup('model', t('usage.models'), summary.byModel, 5),
+      makeGroup('agent', t('usage.agents'), summary.byAgent, 3),
+    ]
+  }, [summary.byAgent, summary.byModel, summary.byProject, t, tokens.seriesPalette])
+
+  return (
+    <div className="space-y-5">
+      {groups.map((group) => (
+        <div className="min-w-0" key={group.kind}>
+          <div className="mb-2 flex min-w-0 items-baseline justify-between gap-4 px-1">
+            <div className="min-w-0">
+              <div className="text-[12px] font-medium text-muted-foreground">{group.label}</div>
+              <div className="mt-0.5 truncate text-[13px] font-semibold text-foreground">
+                {group.leader
+                  ? `${group.leader.label} · ${formatPercent(group.leader.percent)}`
+                  : t('usage.noSpendData')}
+              </div>
+            </div>
+            <div className="shrink-0 text-right text-[12px] text-muted-foreground">
+              <div>{formatUsd(group.totalCost, locale, t('usage.unknown'))}</div>
+              <div>{formatTokens(group.totalTokens, locale)}</div>
+            </div>
+          </div>
+          <div className="flex h-7 overflow-hidden rounded-md bg-muted/50">
+            {group.segments.map((segment) => (
+              <div
+                className="min-w-[2px]"
+                key={segment.key}
+                style={{
+                  backgroundColor: segment.color,
+                  width: `${Math.max(segment.percent * 100, segment.percent > 0 ? 1 : 0)}%`,
+                }}
+                title={`${segment.label} ${formatPercent(segment.percent)} ${formatUsd(segment.cost, locale, t('usage.unknown'))} ${formatTokens(segment.tokens, locale)}`}
+              />
+            ))}
+          </div>
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 px-1">
+            {group.segments.slice(0, 4).map((segment) => (
+              <div
+                className="flex max-w-[220px] items-center gap-1.5 text-[12px] text-muted-foreground"
+                key={segment.key}
+              >
+                <span
+                  className="size-2 shrink-0 rounded-[2px]"
+                  style={{ backgroundColor: segment.color }}
+                />
+                <span className="truncate">{segment.label}</span>
+                <span className="shrink-0 tabular-nums">{formatPercent(segment.percent)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function RankBarChart({
+  chartThemeName,
+  kind,
+  locale,
+  metric,
+  rows,
+  t,
+  tokens,
+}: {
+  chartThemeName: string
+  kind: 'project' | 'model'
+  locale: string
+  metric: RankMetric
+  rows: UsageSummaryBreakdownRow[]
+  t: TFunction
+  tokens: ChartTokens
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const chartRows = useMemo(
+    () =>
+      topRowsWithOther(rows, 10)
+        .map((row) => (row.key === 'other' ? { ...row, label: t('usage.other') } : row))
+        .reverse(),
+    [rows, t],
+  )
+  const option = useMemo<EChartsCoreOption>(() => {
+    const labels = axisLabelStyle(tokens)
+    const metricName = metric === 'cost' ? t('usage.cost') : t('usage.tokens')
+    return {
+      animation: false,
+      color: [kind === 'project' ? tokens.seriesPalette[1] : tokens.seriesPalette[4]],
+      dataset: {
+        dimensions: ['name', 'cost', 'tokens', 'records', 'cache'],
+        source: chartRows.map((row) => ({
+          name: row.label,
+          cost: costValue(row.estimatedCostUsd),
+          tokens: row.totalTokens,
+          records: row.recordCount,
+          cache: cacheHitRate(row.tokens),
+        })),
+      },
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'shadow', z: 0, shadowStyle: { color: tokens.axisPointer } },
+        borderWidth: 0,
+        confine: true,
+        extraCssText: tooltipExtraCss(tokens),
+        backgroundColor: tokens.tooltipBg,
+        formatter: (params: Array<{ data: Record<string, unknown> }>) => {
+          const row = params[0]?.data as
+            | { name: string; cost: number; tokens: number; records: number; cache: number }
+            | undefined
+          if (!row) return ''
+          return `<div style="font-size:12px;color:${tokens.tooltipMuted}">${row.name}</div><div style="margin-top:2px;font-size:13px;font-weight:600;color:${tokens.text}">${formatRankMetricValue(metric, metric === 'cost' ? row.cost : row.tokens, locale, t('usage.unknown'))}</div><div style="margin-top:2px;color:${tokens.tooltipMuted}">${formatTokens(row.tokens, locale)} · ${formatUsd(row.cost, locale, t('usage.unknown'))} · ${formatPercent(row.cache)}</div>`
+        },
+      },
+      grid: { left: 8, right: 16, top: 6, bottom: 10, containLabel: true },
+      xAxis: {
+        type: 'value',
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: {
+          ...labels,
+          formatter: (value: number) =>
+            metric === 'cost'
+              ? formatUsd(value, locale, t('usage.unknown'))
+              : formatTokens(value, locale),
+        },
+        splitLine: { lineStyle: splitLineStyle(tokens) },
+      },
+      yAxis: {
+        type: 'category',
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: {
+          ...labels,
+          overflow: 'truncate',
+          width: 160,
+        },
+      },
+      series: [
+        {
+          name: metricName,
+          type: 'bar',
+          barMaxWidth: 14,
+          encode: { x: metric, y: 'name' },
+          itemStyle: { borderRadius: [0, 3, 3, 0] },
+        },
+      ],
+    }
+  }, [chartRows, kind, locale, metric, t, tokens])
+  useChart(ref, option, chartThemeName)
+  return <div ref={ref} className="h-[300px] w-full" />
 }
 
 function SortIcon({ active, asc }: { active: boolean; asc: boolean }) {
@@ -377,31 +981,43 @@ function SortIcon({ active, asc }: { active: boolean; asc: boolean }) {
   )
 }
 
-function UsageBreakdownTable({
+function RankMetricTabs({
+  onValueChange,
+  t,
+  value,
+}: {
+  onValueChange: (value: RankMetric) => void
+  t: TFunction
+  value: RankMetric
+}) {
+  return (
+    <Tabs onValueChange={(next) => onValueChange(next as RankMetric)} value={value}>
+      <TabsList>
+        {(['cost', 'tokens'] as const).map((metric) => (
+          <TabsTab key={metric} value={metric}>
+            {t(`usage.metric.${metric}` as TranslationKey)}
+          </TabsTab>
+        ))}
+      </TabsList>
+    </Tabs>
+  )
+}
+
+function UsageRankTable({
   locale,
-  summary,
+  nameLabel,
+  rows,
   t,
 }: {
   locale: string
-  summary: UsageSummary
+  nameLabel: string
+  rows: UsageSummaryBreakdownRow[]
   t: TFunction
 }) {
   const [sortKey, setSortKey] = useState<SortKey>('totalTokens')
   const [sortAsc, setSortAsc] = useState(false)
-  const rows = useMemo(() => {
-    const withKind = (
-      kind: TableRowKind,
-      row: UsageSummaryBreakdownRow,
-    ): UsageSummaryBreakdownRow & { kind: TableRowKind } => ({
-      ...row,
-      kind,
-      label: kind === 'agent' ? agentLabel(row.label) : row.label,
-    })
-    const data = [
-      ...summary.byProject.map((row) => withKind('project', row)),
-      ...summary.byModel.map((row) => withKind('model', row)),
-      ...summary.byAgent.map((row) => withKind('agent', row)),
-    ]
+  const sortedRows = useMemo(() => {
+    const data = [...rows]
     return data.sort((a, b) => {
       const dir = sortAsc ? 1 : -1
       if (sortKey === 'label') return a.label.localeCompare(b.label) * dir
@@ -409,7 +1025,7 @@ function UsageBreakdownTable({
       const bValue = b[sortKey] ?? 0
       return (Number(aValue) - Number(bValue)) * dir
     })
-  }, [sortAsc, sortKey, summary.byAgent, summary.byModel, summary.byProject])
+  }, [rows, sortAsc, sortKey])
 
   const changeSort = (key: SortKey) => {
     if (sortKey === key) setSortAsc((value) => !value)
@@ -424,23 +1040,22 @@ function UsageBreakdownTable({
       <Table className="table-fixed">
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[36%]">
+            <TableHead className="w-[40%]">
               <button onClick={() => changeSort('label')} type="button">
-                {t('usage.entityColumn')} <SortIcon active={sortKey === 'label'} asc={sortAsc} />
+                {nameLabel} <SortIcon active={sortKey === 'label'} asc={sortAsc} />
               </button>
             </TableHead>
-            <TableHead className="w-[14%]">{t('usage.type')}</TableHead>
-            <TableHead className="w-[18%] text-right">
+            <TableHead className="w-[22%] text-right">
               <button onClick={() => changeSort('totalTokens')} type="button">
                 {t('usage.tokens')} <SortIcon active={sortKey === 'totalTokens'} asc={sortAsc} />
               </button>
             </TableHead>
-            <TableHead className="w-[18%] text-right">
+            <TableHead className="w-[22%] text-right">
               <button onClick={() => changeSort('estimatedCostUsd')} type="button">
                 {t('usage.cost')} <SortIcon active={sortKey === 'estimatedCostUsd'} asc={sortAsc} />
               </button>
             </TableHead>
-            <TableHead className="w-[14%] text-right">
+            <TableHead className="w-[16%] text-right">
               <button onClick={() => changeSort('recordCount')} type="button">
                 {t('usage.rows')} <SortIcon active={sortKey === 'recordCount'} asc={sortAsc} />
               </button>
@@ -448,20 +1063,17 @@ function UsageBreakdownTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.length === 0 ? (
+          {sortedRows.length === 0 ? (
             <TableRow>
-              <TableCell className="py-8 text-center text-muted-foreground" colSpan={5}>
+              <TableCell className="py-8 text-center text-muted-foreground" colSpan={4}>
                 {t('usage.noTableData')}
               </TableCell>
             </TableRow>
           ) : (
-            rows.map((row) => (
-              <TableRow key={`${row.kind}:${row.key}`}>
+            sortedRows.map((row) => (
+              <TableRow key={row.key}>
                 <TableCell className="truncate font-medium" title={row.label}>
                   {row.label}
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {t(`usage.${row.kind}` as TranslationKey)}
                 </TableCell>
                 <TableCell className="text-right font-mono tabular-nums">
                   {formatTokens(row.totalTokens, locale)}
@@ -481,73 +1093,6 @@ function UsageBreakdownTable({
   )
 }
 
-function AuditPanel({
-  locale,
-  summary,
-  t,
-}: {
-  locale: string
-  summary: UsageSummary
-  t: TFunction
-}) {
-  return (
-    <div className="flex min-h-[260px] flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-border/40 pb-4 text-[13px]">
-        <div className="inline-flex items-center gap-2">
-          <span className="size-2 rounded-full bg-emerald-500" aria-hidden="true" />
-          <span className="text-muted-foreground">
-            {pricingStatusText(summary.pricingStatus, t)}
-          </span>
-        </div>
-        <div className="inline-flex items-center gap-2 text-muted-foreground">
-          <DatabaseIcon aria-hidden="true" className="size-4" />
-          {t('usage.claudeCodexOnly')}
-        </div>
-      </div>
-      <Table className="table-fixed">
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-[34%]">{t('usage.auditTable')}</TableHead>
-            <TableHead className="w-[18%]">{t('usage.model')}</TableHead>
-            <TableHead className="w-[18%]">{t('usage.attribution')}</TableHead>
-            <TableHead className="w-[15%] text-right">{t('usage.tokens')}</TableHead>
-            <TableHead className="w-[15%] text-right">{t('usage.cost')}</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {summary.auditRows.length === 0 ? (
-            <TableRow>
-              <TableCell className="py-8 text-center text-muted-foreground" colSpan={5}>
-                {t('usage.noAuditIssues')}
-              </TableCell>
-            </TableRow>
-          ) : (
-            summary.auditRows.map((row) => (
-              <TableRow key={row.key}>
-                <TableCell className="truncate font-medium" title={auditLabel(row, t)}>
-                  {auditLabel(row, t)}
-                </TableCell>
-                <TableCell className="truncate text-muted-foreground" title={row.model ?? '-'}>
-                  {row.model ?? '-'}
-                </TableCell>
-                <TableCell className="truncate text-muted-foreground">
-                  {row.attributionMethod ?? '-'}
-                </TableCell>
-                <TableCell className="text-right font-mono tabular-nums">
-                  {formatTokens(row.totalTokens, locale)}
-                </TableCell>
-                <TableCell className="text-right font-mono tabular-nums">
-                  {formatUsd(row.estimatedCostUsd, locale, t('usage.unknown'))}
-                </TableCell>
-              </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
-    </div>
-  )
-}
-
 export default function Usage() {
   const colorScheme = useResolvedColorScheme()
   const { locale, t } = useI18n()
@@ -555,77 +1100,60 @@ export default function Usage() {
   const [agent, setAgent] = useState<UsageAgentFilter>('all')
   const [project, setProject] = useState<string | null>(null)
   const [model, setModel] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [visibleSummary, setVisibleSummary] = useState<UsageSummary | null>(null)
+  const [manualRefreshError, setManualRefreshError] = useState<string | null>(null)
+  const [projectRankMetric, setProjectRankMetric] = useState<RankMetric>('cost')
+  const [modelRankMetric, setModelRankMetric] = useState<RankMetric>('cost')
   const [manualRefreshing, setManualRefreshing] = useState(false)
-  const openRefreshStartedRef = useRef(false)
   const usageSummaries = useAtomValue(usageSummariesAtom)
   const refreshState = useAtomValue(usageRefreshStateAtom)
   const args = useMemo<UsageSummaryArgs>(
     () => ({ periodDays, agent, project, model, includeSidechain: true }),
     [agent, model, periodDays, project],
   )
-  const exactSummary = usageSummaries[usageSummaryCacheKey(args)] ?? null
-  const summary = exactSummary ?? visibleSummary
-  const chartThemeName = getChartThemeName(colorScheme)
-  const tokens = getChartTokens(colorScheme)
+  const cacheKey = useMemo(() => usageSummaryCacheKey(args), [args])
+  const exactSummary = usageSummaries[cacheKey] ?? null
+  const refreshSummary = useCallback(() => refreshUsageSummary(args), [args])
+  const {
+    error: queryError,
+    isInitialLoading,
+    isStaleLoading,
+    visibleValue: summary,
+  } = useStaleCachedQuery({
+    cacheKey,
+    cachedValue: exactSummary,
+    refresh: refreshSummary,
+  })
+  const error = manualRefreshError ?? queryError
+  const chartThemeName = useMemo(() => getChartThemeName(colorScheme), [colorScheme])
+  const tokens = useMemo(() => getChartTokens(colorScheme), [colorScheme])
 
   useEffect(() => {
-    if (exactSummary) setVisibleSummary(exactSummary)
-  }, [exactSummary])
+    setManualRefreshError((current) => (cacheKey && current !== null ? null : current))
+  }, [cacheKey])
 
   useEffect(() => {
-    let alive = true
-    setError(null)
-    refreshUsageSummary(args)
-      .then((result) => {
-        if (!alive) return
-        if (result && !result.ok) setError(result.error)
-      })
-      .catch((err) => {
-        if (alive) setError(String(err))
-      })
+    void syncUsageRefreshState()
     return () => {
-      alive = false
-    }
-  }, [args])
-
-  useEffect(() => {
-    if (openRefreshStartedRef.current) return
-    openRefreshStartedRef.current = true
-    let alive = true
-    runUsageRefresh().then((result) => {
-      if (!alive || !result?.ok) return
-      void refreshUsageSummary(args)
-    })
-    return () => {
-      alive = false
       clearActiveUsageQuery()
     }
-  }, [args])
+  }, [])
 
   const handleManualRefresh = async () => {
     setManualRefreshing(true)
-    setError(null)
+    setManualRefreshError(null)
     try {
       const result = await runUsageRefresh()
-      if (result?.ok) {
-        const summaryResult = await refreshUsageSummary(args)
-        if (summaryResult && !summaryResult.ok) setError(summaryResult.error)
-      } else if (result && !result.ok) {
-        setError(result.error)
+      if (result && !result.ok) {
+        setManualRefreshError(result.error)
       }
     } catch (err) {
-      setError(String(err))
+      setManualRefreshError(String(err))
     } finally {
       setManualRefreshing(false)
     }
   }
 
-  const topModel = summary?.byModel[0]
-  const topAgent = summary?.byAgent[0]
-  const topMix = topModel?.label ?? (topAgent ? agentLabel(topAgent.label) : t('usage.none'))
-  const isLoading = summary !== null && exactSummary === null
+  const isRefreshing = manualRefreshing || refreshState.status === 'loading'
   const hasData = (summary?.totals.recordCount ?? 0) > 0
   const modelItems = [
     { label: t('usage.allModels'), value: 'all' },
@@ -640,7 +1168,7 @@ export default function Usage() {
     value: item.value,
   }))
 
-  if (error && !summary) {
+  if (error && !summary && !isInitialLoading) {
     return (
       <PageShell fluid className="flex min-h-full items-center justify-center">
         <div className="flex max-w-md flex-col items-center gap-3 text-center">
@@ -662,16 +1190,20 @@ export default function Usage() {
           </h1>
         </div>
         <div className="electron-no-drag flex flex-wrap items-center justify-end gap-2">
-          {(isLoading || refreshState.status === 'loading') && (
-            <Spinner className="mr-1 text-muted-foreground" />
-          )}
+          <Spinner
+            aria-hidden={!isStaleLoading}
+            className={cn(
+              'h-3.5 w-3.5 text-muted-foreground transition-opacity',
+              isStaleLoading ? 'opacity-100' : 'opacity-0',
+            )}
+          />
           <Tabs
             onValueChange={(value) => setPeriodDays(Number(value) as UsageSummary['periodDays'])}
             value={String(periodDays)}
           >
-            <TabsList className="h-7">
+            <TabsList>
               {HISTORY_PERIODS.map((days) => (
-                <TabsTab className="h-6 px-2 text-[12px]" key={days} value={String(days)}>
+                <TabsTab key={days} value={String(days)}>
                   {formatPeriodLabel(days, locale)}
                 </TabsTab>
               ))}
@@ -726,8 +1258,8 @@ export default function Usage() {
             </SelectPopup>
           </Select>
           <Button
-            disabled={manualRefreshing}
-            loading={manualRefreshing}
+            disabled={isRefreshing}
+            loading={isRefreshing}
             onClick={handleManualRefresh}
             size="sm"
             variant="secondary"
@@ -738,11 +1270,8 @@ export default function Usage() {
         </div>
       </header>
 
-      {!summary ? (
-        <div className="rounded-xl border border-border/60 bg-card/40 px-5 py-12 text-center text-[13px] text-muted-foreground">
-          <Spinner className="mx-auto mb-3" />
-          {t('usage.loading')}
-        </div>
+      {isInitialLoading ? (
+        <UsageLoadingSkeleton />
       ) : !hasData ? (
         <div className="rounded-xl border border-border/60 bg-card/40 px-5 py-12 text-center">
           <h2 className="text-[20px] font-semibold text-foreground">{t('usage.emptyTitle')}</h2>
@@ -751,11 +1280,17 @@ export default function Usage() {
         </div>
       ) : (
         <>
-          <div className="grid gap-2 md:grid-cols-4">
+          <div className="grid grid-cols-4 gap-2">
             <StatTile
               label={t('usage.estimatedCost')}
               value={formatUsd(summary.totals.estimatedCostUsd, locale, t('usage.unknown'))}
-              detail={t('usage.disclaimer')}
+              detail={
+                formatEstimatedCostComparison(
+                  summary.periodCompare?.estimatedCostUsd,
+                  summary.periodDays,
+                  locale,
+                ) ?? usagePricingDetail(summary, t)
+              }
             />
             <StatTile
               label={t('usage.totalTokens')}
@@ -765,17 +1300,27 @@ export default function Usage() {
             <StatTile
               label={t('usage.cacheHitRate')}
               value={formatPercent(cacheHitRate(summary.tokenBreakdown))}
-              detail={`${formatTokens(
-                summary.tokenBreakdown.cachedInputTokens,
-                locale,
-              )} ${t('usage.cachedTokens')}`}
+              detail={`${formatTokens(summary.tokenBreakdown.cachedInputTokens, locale)} ${t('usage.cachedTokens')}`}
             />
             <StatTile
-              label={t('usage.topModel')}
-              value={topMix}
-              detail={pricingStatusText(summary.pricingStatus, t)}
+              label={t('usage.averageHourlyCost')}
+              value={formatNullableUsd(
+                summary.efficiency.totals.costPerHourUsd,
+                locale,
+                t('usage.unknown'),
+              )}
+              detail={
+                formatHourlyCostComparison(
+                  summary.periodCompare?.costPerHourUsd,
+                  summary.periodDays,
+                  locale,
+                  t,
+                ) ?? usagePricingDetail(summary, t)
+              }
             />
           </div>
+
+          <UsageHighlights locale={locale} summary={summary} t={t} />
 
           {error && (
             <div className="rounded-xl border border-border/60 bg-card/40 px-4 py-3 text-[13px] text-muted-foreground">
@@ -783,40 +1328,117 @@ export default function Usage() {
             </div>
           )}
 
+          <DashboardPanel
+            title={t('usage.costTimeTrend')}
+            description={t('usage.costTimeTrendDescription')}
+          >
+            <CostTimeTrendChart
+              chartThemeName={chartThemeName}
+              locale={locale}
+              summary={summary}
+              t={t}
+              tokens={tokens}
+            />
+          </DashboardPanel>
+
+          <DashboardPanel
+            title={t('usage.agentContribution')}
+            description={t('usage.agentContributionDescription')}
+          >
+            <AgentContributionChart
+              chartThemeName={chartThemeName}
+              locale={locale}
+              summary={summary}
+              t={t}
+              tokens={tokens}
+            />
+          </DashboardPanel>
+
+          <DashboardPanel
+            title={t('usage.spendBreakdown')}
+            description={t('usage.spendBreakdownDescription')}
+          >
+            <SpendBreakdown locale={locale} summary={summary} t={t} tokens={tokens} />
+          </DashboardPanel>
+
           <div className="grid gap-5 xl:grid-cols-2">
             <DashboardPanel
-              title={t('usage.dailyUsageTrend')}
-              description={t('usage.dailyUsageTrendDescription')}
+              action={
+                <RankMetricTabs
+                  onValueChange={setProjectRankMetric}
+                  t={t}
+                  value={projectRankMetric}
+                />
+              }
+              title={t('usage.projectCostRank')}
+              description={t('usage.projectCostRankDescription')}
             >
-              <DailyUsageTrend
+              <RankBarChart
                 chartThemeName={chartThemeName}
+                kind="project"
                 locale={locale}
-                summary={summary}
+                metric={projectRankMetric}
+                rows={summary.byProject}
                 t={t}
                 tokens={tokens}
               />
             </DashboardPanel>
             <DashboardPanel
-              title={t('usage.tokenBreakdown')}
-              description={t('usage.tokenBreakdownDescription')}
+              action={
+                <RankMetricTabs onValueChange={setModelRankMetric} t={t} value={modelRankMetric} />
+              }
+              title={t('usage.modelCostRank')}
+              description={t('usage.modelCostRankDescription')}
             >
-              <TokenBreakdownChart
+              <RankBarChart
                 chartThemeName={chartThemeName}
+                kind="model"
                 locale={locale}
-                summary={summary}
+                metric={modelRankMetric}
+                rows={summary.byModel}
                 t={t}
                 tokens={tokens}
               />
             </DashboardPanel>
           </div>
 
-          <DashboardPanel title={t('usage.tableTitle')} description={t('usage.tableDescription')}>
-            <UsageBreakdownTable locale={locale} summary={summary} t={t} />
+          <DashboardPanel
+            title={t('usage.tokenBreakdown')}
+            description={t('usage.tokenBreakdownDescription')}
+          >
+            <DailyTokenCompositionChart
+              chartThemeName={chartThemeName}
+              locale={locale}
+              summary={summary}
+              t={t}
+              tokens={tokens}
+            />
           </DashboardPanel>
 
-          <DashboardPanel title={t('usage.auditTitle')} description={t('usage.auditDescription')}>
-            <AuditPanel locale={locale} summary={summary} t={t} />
-          </DashboardPanel>
+          <div className="grid gap-5 xl:grid-cols-2">
+            <DashboardPanel
+              title={t('usage.projectTableTitle')}
+              description={t('usage.projectTableDescription')}
+            >
+              <UsageRankTable
+                locale={locale}
+                nameLabel={t('usage.project')}
+                rows={summary.byProject}
+                t={t}
+              />
+            </DashboardPanel>
+            <DashboardPanel
+              title={t('usage.modelTableTitle')}
+              description={t('usage.modelTableDescription')}
+            >
+              <UsageRankTable
+                locale={locale}
+                nameLabel={t('usage.model')}
+                rows={summary.byModel}
+                t={t}
+              />
+            </DashboardPanel>
+          </div>
         </>
       )}
     </PageShell>

@@ -27,7 +27,6 @@ import {
   USAGE_REFRESH_FREQUENCIES,
 } from '../shared/ipc-types.js'
 import {
-  notifyRenderer,
   queryAgentStatus,
   queryHistorySummary,
   queryMenubarState,
@@ -35,7 +34,12 @@ import {
   writeAndNotify,
 } from './db.js'
 import { getUpdateState, runUpdateAction, runUpdateCheck } from './updater.js'
-import { queryUsageSummary, runUsageRefresh, startUsageBackgroundRefresh } from './usage-service.js'
+import {
+  queryUsageRefreshState,
+  queryUsageSummary,
+  startUsageBackgroundRefresh,
+  startUsageRefreshJob,
+} from './usage-service.js'
 import { normalizeAppRoute } from './window-security.js'
 
 const VALID_AGENTS = new Set(['claude-code', 'codex', 'cursor', 'gemini-cli'])
@@ -152,7 +156,7 @@ function assertValidUsageSummaryArgs(args: unknown): asserts args is UsageSummar
 }
 
 function usageRefreshResultFromService(
-  result: Awaited<ReturnType<typeof runUsageRefresh>>,
+  result: ReturnType<typeof startUsageRefreshJob>,
 ): UsageRefreshResult {
   return {
     ...result,
@@ -203,13 +207,23 @@ export function registerIpcHandlers(
 
   ipcMain.handle('refreshUsage', async (): Promise<IpcResult<UsageRefreshResult>> => {
     try {
-      const result = usageRefreshResultFromService(await runUsageRefresh({ refreshPricing: true }))
-      notifyRenderer({ type: 'usage-changed' })
+      const result = usageRefreshResultFromService(startUsageRefreshJob({ refreshPricing: true }))
       return { ok: true, data: result }
     } catch (err) {
       return { ok: false, error: String(err) }
     }
   })
+
+  ipcMain.handle(
+    'getUsageRefreshState',
+    async (): Promise<IpcResult<ReturnType<typeof queryUsageRefreshState>>> => {
+      try {
+        return { ok: true, data: queryUsageRefreshState() }
+      } catch (err) {
+        return { ok: false, error: String(err) }
+      }
+    },
+  )
 
   ipcMain.handle(
     'getMenubarState',

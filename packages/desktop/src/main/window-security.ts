@@ -1,7 +1,7 @@
 import { app, type BrowserWindow, session } from 'electron'
 
 const LOCAL_DEV_HOSTS = new Set(['localhost', '127.0.0.1', '::1'])
-const APP_ROUTES = new Set(['/', '/live', '/history', '/settings'])
+const APP_ROUTES = new Set(['/', '/live', '/history', '/usage', '/settings'])
 
 export function normalizeAppRoute(route: unknown, fallback = '/'): string {
   if (typeof route !== 'string') return fallback

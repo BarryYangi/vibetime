@@ -150,4 +150,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 4. Desktop Shell, Today View & CLI | 6/6 | Complete | 2026-04-29 |
 | 5. Live, History, Menubar & Lifecycle | 4/4 | Complete | 2026-05-07 |
 | 6. Packaging & V0 Acceptance | 1/1 | Complete | 2026-05-08 |
-| 7. Usage Analytics | 1/6 | In Progress | — |
+| 7. Usage Analytics | 6/6 | Complete | 2026-05-16 |

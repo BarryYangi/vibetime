@@ -21,7 +21,7 @@ describe('usage IPC contracts', () => {
   it('limits usage agents, filters, and refresh frequencies to renderer-safe enums', () => {
     expect(USAGE_AGENTS).toEqual(['claude-code', 'codex'])
     expect(USAGE_AGENT_FILTERS).toEqual(['all', 'claude-code', 'codex'])
-    expect(USAGE_REFRESH_FREQUENCIES).toEqual(['15m', '30m', '1h', '4h'])
+    expect(USAGE_REFRESH_FREQUENCIES).toEqual(['manual', '1m', '2m', '5m', '15m', '30m'])
   })
 
   it('exposes summary args without scanner internals', () => {
@@ -43,11 +43,14 @@ describe('usage IPC contracts', () => {
   })
 
   it('types usage methods and push notifications', () => {
-    type Methods = keyof Pick<IpcMethods, 'getUsageSummary' | 'refreshUsage'>
-    const methods: Methods[] = ['getUsageSummary', 'refreshUsage']
+    type Methods = keyof Pick<
+      IpcMethods,
+      'getUsageSummary' | 'getUsageRefreshState' | 'refreshUsage'
+    >
+    const methods: Methods[] = ['getUsageSummary', 'getUsageRefreshState', 'refreshUsage']
     const event: IpcPushEvent = { type: 'usage-changed' }
 
-    expect(methods).toEqual(['getUsageSummary', 'refreshUsage'])
+    expect(methods).toEqual(['getUsageSummary', 'getUsageRefreshState', 'refreshUsage'])
     expect(event.type).toBe('usage-changed')
   })
 
@@ -55,6 +58,7 @@ describe('usage IPC contracts', () => {
     const { IPC_CHANNELS } = await import('../preload/index.js')
 
     expect(IPC_CHANNELS.has('getUsageSummary')).toBe(true)
+    expect(IPC_CHANNELS.has('getUsageRefreshState')).toBe(true)
     expect(IPC_CHANNELS.has('refreshUsage')).toBe(true)
     expect(IPC_CHANNELS.has('unknown' as keyof IpcMethods)).toBe(false)
   })

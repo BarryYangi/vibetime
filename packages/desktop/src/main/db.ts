@@ -1,16 +1,8 @@
 import { existsSync, type FSWatcher, mkdirSync, readFileSync, watch } from 'node:fs'
-import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import type { NormalizedEvent } from '@vibetime/core'
 import {
   buildHistorySummaryFromEvents,
-  DDL_EVENTS,
-  DDL_INDICES,
-  DDL_OPEN_TURNS,
-  DDL_USAGE_INDICES,
-  DDL_USAGE_PRICING_CACHE,
-  DDL_USAGE_RECORDS,
-  DDL_USAGE_SCAN_STATE,
   durationWithinWindow,
   HISTORY_TURN_START_BUFFER_SEC,
   type HistoryPeriodDays,
@@ -18,7 +10,7 @@ import {
   historyLowerBound,
 } from '@vibetime/core'
 import { getManagedCliPath } from '@vibetime/hook/install'
-import Database from 'better-sqlite3'
+import type Database from 'better-sqlite3'
 import { BrowserWindow } from 'electron'
 import { formatDurationMinuteSummary } from '../shared/format.js'
 import type {
@@ -30,16 +22,13 @@ import type {
   TodaySummary,
 } from '../shared/ipc-types.js'
 import { findCodexTurnCompletion } from './codex-transcript.js'
+import { DB_DIR, DB_FILES, openDesktopDb } from './desktop-db.js'
 import { logger } from './logger.js'
 
 type DbEvent = Omit<NormalizedEvent, 'duration_sec' | 'meta'> & {
   duration_sec: number | null
   meta: Record<string, unknown> | string | null
 }
-
-const DB_PATH = join(homedir(), '.vibetime', 'data.db')
-const DB_DIR = join(homedir(), '.vibetime')
-const DB_FILES = new Set(['data.db', 'data.db-wal', 'data.db-shm'])
 
 // Background reconciliation cadence. Codex transcript fallbacks are best-effort;
 // 30s is fresh enough for UI without thrashing disk I/O.
@@ -57,27 +46,12 @@ export function setDbChangeListener(listener: ((event: IpcPushEvent) => void) | 
 
 export function getDb(): Database.Database {
   if (!db) {
-    mkdirSync(DB_DIR, { recursive: true, mode: 0o700 })
-    db = new Database(DB_PATH)
-    db.pragma('journal_mode = WAL')
-    db.pragma('synchronous = NORMAL')
-    db.pragma('busy_timeout = 5000')
-    db.pragma('foreign_keys = ON')
-    initializeDesktopDbSchema(db)
+    db = openDesktopDb()
   }
   return db
 }
 
-export function initializeDesktopDbSchema(handle: Database.Database): void {
-  handle.exec(DDL_EVENTS.replace('CREATE TABLE', 'CREATE TABLE IF NOT EXISTS'))
-  handle.exec(DDL_OPEN_TURNS.replace('CREATE TABLE', 'CREATE TABLE IF NOT EXISTS'))
-  handle.exec(DDL_USAGE_RECORDS.replace('CREATE TABLE', 'CREATE TABLE IF NOT EXISTS'))
-  handle.exec(DDL_USAGE_SCAN_STATE.replace('CREATE TABLE', 'CREATE TABLE IF NOT EXISTS'))
-  handle.exec(DDL_USAGE_PRICING_CACHE.replace('CREATE TABLE', 'CREATE TABLE IF NOT EXISTS'))
-  for (const idx of [...DDL_INDICES, ...DDL_USAGE_INDICES]) {
-    handle.exec(idx.replace('CREATE INDEX', 'CREATE INDEX IF NOT EXISTS'))
-  }
-}
+export { initializeDesktopDbSchema } from './desktop-db.js'
 
 export function closeDb(): void {
   if (db) {
