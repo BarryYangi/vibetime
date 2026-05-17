@@ -18,11 +18,12 @@ export function preloadECharts(): Promise<EChartsModule> {
   return echartsModulePromise
 }
 
-function requestNextFrame(callback: () => void): number {
+function requestNextFrame(callback: () => void): void {
   if (typeof globalThis.requestAnimationFrame === 'function') {
-    return globalThis.requestAnimationFrame(() => callback())
+    globalThis.requestAnimationFrame(() => callback())
+    return
   }
-  return globalThis.setTimeout(callback, 16)
+  globalThis.setTimeout(callback, 16)
 }
 
 function scheduleChartUpdate(run: () => void): () => void {

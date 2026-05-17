@@ -80,6 +80,26 @@ const summary: UsageSummary = {
   byAgent: [],
   byModel: [],
   byProject: [],
+  projectModelMatrix: [],
+  efficiency: {
+    totals: {
+      durationSec: 0,
+      turnCount: 0,
+      costPerHourUsd: null,
+      costPerTurnUsd: null,
+      tokensPerTurn: null,
+    },
+    daily: [],
+    byAgent: [],
+    byModel: [],
+    byProject: [],
+  },
+  dataQuality: {
+    assignedRecordCount: 0,
+    unassigned: { totalTokens: 0, estimatedCostUsd: null, unknownCostTokens: 0, recordCount: 0 },
+    unknownPrice: { totalTokens: 0, estimatedCostUsd: null, unknownCostTokens: 0, recordCount: 0 },
+    attribution: [],
+  },
   auditRows: [],
   availableFilters: { agents: [], models: [], projects: [] },
 }

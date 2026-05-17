@@ -1154,7 +1154,7 @@ export default function Usage() {
   }
 
   const isRefreshing = manualRefreshing || refreshState.status === 'loading'
-  const hasData = (summary?.totals.recordCount ?? 0) > 0
+  const hasData = summary !== null && summary.totals.recordCount > 0
   const modelItems = [
     { label: t('usage.allModels'), value: 'all' },
     ...(summary?.availableFilters.models ?? []).map((value) => ({ label: value, value })),
@@ -1272,7 +1272,7 @@ export default function Usage() {
 
       {isInitialLoading ? (
         <UsageLoadingSkeleton />
-      ) : !hasData ? (
+      ) : !summary || !hasData ? (
         <div className="rounded-xl border border-border/60 bg-card/40 px-5 py-12 text-center">
           <h2 className="text-[20px] font-semibold text-foreground">{t('usage.emptyTitle')}</h2>
           <p className="mt-2 text-[13px] text-muted-foreground">{t('usage.emptyDescription')}</p>

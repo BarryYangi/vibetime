@@ -1549,11 +1549,12 @@ async function scanSourceFilesOffMainThread(
 
   return new Promise((resolve, reject) => {
     let settled = false
-    const worker = new Worker(USAGE_SCAN_WORKER_SOURCE, {
-      eval: true,
-      type: 'module',
-      workerData: { coreModuleUrl, files, previousStates: Array.from(previousStates.entries()) },
-    })
+    const worker = new Worker(
+      new URL(`data:text/javascript,${encodeURIComponent(USAGE_SCAN_WORKER_SOURCE)}`),
+      {
+        workerData: { coreModuleUrl, files, previousStates: Array.from(previousStates.entries()) },
+      },
+    )
     const timeout = setTimeout(() => {
       if (settled) return
       settled = true

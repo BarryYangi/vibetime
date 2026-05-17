@@ -1,4 +1,5 @@
 import { existsSync, type FSWatcher, mkdirSync, readFileSync, watch } from 'node:fs'
+import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
 import type { NormalizedEvent } from '@vibetime/core'
 import {
