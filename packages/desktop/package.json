@@ -21,7 +21,7 @@
     "rebuild:native": "pnpm run rebuild:native:electron",
     "rebuild:native:electron": "electron-rebuild -f -w better-sqlite3",
     "rebuild:native:node": "pnpm rebuild better-sqlite3",
-    "test": "vitest run"
+    "test": "pnpm run rebuild:native:node && vitest run"
   },
   "dependencies": {
     "@vibetime/core": "workspace:*",
