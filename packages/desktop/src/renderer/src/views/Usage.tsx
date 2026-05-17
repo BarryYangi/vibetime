@@ -183,7 +183,6 @@ function pricingStatusText(status: UsageSummary['pricingStatus'], t: TFunction):
   if (status === 'cached' || status === 'refresh_failed_with_cache') {
     return t('usage.pricingCached')
   }
-  if (status === 'unknown_model') return t('usage.unknownModelPrice')
   return t('usage.pricingUnavailable')
 }
 

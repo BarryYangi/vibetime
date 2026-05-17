@@ -52,7 +52,7 @@ function makeUsageSummary(
       recordCount: totalTokens > 0 ? 1 : 0,
     },
     daily: [],
-    pricingStatus: estimatedCostUsd === null ? 'unknown_model' : 'fresh',
+    pricingStatus: 'fresh',
     tokenBreakdown: {
       inputTokens: totalTokens,
       cachedInputTokens: 0,

@@ -1,14 +1,33 @@
-import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { buildUsagePeriodCompare, buildUsageSummary } from './aggregate.js'
-import { normalizeLiteLlmPricingPayload } from './pricing.js'
-import type { UsageRecordFact, UsageTokenBreakdown } from './types.js'
+import type { UsagePricingEntry, UsageRecordFact, UsageTokenBreakdown } from './types.js'
 
-function pricingFixture(): unknown {
-  return JSON.parse(
-    readFileSync(new URL('./__fixtures__/pricing-cache.json', import.meta.url), 'utf8'),
-  )
-}
+const PRICES: UsagePricingEntry[] = [
+  {
+    model: 'claude-sonnet-4-5',
+    provider: 'anthropic',
+    inputUsdPerMillion: 3,
+    cachedInputUsdPerMillion: 0.3,
+    cacheCreationInputUsdPerMillion: 3.75,
+    outputUsdPerMillion: 15,
+    reasoningOutputUsdPerMillion: null,
+    source: 'models.dev',
+    fetchedAt: '2026-05-15T00:00:00.000Z',
+    rawVersion: 'test',
+  },
+  {
+    model: 'gpt-5-codex',
+    provider: 'openai',
+    inputUsdPerMillion: 1.25,
+    cachedInputUsdPerMillion: 0.125,
+    cacheCreationInputUsdPerMillion: null,
+    outputUsdPerMillion: 10,
+    reasoningOutputUsdPerMillion: null,
+    source: 'models.dev',
+    fetchedAt: '2026-05-15T00:00:00.000Z',
+    rawVersion: 'test',
+  },
+]
 
 function tokens(overrides: Partial<UsageTokenBreakdown>): UsageTokenBreakdown {
   const result = {
@@ -64,7 +83,7 @@ describe('buildUsageSummary', () => {
       {
         periodDays: 7,
         now: new Date('2026-05-15T12:00:00.000Z'),
-        prices: normalizeLiteLlmPricingPayload(pricingFixture(), '2026-05-15T00:00:00.000Z'),
+        prices: PRICES,
         pricingStatus: 'fresh',
       },
     )
@@ -78,7 +97,7 @@ describe('buildUsageSummary', () => {
     const summary = buildUsageSummary([record({ ts: 1778814000 })], {
       periodDays: 7,
       now: new Date('2026-05-15T12:00:00.000Z'),
-      prices: normalizeLiteLlmPricingPayload(pricingFixture(), '2026-05-15T00:00:00.000Z'),
+      prices: PRICES,
       pricingStatus: 'fresh',
     })
 
@@ -95,7 +114,7 @@ describe('buildUsageSummary', () => {
     expect(summary.daily.at(-1)).toMatchObject({ totalTokens: 150, recordCount: 1 })
   })
 
-  it('uses ccusage zero-cost fallback while keeping Unassigned usage auditable', () => {
+  it('keeps unknown model pricing auditable without treating it as zero cost', () => {
     const summary = buildUsageSummary(
       [
         record({
@@ -109,27 +128,27 @@ describe('buildUsageSummary', () => {
       {
         periodDays: 7,
         now: new Date('2026-05-15T12:00:00.000Z'),
-        prices: normalizeLiteLlmPricingPayload(pricingFixture(), '2026-05-15T00:00:00.000Z'),
+        prices: PRICES,
         pricingStatus: 'fresh',
       },
     )
 
-    expect(summary.totals.estimatedCostUsd).toBe(0)
-    expect(summary.totals.unknownCostTokens).toBe(0)
+    expect(summary.totals.estimatedCostUsd).toBeNull()
+    expect(summary.totals.unknownCostTokens).toBe(580)
     expect(summary.auditRows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           label: 'Cost unknown for this model',
           model: 'unknown-future-model',
-          estimatedCostUsd: 0,
-          unknownCostTokens: 0,
+          estimatedCostUsd: null,
+          unknownCostTokens: 580,
         }),
         expect.objectContaining({ label: 'Unassigned usage', attributionMethod: 'unmatched' }),
       ]),
     )
   })
 
-  it('treats unpriced token categories as zero cost like ccusage', () => {
+  it('treats missing token-category rates as zero without marking the model unknown', () => {
     const summary = buildUsageSummary(
       [
         record({
@@ -155,7 +174,7 @@ describe('buildUsageSummary', () => {
             cacheCreationInputUsdPerMillion: null,
             outputUsdPerMillion: 15,
             reasoningOutputUsdPerMillion: null,
-            source: 'litellm',
+            source: 'models.dev',
             fetchedAt: '2026-05-15T00:00:00.000Z',
             rawVersion: 'test',
           },
@@ -188,7 +207,7 @@ describe('buildUsageSummary', () => {
       {
         periodDays: 7,
         now: new Date('2026-05-15T12:00:00.000Z'),
-        prices: normalizeLiteLlmPricingPayload(pricingFixture(), '2026-05-15T00:00:00.000Z'),
+        prices: PRICES,
         pricingStatus: 'fresh',
       },
     )
@@ -199,7 +218,7 @@ describe('buildUsageSummary', () => {
   })
 
   it('builds previous-period comparisons only when comparable values exist', () => {
-    const prices = normalizeLiteLlmPricingPayload(pricingFixture(), '2026-05-15T00:00:00.000Z')
+    const prices = PRICES
     const current = buildUsageSummary(
       [record({ tokens: tokens({ inputTokens: 200, outputTokens: 100, totalTokens: 300 }) })],
       {

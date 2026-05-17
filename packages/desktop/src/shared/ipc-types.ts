@@ -64,7 +64,6 @@ export type UsagePricingStatus =
   | 'cached'
   | 'refresh_failed_with_cache'
   | 'refresh_failed_without_cache'
-  | 'unknown_model'
 
 export interface VibetimeConfig {
   projects: Record<string, string>

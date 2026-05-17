@@ -131,7 +131,6 @@ describe('scanCodexUsageTranscript', () => {
             git: {
               repository_url: 'https://github.com/BarryYangi/vibetime.git',
             },
-            model_provider: 'openai',
           },
         }),
         JSON.stringify({
@@ -199,7 +198,6 @@ describe('scanCodexUsageTranscript', () => {
           payload: {
             id: 'codex-session-windows',
             project: 'vibetime',
-            model_provider: 'openai',
           },
         }),
         JSON.stringify({

@@ -76,10 +76,7 @@ function addRecord(
   addTokens(accumulator.tokens, record.tokens)
   accumulator.recordCount += 1
 
-  const resolved = resolvePrice(record.model, {
-    agent: record.agent,
-    provider: record.meta?.modelProvider ?? null,
-  })
+  const resolved = resolvePrice(record.model)
   const cost = estimateUsageCostUsd(record.tokens, resolved.price, {
     codexServiceTier: record.meta?.codexServiceTier ?? null,
   })
@@ -290,10 +287,7 @@ export function buildUsageSummary(
       addRecord(unassigned, record, resolvePrice)
     }
 
-    const priceResolution = resolvePrice(record.model, {
-      agent: record.agent,
-      provider: record.meta?.modelProvider ?? null,
-    })
+    const priceResolution = resolvePrice(record.model)
     if (priceResolution.matchKind === 'unknown') {
       addRecord(upsertGroup(unknownPriceByModel, record.model), record, resolvePrice)
     }

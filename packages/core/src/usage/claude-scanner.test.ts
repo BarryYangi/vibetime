@@ -52,7 +52,6 @@ describe('scanClaudeUsageTranscript', () => {
       subagentType: 'reviewer',
       sourceKind: 'claude-assistant-usage',
       claudePathRole: 'parent',
-      modelProvider: 'anthropic',
     })
   })
 

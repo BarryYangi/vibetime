@@ -1,5 +1,4 @@
 import type {
-  UsageAgent,
   UsagePriceResolution,
   UsagePricingEntry,
   UsagePricingStatus,
@@ -8,30 +7,56 @@ import type {
 
 const MILLION = 1_000_000
 const CODEX_PRIORITY_INPUT_TOKEN_LIMIT = 272_000
-const DEFAULT_FRESH_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
-const DEFAULT_PROVIDER_PREFIXES = [
-  'anthropic/',
-  'claude-3-5-',
-  'claude-3-',
-  'claude-',
-  'openai/',
-  'azure/',
-  'openrouter/openai/',
-] as const
-const CODEX_PROVIDER_PREFIXES = ['openai/', 'azure/', 'openrouter/openai/'] as const
-const CLAUDE_PROVIDER_PREFIXES = ['anthropic/'] as const
+const DEFAULT_FRESH_MAX_AGE_MS = 24 * 60 * 60 * 1000
 const CODEX_MODEL_ALIASES: Record<string, string[]> = {
   'gpt-5-codex': ['gpt-5'],
   'gpt-5.3-codex': ['gpt-5.2-codex'],
 }
 const MODE_SUFFIXES = ['-thinking', '-high', '-medium', '-low', '-fast'] as const
+const OFFICIAL_PROVIDER_RULES = [
+  { provider: 'openai', patterns: [/^gpt-/, /^o\d(?:-|$)/, /^chatgpt-/, /^codex-/] },
+  { provider: 'anthropic', patterns: [/^claude-/] },
+  { provider: 'google', patterns: [/^gemini-/, /^gemma-/] },
+  { provider: 'moonshotai', patterns: [/^kimi-/] },
+  { provider: 'xiaomi', patterns: [/^mimo-/] },
+  { provider: 'zai', patterns: [/^glm-/, /^chatglm-/] },
+  { provider: 'alibaba', patterns: [/^qwen/] },
+  { provider: 'deepseek', patterns: [/^deepseek-/] },
+  { provider: 'xai', patterns: [/^grok-/] },
+  { provider: 'mistral', patterns: [/^mistral-/, /^mixtral-/, /^codestral-/, /^ministral-/] },
+  { provider: 'cohere', patterns: [/^command-/] },
+  { provider: 'perplexity', patterns: [/^sonar(?:-|$)/] },
+] as const
+const OFFICIAL_PROVIDER_IDS: ReadonlySet<string> = new Set(
+  OFFICIAL_PROVIDER_RULES.map((rule) => rule.provider),
+)
+const GATEWAY_PROVIDER_PREFIXES = new Set([
+  'azure',
+  'azure_ai',
+  'bedrock',
+  'bedrock_converse',
+  'deepinfra',
+  'fireworks-ai',
+  'fireworks_ai',
+  'groq',
+  'huggingface',
+  'kilo',
+  'novita',
+  'novita-ai',
+  'openrouter',
+  'together_ai',
+  'togetherai',
+  'vertex_ai',
+  'vercel',
+  'vercel_ai_gateway',
+])
 
 type JsonObject = Record<string, unknown>
-type UsagePriceLookupContext = {
-  agent?: UsageAgent
-  provider?: string | null
+type ModelRoute = {
+  provider: string | null
+  model: string
 }
-type UsagePriceResolver = (model: string, context?: UsagePriceLookupContext) => UsagePriceResolution
+type UsagePriceResolver = (model: string) => UsagePriceResolution
 type RateOverride = {
   provider: string
   inputUsdPerMillion: number
@@ -49,7 +74,44 @@ type RateOverride = {
   codexLongContextAppliesToWholeRow?: boolean
 }
 
-const CODEXBAR_RATE_OVERRIDES: Record<string, RateOverride> = {
+const CLAUDE_HAIKU_4_5_RATE: RateOverride = {
+  provider: 'anthropic',
+  inputUsdPerMillion: 1,
+  cachedInputUsdPerMillion: 0.1,
+  cacheCreationInputUsdPerMillion: 1.25,
+  outputUsdPerMillion: 5,
+}
+
+const CLAUDE_OPUS_4_RATE: RateOverride = {
+  provider: 'anthropic',
+  inputUsdPerMillion: 15,
+  cachedInputUsdPerMillion: 1.5,
+  cacheCreationInputUsdPerMillion: 18.75,
+  outputUsdPerMillion: 75,
+}
+
+const CLAUDE_OPUS_4_5_RATE: RateOverride = {
+  provider: 'anthropic',
+  inputUsdPerMillion: 5,
+  cachedInputUsdPerMillion: 0.5,
+  cacheCreationInputUsdPerMillion: 6.25,
+  outputUsdPerMillion: 25,
+}
+
+const CLAUDE_SONNET_4_RATE: RateOverride = {
+  provider: 'anthropic',
+  inputUsdPerMillion: 3,
+  cachedInputUsdPerMillion: 0.3,
+  cacheCreationInputUsdPerMillion: 3.75,
+  outputUsdPerMillion: 15,
+  thresholdTokens: 200_000,
+  inputUsdPerMillionAboveThreshold: 6,
+  cachedInputUsdPerMillionAboveThreshold: 0.6,
+  cacheCreationInputUsdPerMillionAboveThreshold: 7.5,
+  outputUsdPerMillionAboveThreshold: 22.5,
+}
+
+const BUILTIN_RATE_OVERRIDES: Record<string, RateOverride> = {
   'gpt-5': {
     provider: 'openai',
     inputUsdPerMillion: 1.25,
@@ -190,68 +252,43 @@ const CODEXBAR_RATE_OVERRIDES: Record<string, RateOverride> = {
     outputUsdPerMillion: 180,
   },
   'claude-sonnet-4-5': {
-    provider: 'anthropic',
-    inputUsdPerMillion: 3,
-    cachedInputUsdPerMillion: 0.3,
-    cacheCreationInputUsdPerMillion: 3.75,
-    outputUsdPerMillion: 15,
-    thresholdTokens: 200_000,
-    inputUsdPerMillionAboveThreshold: 6,
-    cachedInputUsdPerMillionAboveThreshold: 0.6,
-    cacheCreationInputUsdPerMillionAboveThreshold: 7.5,
-    outputUsdPerMillionAboveThreshold: 22.5,
+    ...CLAUDE_SONNET_4_RATE,
   },
   'claude-sonnet-4-5-20250929': {
-    provider: 'anthropic',
-    inputUsdPerMillion: 3,
-    cachedInputUsdPerMillion: 0.3,
-    cacheCreationInputUsdPerMillion: 3.75,
-    outputUsdPerMillion: 15,
-    thresholdTokens: 200_000,
-    inputUsdPerMillionAboveThreshold: 6,
-    cachedInputUsdPerMillionAboveThreshold: 0.6,
-    cacheCreationInputUsdPerMillionAboveThreshold: 7.5,
-    outputUsdPerMillionAboveThreshold: 22.5,
+    ...CLAUDE_SONNET_4_RATE,
   },
   'claude-sonnet-4-6': {
-    provider: 'anthropic',
-    inputUsdPerMillion: 3,
-    cachedInputUsdPerMillion: 0.3,
-    cacheCreationInputUsdPerMillion: 3.75,
-    outputUsdPerMillion: 15,
-    thresholdTokens: 200_000,
-    inputUsdPerMillionAboveThreshold: 6,
-    cachedInputUsdPerMillionAboveThreshold: 0.6,
-    cacheCreationInputUsdPerMillionAboveThreshold: 7.5,
-    outputUsdPerMillionAboveThreshold: 22.5,
+    ...CLAUDE_SONNET_4_RATE,
+  },
+  'claude-sonnet-4-20250514': {
+    ...CLAUDE_SONNET_4_RATE,
   },
   'claude-haiku-4-5': {
-    provider: 'anthropic',
-    inputUsdPerMillion: 1,
-    cachedInputUsdPerMillion: 0.1,
-    cacheCreationInputUsdPerMillion: 1.25,
-    outputUsdPerMillion: 5,
+    ...CLAUDE_HAIKU_4_5_RATE,
   },
   'claude-haiku-4-5-20251001': {
-    provider: 'anthropic',
-    inputUsdPerMillion: 1,
-    cachedInputUsdPerMillion: 0.1,
-    cacheCreationInputUsdPerMillion: 1.25,
-    outputUsdPerMillion: 5,
+    ...CLAUDE_HAIKU_4_5_RATE,
+  },
+  'claude-opus-4-20250514': {
+    ...CLAUDE_OPUS_4_RATE,
+  },
+  'claude-opus-4-1': {
+    ...CLAUDE_OPUS_4_RATE,
   },
   'claude-opus-4-5': {
-    provider: 'anthropic',
-    inputUsdPerMillion: 5,
-    cachedInputUsdPerMillion: 0.5,
-    cacheCreationInputUsdPerMillion: 6.25,
-    outputUsdPerMillion: 25,
+    ...CLAUDE_OPUS_4_5_RATE,
   },
   'claude-opus-4-5-20251101': {
-    provider: 'anthropic',
-    inputUsdPerMillion: 5,
-    cachedInputUsdPerMillion: 0.5,
-    cacheCreationInputUsdPerMillion: 6.25,
-    outputUsdPerMillion: 25,
+    ...CLAUDE_OPUS_4_5_RATE,
+  },
+  'claude-opus-4-6': {
+    ...CLAUDE_OPUS_4_5_RATE,
+  },
+  'claude-opus-4-6-20260205': {
+    ...CLAUDE_OPUS_4_5_RATE,
+  },
+  'claude-opus-4-7': {
+    ...CLAUDE_OPUS_4_5_RATE,
   },
 }
 
@@ -261,11 +298,6 @@ function isObject(value: unknown): value is JsonObject {
 
 function nullableNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
-}
-
-function perTokenToPerMillion(value: unknown): number | null {
-  const rate = nullableNumber(value)
-  return rate === null ? null : rate * MILLION
 }
 
 function hasAnyRate(entry: UsagePricingEntry): boolean {
@@ -283,87 +315,121 @@ function rawVersionFromPayload(payload: JsonObject): string {
   return typeof version === 'string' && version ? version : 'unknown'
 }
 
-function normalizeSeededModel(
-  model: JsonObject,
-  fetchedAt: string,
-  rawVersion: string,
-): UsagePricingEntry | null {
-  const modelName = typeof model.model === 'string' ? model.model : null
-  const provider = typeof model.provider === 'string' ? model.provider : null
-  if (!modelName || !provider) return null
+function modelsDevProviders(payload: JsonObject): Array<[string, JsonObject]> {
+  const root = isObject(payload.providers) ? payload.providers : payload
+  return Object.entries(root).filter((entry): entry is [string, JsonObject] => isObject(entry[1]))
+}
+
+function modelsDevProviderId(providerKey: string, provider: JsonObject): string {
+  return typeof provider.id === 'string' && provider.id.trim()
+    ? provider.id.trim().toLowerCase()
+    : providerKey.trim().toLowerCase()
+}
+
+function normalizePathSegments(value: string): string[] {
+  return value
+    .trim()
+    .split('/')
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+}
+
+function modelsDevPricingRoute(providerId: string, modelName: string): ModelRoute {
+  const segments = normalizePathSegments(modelName)
+  if (OFFICIAL_PROVIDER_IDS.has(providerId) || segments.length <= 1) {
+    return { provider: providerId, model: modelName }
+  }
 
   return {
-    model: modelName,
-    provider,
-    inputUsdPerMillion: nullableNumber(model.inputUsdPerMillion),
-    cachedInputUsdPerMillion: nullableNumber(model.cachedInputUsdPerMillion),
-    cacheCreationInputUsdPerMillion: nullableNumber(model.cacheCreationInputUsdPerMillion),
-    outputUsdPerMillion: nullableNumber(model.outputUsdPerMillion),
-    reasoningOutputUsdPerMillion: nullableNumber(model.reasoningOutputUsdPerMillion),
-    source: 'litellm',
-    fetchedAt,
-    rawVersion,
+    provider: `${providerId}/${segments.slice(0, -1).join('/')}`,
+    model: segments[segments.length - 1] ?? modelName,
   }
 }
 
-function normalizeLiteLlmModel(
+function modelsDevContextTier(cost: JsonObject): {
+  thresholdTokens: number
+  inputUsdPerMillionAboveThreshold: number | null
+  cachedInputUsdPerMillionAboveThreshold: number | null
+  cacheCreationInputUsdPerMillionAboveThreshold: number | null
+  outputUsdPerMillionAboveThreshold: number | null
+} | null {
+  const tiers = Array.isArray(cost.tiers) ? cost.tiers.filter(isObject) : []
+  const contextTiers = tiers
+    .map((tier) => {
+      const tierInfo = isObject(tier.tier) ? tier.tier : null
+      const threshold = nullableNumber(tierInfo?.size)
+      if (tierInfo?.type !== 'context' || threshold === null || threshold <= 0) return null
+      return {
+        thresholdTokens: Math.trunc(threshold),
+        inputUsdPerMillionAboveThreshold: nullableNumber(tier.input),
+        cachedInputUsdPerMillionAboveThreshold: nullableNumber(tier.cache_read),
+        cacheCreationInputUsdPerMillionAboveThreshold: nullableNumber(tier.cache_write),
+        outputUsdPerMillionAboveThreshold: nullableNumber(tier.output),
+      }
+    })
+    .filter(
+      (
+        tier,
+      ): tier is {
+        thresholdTokens: number
+        inputUsdPerMillionAboveThreshold: number | null
+        cachedInputUsdPerMillionAboveThreshold: number | null
+        cacheCreationInputUsdPerMillionAboveThreshold: number | null
+        outputUsdPerMillionAboveThreshold: number | null
+      } => tier !== null,
+    )
+    .sort((a, b) => a.thresholdTokens - b.thresholdTokens)
+  if (contextTiers[0]) return contextTiers[0]
+
+  const contextOver200K = isObject(cost.context_over_200k) ? cost.context_over_200k : null
+  if (!contextOver200K) return null
+  return {
+    thresholdTokens: 200_000,
+    inputUsdPerMillionAboveThreshold: nullableNumber(contextOver200K.input),
+    cachedInputUsdPerMillionAboveThreshold: nullableNumber(contextOver200K.cache_read),
+    cacheCreationInputUsdPerMillionAboveThreshold: nullableNumber(contextOver200K.cache_write),
+    outputUsdPerMillionAboveThreshold: nullableNumber(contextOver200K.output),
+  }
+}
+
+function normalizeModelsDevModel(
+  providerId: string,
   modelName: string,
   model: JsonObject,
   fetchedAt: string,
   rawVersion: string,
 ): UsagePricingEntry | null {
-  const provider =
-    typeof model.litellm_provider === 'string'
-      ? model.litellm_provider
-      : typeof model.provider === 'string'
-        ? model.provider
-        : null
-  if (!provider) return null
+  const cost = isObject(model.cost) ? model.cost : null
+  if (!cost) return null
 
-  const entry: UsagePricingEntry = {
-    model: modelName,
-    provider,
-    inputUsdPerMillion:
-      perTokenToPerMillion(model.input_cost_per_token) ??
-      nullableNumber(model.input_per_million_usd),
-    cachedInputUsdPerMillion:
-      perTokenToPerMillion(model.cache_read_input_token_cost) ??
-      perTokenToPerMillion(model.cached_input_cost_per_token) ??
-      nullableNumber(model.cached_input_per_million_usd),
-    cacheCreationInputUsdPerMillion:
-      perTokenToPerMillion(model.cache_creation_input_token_cost) ??
-      nullableNumber(model.cache_creation_input_per_million_usd),
-    outputUsdPerMillion:
-      perTokenToPerMillion(model.output_cost_per_token) ??
-      nullableNumber(model.output_per_million_usd),
-    reasoningOutputUsdPerMillion:
-      perTokenToPerMillion(model.reasoning_output_cost_per_token) ??
-      nullableNumber(model.reasoning_output_per_million_usd),
-    source: 'litellm',
+  const input = nullableNumber(cost.input)
+  const output = nullableNumber(cost.output)
+  if (input === null || output === null) return null
+
+  const tier = modelsDevContextTier(cost)
+  const route = modelsDevPricingRoute(providerId, modelName)
+  return {
+    model: route.model,
+    provider: route.provider ?? providerId,
+    inputUsdPerMillion: input,
+    cachedInputUsdPerMillion: nullableNumber(cost.cache_read),
+    cacheCreationInputUsdPerMillion: nullableNumber(cost.cache_write),
+    outputUsdPerMillion: output,
+    reasoningOutputUsdPerMillion: null,
+    thresholdTokens: tier?.thresholdTokens ?? null,
+    inputUsdPerMillionAboveThreshold: tier?.inputUsdPerMillionAboveThreshold ?? null,
+    cachedInputUsdPerMillionAboveThreshold: tier?.cachedInputUsdPerMillionAboveThreshold ?? null,
+    cacheCreationInputUsdPerMillionAboveThreshold:
+      tier?.cacheCreationInputUsdPerMillionAboveThreshold ?? null,
+    outputUsdPerMillionAboveThreshold: tier?.outputUsdPerMillionAboveThreshold ?? null,
+    longContextAppliesToWholeRow: providerId === 'openai' && tier !== null ? true : null,
+    source: 'models.dev',
     fetchedAt,
     rawVersion,
   }
-
-  return hasAnyRate(entry) ? entry : null
 }
 
-function modelEntries(payload: JsonObject): Array<[string, JsonObject]> {
-  if (Array.isArray(payload.models)) {
-    return payload.models
-      .filter(isObject)
-      .map((model) => [typeof model.model === 'string' ? model.model : '', model])
-  }
-  if (isObject(payload.models)) {
-    return Object.entries(payload.models).filter((entry): entry is [string, JsonObject] =>
-      isObject(entry[1]),
-    )
-  }
-  return Object.entries(payload).filter((entry): entry is [string, JsonObject] =>
-    isObject(entry[1]),
-  )
-}
-
-export function normalizeLiteLlmPricingPayload(
+export function normalizeModelsDevPricingPayload(
   payload: unknown,
   fetchedAt: string,
 ): UsagePricingEntry[] {
@@ -372,18 +438,54 @@ export function normalizeLiteLlmPricingPayload(
   const rawVersion = rawVersionFromPayload(payload)
   const entries: UsagePricingEntry[] = []
 
-  for (const [modelName, model] of modelEntries(payload)) {
-    const normalized = Array.isArray(payload.models)
-      ? normalizeSeededModel(model, fetchedAt, rawVersion)
-      : normalizeLiteLlmModel(modelName, model, fetchedAt, rawVersion)
-    if (normalized) entries.push(normalized)
+  for (const [providerKey, provider] of modelsDevProviders(payload)) {
+    const models = isObject(provider.models) ? provider.models : null
+    if (!models) continue
+    const providerId = modelsDevProviderId(providerKey, provider)
+    for (const [modelName, model] of Object.entries(models)) {
+      if (!isObject(model)) continue
+      const normalized = normalizeModelsDevModel(
+        providerId,
+        modelName,
+        model,
+        fetchedAt,
+        rawVersion === 'unknown' ? 'models.dev' : rawVersion,
+      )
+      if (normalized) entries.push(normalized)
+    }
   }
 
-  return entries
+  const uniqueEntries = new Map<string, UsagePricingEntry>()
+  for (const entry of entries) {
+    const key = `${entry.provider}\0${entry.model}`
+    if (!uniqueEntries.has(key)) uniqueEntries.set(key, entry)
+  }
+  return [...uniqueEntries.values()]
 }
 
 function normalizeLookupKey(value: string): string {
   return value.trim().toLowerCase()
+}
+
+function modelRouteFromName(model: string): ModelRoute {
+  const normalized = normalizeLookupKey(model)
+  const segments = normalizePathSegments(normalized)
+  if (segments.length >= 2) {
+    return {
+      provider: segments.slice(0, -1).join('/'),
+      model: segments[segments.length - 1] ?? normalized,
+    }
+  }
+  return { provider: null, model: normalized }
+}
+
+function officialProviderForModel(model: string): string | null {
+  const normalized = modelRouteFromName(model).model
+  return (
+    OFFICIAL_PROVIDER_RULES.find((rule) =>
+      rule.patterns.some((pattern) => pattern.test(normalized)),
+    )?.provider ?? null
+  )
 }
 
 function pricingEntryFromOverride(model: string, override: RateOverride): UsagePricingEntry {
@@ -395,14 +497,21 @@ function pricingEntryFromOverride(model: string, override: RateOverride): UsageP
     cacheCreationInputUsdPerMillion: override.cacheCreationInputUsdPerMillion ?? null,
     outputUsdPerMillion: override.outputUsdPerMillion,
     reasoningOutputUsdPerMillion: null,
-    source: 'codexbar-builtin',
+    thresholdTokens: override.thresholdTokens ?? null,
+    inputUsdPerMillionAboveThreshold: override.inputUsdPerMillionAboveThreshold ?? null,
+    cachedInputUsdPerMillionAboveThreshold: override.cachedInputUsdPerMillionAboveThreshold ?? null,
+    cacheCreationInputUsdPerMillionAboveThreshold:
+      override.cacheCreationInputUsdPerMillionAboveThreshold ?? null,
+    outputUsdPerMillionAboveThreshold: override.outputUsdPerMillionAboveThreshold ?? null,
+    longContextAppliesToWholeRow: override.codexLongContextAppliesToWholeRow ?? null,
+    source: 'builtin',
     fetchedAt: 'builtin',
-    rawVersion: 'codexbar',
+    rawVersion: 'local',
   }
 }
 
 function exactOverride(model: string): UsagePricingEntry | null {
-  const override = CODEXBAR_RATE_OVERRIDES[model]
+  const override = BUILTIN_RATE_OVERRIDES[model]
   return override ? pricingEntryFromOverride(model, override) : null
 }
 
@@ -413,76 +522,54 @@ function rateSignature(entry: UsagePricingEntry): string {
     entry.cacheCreationInputUsdPerMillion,
     entry.outputUsdPerMillion,
     entry.reasoningOutputUsdPerMillion,
+    entry.thresholdTokens ?? null,
+    entry.inputUsdPerMillionAboveThreshold ?? null,
+    entry.cachedInputUsdPerMillionAboveThreshold ?? null,
+    entry.cacheCreationInputUsdPerMillionAboveThreshold ?? null,
+    entry.outputUsdPerMillionAboveThreshold ?? null,
+    entry.longContextAppliesToWholeRow ?? null,
   ].join('|')
 }
 
-function providerHints(context: UsagePriceLookupContext, model: string): string[] {
-  const hints: string[] = []
-  if (context.provider) hints.push(normalizeLookupKey(context.provider))
-  if (model.startsWith('claude-')) hints.push('anthropic')
-  if (model.startsWith('gpt-')) hints.push('openai')
-  if (context.agent === 'claude-code') hints.push('anthropic')
-  return Array.from(new Set(hints))
-}
-
-function providerMatches(entry: UsagePricingEntry, hints: readonly string[]): boolean {
-  const provider = normalizeLookupKey(entry.provider)
-  const model = normalizeLookupKey(entry.model)
-  return hints.some(
-    (hint) => provider === hint || provider.startsWith(`${hint}_`) || model.startsWith(`${hint}/`),
-  )
-}
-
-function chooseUsableEntry(
-  entries: readonly UsagePricingEntry[],
-  context: UsagePriceLookupContext,
-  model: string,
-): UsagePricingEntry | null {
+function chooseUsableEntry(entries: readonly UsagePricingEntry[]): UsagePricingEntry | null {
   const usable = entries.filter(hasAnyRate)
   if (usable.length === 0) return null
   if (usable.length === 1) return usable[0] ?? null
 
-  const hints = providerHints(context, model)
-  const providerMatchesEntries =
-    hints.length > 0 ? usable.filter((entry) => providerMatches(entry, hints)) : []
-  if (providerMatchesEntries.length === 1) return providerMatchesEntries[0] ?? null
-
   const signatures = new Set(usable.map(rateSignature))
-  if (signatures.size === 1) {
-    return [...usable].sort((a, b) => a.model.localeCompare(b.model))[0] ?? null
-  }
+  if (signatures.size !== 1) return null
 
-  return null
-}
-
-function firstUsableEntry(entries: readonly UsagePricingEntry[]): UsagePricingEntry | null {
-  return entries.find(hasAnyRate) ?? null
+  return (
+    [...usable].sort(
+      (a, b) => a.provider.localeCompare(b.provider) || a.model.localeCompare(b.model),
+    )[0] ?? null
+  )
 }
 
 function unique(values: string[]): string[] {
   return Array.from(new Set(values.filter(Boolean)))
 }
 
-function stripKnownProviderPrefix(model: string): string {
-  return model.replace(/^(openai|anthropic|azure|azure_ai|openrouter\/openai)\//, '')
+function stripModelRoutePrefix(model: string): string {
+  return modelRouteFromName(model).model
 }
 
 function normalizedModelCandidates(model: string): string[] {
   const raw = normalizeLookupKey(model)
-  const withoutKnownProvider = stripKnownProviderPrefix(raw)
-  const candidates = [raw, withoutKnownProvider]
+  const withoutModelRoute = stripModelRoutePrefix(raw)
+  const candidates = [raw, withoutModelRoute]
 
-  const dated = withoutKnownProvider.match(/^(gpt-[\w.-]+)-\d{4}-\d{2}-\d{2}$/)
+  const dated = withoutModelRoute.match(/^(gpt-[\w.-]+)-\d{4}-\d{2}-\d{2}$/)
   if (dated?.[1]) candidates.push(dated[1])
 
-  const glmDashVersion = withoutKnownProvider.match(/^(glm-\d+)-(\d+)$/)
+  const glmDashVersion = withoutModelRoute.match(/^(glm-\d+)-(\d+)$/)
   if (glmDashVersion) candidates.push(`${glmDashVersion[1]}.${glmDashVersion[2]}`)
 
-  candidates.push(withoutKnownProvider.replace(/k2p(\d+)/g, 'k2.$1'))
+  candidates.push(withoutModelRoute.replace(/k2p(\d+)/g, 'k2.$1'))
 
   for (const suffix of MODE_SUFFIXES) {
-    if (withoutKnownProvider.endsWith(suffix)) {
-      const stripped = withoutKnownProvider.slice(0, -suffix.length)
+    if (withoutModelRoute.endsWith(suffix)) {
+      const stripped = withoutModelRoute.slice(0, -suffix.length)
       candidates.push(stripped)
       if (stripped === 'gemini-3-pro') candidates.push('gemini-3-pro-preview')
     }
@@ -493,7 +580,7 @@ function normalizedModelCandidates(model: string): string[] {
 
 function rawModelCandidates(model: string): string[] {
   const raw = normalizeLookupKey(model)
-  return unique([raw, stripKnownProviderPrefix(raw)])
+  return unique([raw, stripModelRoutePrefix(raw)])
 }
 
 function aliasCandidates(model: string): string[] {
@@ -507,33 +594,68 @@ function aliasCandidates(model: string): string[] {
   return unique([...aliases, ...genericCodexAlias, ...claudeThinkingAlias])
 }
 
-function providerPrefixesFor(model: string, context: UsagePriceLookupContext): readonly string[] {
-  if (context.agent === 'codex' || model.startsWith('gpt-')) return CODEX_PROVIDER_PREFIXES
-  if (context.agent === 'claude-code' || model.startsWith('claude-'))
-    return CLAUDE_PROVIDER_PREFIXES
-  return DEFAULT_PROVIDER_PREFIXES
+function aliasCandidatesForNames(names: readonly string[]): string[] {
+  return unique(names.flatMap(aliasCandidates))
+}
+
+function isGatewayRouteProvider(provider: string): boolean {
+  const firstSegment = normalizePathSegments(provider)[0]
+  return firstSegment ? GATEWAY_PROVIDER_PREFIXES.has(firstSegment) : false
+}
+
+function routePrefixCandidatesFor(model: string): string[] {
+  const route = modelRouteFromName(model)
+  const officialProvider = officialProviderForModel(model)
+  if (route.provider) {
+    const provider = normalizeLookupKey(route.provider)
+    return isGatewayRouteProvider(provider)
+      ? [provider]
+      : unique([provider, officialProvider ?? ''])
+  }
+  return officialProvider ? [officialProvider] : []
+}
+
+function routedNamesForProvider(provider: string, names: readonly string[]): string[] {
+  const normalizedProvider = normalizeLookupKey(provider)
+  return unique(
+    names.map((name) => `${normalizedProvider}/${stripModelRoutePrefix(normalizeLookupKey(name))}`),
+  )
 }
 
 function buildPriceIndex(prices: readonly UsagePricingEntry[]): Map<string, UsagePricingEntry[]> {
   const index = new Map<string, UsagePricingEntry[]>()
-  for (const price of prices) {
-    const key = normalizeLookupKey(price.model)
-    const entries = index.get(key) ?? []
+  const add = (key: string, price: UsagePricingEntry): void => {
+    const normalizedKey = normalizeLookupKey(key)
+    const entries = index.get(normalizedKey) ?? []
     entries.push(price)
-    index.set(key, entries)
+    index.set(normalizedKey, entries)
+  }
+  for (const price of prices) {
+    add(price.model, price)
+    add(`${price.provider}/${price.model}`, price)
   }
   return index
+}
+
+function uniqueEntries(entries: UsagePricingEntry[]): UsagePricingEntry[] {
+  const seen = new Set<string>()
+  return entries.filter((entry) => {
+    const key = `${normalizeLookupKey(entry.provider)}\0${normalizeLookupKey(entry.model)}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }
 
 function resolveFromNames(
   names: readonly string[],
   index: Map<string, UsagePricingEntry[]>,
-  context: UsagePriceLookupContext,
-  requestedModel: string,
-): { price: UsagePricingEntry; candidateCount: number } | null {
-  const entries = names.flatMap((name) => index.get(normalizeLookupKey(name)) ?? [])
-  const price = chooseUsableEntry(entries, context, requestedModel)
-  return price ? { price, candidateCount: entries.length } : null
+): { price: UsagePricingEntry | null; candidateCount: number } {
+  const entries = uniqueEntries(names.flatMap((name) => index.get(normalizeLookupKey(name)) ?? []))
+  return {
+    price: chooseUsableEntry(entries),
+    candidateCount: entries.length,
+  }
 }
 
 function resolveFromOverrides(names: readonly string[]): UsagePricingEntry | null {
@@ -542,28 +664,6 @@ function resolveFromOverrides(names: readonly string[]): UsagePricingEntry | nul
     if (override) return override
   }
   return null
-}
-
-function suffixMatches(
-  names: readonly string[],
-  prices: readonly UsagePricingEntry[],
-): UsagePricingEntry[] {
-  const normalizedNames = names.map(normalizeLookupKey)
-  return prices.filter((price) => {
-    const model = normalizeLookupKey(price.model)
-    return normalizedNames.some((name) => model.endsWith(`/${name}`))
-  })
-}
-
-function containsMatches(
-  names: readonly string[],
-  prices: readonly UsagePricingEntry[],
-): UsagePricingEntry[] {
-  const normalizedNames = names.map(normalizeLookupKey)
-  return prices.filter((price) => {
-    const model = normalizeLookupKey(price.model)
-    return normalizedNames.some((name) => model.includes(name) || name.includes(model))
-  })
 }
 
 function resolution(
@@ -586,9 +686,7 @@ function resolution(
 
 function resolveUsagePriceWithIndex(
   model: string,
-  prices: readonly UsagePricingEntry[],
   index: Map<string, UsagePricingEntry[]>,
-  context: UsagePriceLookupContext = {},
 ): UsagePriceResolution {
   const requestedModel = model.trim()
   if (!requestedModel) return resolution(model, null, 'unknown', 'empty model name', 0)
@@ -597,9 +695,31 @@ function resolveUsagePriceWithIndex(
   const normalized = normalizedModelCandidates(requestedModel).filter(
     (candidate) => !raw.includes(candidate),
   )
+  const aliases = aliasCandidatesForNames([...raw, ...normalized])
+  const nonAliasNames = unique([...raw, ...normalized])
+  const route = modelRouteFromName(requestedModel)
+  const routeProviders = routePrefixCandidatesFor(requestedModel)
+  let unresolvedCandidateCount = 0
 
-  const exact = resolveFromNames(raw, index, context, requestedModel)
-  if (exact)
+  for (const provider of routeProviders) {
+    const routed = resolveFromNames(routedNamesForProvider(provider, nonAliasNames), index)
+    unresolvedCandidateCount = Math.max(unresolvedCandidateCount, routed.candidateCount)
+    if (routed.price) {
+      return resolution(
+        requestedModel,
+        routed.price,
+        route.provider ? 'exact' : 'provider-prefix',
+        route.provider
+          ? 'matched routed pricing model'
+          : 'matched canonical provider pricing model',
+        routed.candidateCount,
+      )
+    }
+  }
+
+  const exact = resolveFromNames(raw, index)
+  unresolvedCandidateCount = Math.max(unresolvedCandidateCount, exact.candidateCount)
+  if (exact.price)
     return resolution(
       requestedModel,
       exact.price,
@@ -609,12 +729,29 @@ function resolveUsagePriceWithIndex(
     )
 
   const override = resolveFromOverrides(raw)
-  if (override)
-    return resolution(requestedModel, override, 'exact', 'matched CodexBar built-in pricing')
+  if (override) return resolution(requestedModel, override, 'exact', 'matched built-in pricing')
 
-  const aliases = aliasCandidates(requestedModel)
-  const alias = resolveFromNames(aliases, index, context, requestedModel)
-  if (alias)
+  const aliasOverride = resolveFromOverrides(aliases)
+  if (aliasOverride)
+    return resolution(requestedModel, aliasOverride, 'alias', 'matched built-in alias')
+
+  for (const provider of routeProviders) {
+    const routedAlias = resolveFromNames(routedNamesForProvider(provider, aliases), index)
+    unresolvedCandidateCount = Math.max(unresolvedCandidateCount, routedAlias.candidateCount)
+    if (routedAlias.price) {
+      return resolution(
+        requestedModel,
+        routedAlias.price,
+        'alias',
+        'matched routed model alias',
+        routedAlias.candidateCount,
+      )
+    }
+  }
+
+  const alias = resolveFromNames(aliases, index)
+  unresolvedCandidateCount = Math.max(unresolvedCandidateCount, alias.candidateCount)
+  if (alias.price)
     return resolution(
       requestedModel,
       alias.price,
@@ -623,12 +760,9 @@ function resolveUsagePriceWithIndex(
       alias.candidateCount,
     )
 
-  const aliasOverride = resolveFromOverrides(aliases)
-  if (aliasOverride)
-    return resolution(requestedModel, aliasOverride, 'alias', 'matched CodexBar built-in alias')
-
-  const normalizedMatch = resolveFromNames(normalized, index, context, requestedModel)
-  if (normalizedMatch)
+  const normalizedMatch = resolveFromNames(normalized, index)
+  unresolvedCandidateCount = Math.max(unresolvedCandidateCount, normalizedMatch.candidateCount)
+  if (normalizedMatch.price)
     return resolution(
       requestedModel,
       normalizedMatch.price,
@@ -643,100 +777,30 @@ function resolveUsagePriceWithIndex(
       requestedModel,
       normalizedOverride,
       'normalized',
-      'matched normalized CodexBar built-in pricing',
+      'matched normalized built-in pricing',
     )
-
-  const prefixedNames = unique(
-    [...raw, ...normalized, ...aliases].flatMap((name) =>
-      providerPrefixesFor(name, context).map((prefix) => `${prefix}${name}`),
-    ),
-  )
-  const providerPrefixed = resolveFromNames(prefixedNames, index, context, requestedModel)
-  if (providerPrefixed) {
-    return resolution(
-      requestedModel,
-      providerPrefixed.price,
-      'provider-prefix',
-      'matched provider-prefixed pricing model',
-      providerPrefixed.candidateCount,
-    )
-  }
-
-  const suffixEntries = suffixMatches([...raw, ...normalized, ...aliases], prices)
-  const suffix = chooseUsableEntry(suffixEntries, context, requestedModel)
-  if (suffix) {
-    return resolution(
-      requestedModel,
-      suffix,
-      'suffix',
-      'matched unique provider-suffixed pricing model',
-      suffixEntries.length,
-    )
-  }
-
-  const ccusageSuffixFallback = firstUsableEntry(suffixEntries)
-  if (ccusageSuffixFallback) {
-    return resolution(
-      requestedModel,
-      ccusageSuffixFallback,
-      'suffix',
-      'matched first ccusage-compatible provider-suffixed pricing candidate',
-      suffixEntries.length,
-    )
-  }
-
-  const containsEntries = containsMatches([...raw, ...normalized, ...aliases], prices)
-  const contains = chooseUsableEntry(containsEntries, context, requestedModel)
-  if (contains) {
-    return resolution(
-      requestedModel,
-      contains,
-      'contains',
-      'matched ccusage-compatible contains pricing candidate',
-      containsEntries.length,
-    )
-  }
-
-  const ccusageContainsFallback = firstUsableEntry(containsEntries)
-  if (ccusageContainsFallback) {
-    return resolution(
-      requestedModel,
-      ccusageContainsFallback,
-      'contains',
-      'matched first ccusage-compatible contains pricing candidate',
-      containsEntries.length,
-    )
-  }
 
   return resolution(
     requestedModel,
     null,
     'unknown',
-    suffixEntries.length > 1
-      ? 'multiple pricing candidates have different rates and no provider metadata disambiguates them'
+    unresolvedCandidateCount > 1
+      ? 'multiple pricing candidates have different rates and no model route disambiguates them'
       : 'no pricing candidate found',
-    suffixEntries.length,
+    unresolvedCandidateCount,
   )
-}
-
-function resolverCacheKey(model: string, context: UsagePriceLookupContext): string {
-  return [
-    normalizeLookupKey(model),
-    context.agent ?? '',
-    context.provider ? normalizeLookupKey(context.provider) : '',
-  ].join('\0')
 }
 
 export function createUsagePriceResolver(prices: readonly UsagePricingEntry[]): UsagePriceResolver {
   const index = buildPriceIndex(prices)
   const cache = new Map<string, UsagePriceResolution>()
 
-  return (model, context = {}) => {
-    const key = resolverCacheKey(model, context)
+  return (model) => {
+    const key = normalizeLookupKey(model)
     const cached = cache.get(key)
     if (cached) return cached
 
-    const resolved = resolveUsagePriceWithIndex(model, prices, index, context)
+    const resolved = resolveUsagePriceWithIndex(model, index)
     cache.set(key, resolved)
     return resolved
   }
@@ -745,9 +809,8 @@ export function createUsagePriceResolver(prices: readonly UsagePricingEntry[]): 
 export function resolveUsagePrice(
   model: string,
   prices: readonly UsagePricingEntry[],
-  context: UsagePriceLookupContext = {},
 ): UsagePriceResolution {
-  return resolveUsagePriceWithIndex(model, prices, buildPriceIndex(prices), context)
+  return resolveUsagePriceWithIndex(model, buildPriceIndex(prices))
 }
 
 export function lookupUsagePrice(
@@ -757,8 +820,61 @@ export function lookupUsagePrice(
   return resolveUsagePrice(model, prices).price
 }
 
+function rateOverrideForModel(model: string): RateOverride | null {
+  const candidates = unique([
+    ...rawModelCandidates(model),
+    ...normalizedModelCandidates(model),
+    ...aliasCandidates(model),
+  ])
+  for (const candidate of candidates) {
+    const override = BUILTIN_RATE_OVERRIDES[candidate]
+    if (override) return override
+  }
+  return null
+}
+
 function rateOverrideForPrice(price: UsagePricingEntry): RateOverride | null {
-  return CODEXBAR_RATE_OVERRIDES[price.model] ?? null
+  return rateOverrideForModel(price.model)
+}
+
+function thresholdTokens(
+  price: UsagePricingEntry,
+  override: RateOverride | null,
+): number | undefined {
+  return override?.thresholdTokens ?? price.thresholdTokens ?? undefined
+}
+
+function longContextAppliesToWholeRow(
+  price: UsagePricingEntry,
+  override: RateOverride | null,
+): boolean {
+  return (
+    override?.codexLongContextAppliesToWholeRow === true ||
+    price.longContextAppliesToWholeRow === true
+  )
+}
+
+function aboveThresholdRate(
+  price: UsagePricingEntry,
+  override: RateOverride | null,
+  kind: 'input' | 'cached' | 'cacheCreation' | 'output',
+): number | null | undefined {
+  if (kind === 'input') {
+    return override?.inputUsdPerMillionAboveThreshold ?? price.inputUsdPerMillionAboveThreshold
+  }
+  if (kind === 'cached') {
+    return (
+      override?.cachedInputUsdPerMillionAboveThreshold ??
+      price.cachedInputUsdPerMillionAboveThreshold
+    )
+  }
+  if (kind === 'cacheCreation') {
+    return (
+      override?.cacheCreationInputUsdPerMillionAboveThreshold ??
+      price.cacheCreationInputUsdPerMillionAboveThreshold
+    )
+  }
+  return override?.outputUsdPerMillionAboveThreshold ?? price.outputUsdPerMillionAboveThreshold
 }
 
 function codexRate(
@@ -766,28 +882,11 @@ function codexRate(
   override: RateOverride | null,
   tokens: UsageTokenBreakdown,
   kind: 'input' | 'cached' | 'output',
-  serviceTier?: 'priority' | null,
 ): number | null {
-  if (
-    serviceTier === 'priority' &&
-    override &&
-    tokens.inputTokens <= CODEX_PRIORITY_INPUT_TOKEN_LIMIT
-  ) {
-    if (kind === 'input') return override.priorityInputUsdPerMillion ?? price.inputUsdPerMillion
-    if (kind === 'cached') {
-      return (
-        override.priorityCachedInputUsdPerMillion ??
-        price.cachedInputUsdPerMillion ??
-        price.inputUsdPerMillion
-      )
-    }
-    return override.priorityOutputUsdPerMillion ?? price.outputUsdPerMillion
-  }
-
   const usesLongContext =
-    override?.codexLongContextAppliesToWholeRow === true &&
-    override.thresholdTokens !== undefined &&
-    tokens.inputTokens > override.thresholdTokens
+    longContextAppliesToWholeRow(price, override) &&
+    thresholdTokens(price, override) !== undefined &&
+    tokens.inputTokens > (thresholdTokens(price, override) ?? Number.POSITIVE_INFINITY)
 
   if (!usesLongContext) {
     if (kind === 'input') return price.inputUsdPerMillion
@@ -795,15 +894,16 @@ function codexRate(
     return price.outputUsdPerMillion
   }
 
-  if (kind === 'input') return override.inputUsdPerMillionAboveThreshold ?? price.inputUsdPerMillion
+  if (kind === 'input')
+    return aboveThresholdRate(price, override, 'input') ?? price.inputUsdPerMillion
   if (kind === 'cached') {
     return (
-      override.cachedInputUsdPerMillionAboveThreshold ??
+      aboveThresholdRate(price, override, 'cached') ??
       price.cachedInputUsdPerMillion ??
       price.inputUsdPerMillion
     )
   }
-  return override.outputUsdPerMillionAboveThreshold ?? price.outputUsdPerMillion
+  return aboveThresholdRate(price, override, 'output') ?? price.outputUsdPerMillion
 }
 
 function addTieredCost(
@@ -821,12 +921,27 @@ function addTieredCost(
   return (below / MILLION) * baseRate + (over / MILLION) * aboveRate
 }
 
+function codexPriorityCostUsd(tokens: UsageTokenBreakdown, override: RateOverride): number | null {
+  const cachedInputTokens = Math.min(tokens.cachedInputTokens, tokens.inputTokens)
+  const billableInputTokens = Math.max(0, tokens.inputTokens - cachedInputTokens)
+  const inputRate = override.priorityInputUsdPerMillion
+  const cachedRate = override.priorityCachedInputUsdPerMillion
+  const outputRate = override.priorityOutputUsdPerMillion
+  if (inputRate === undefined || outputRate === undefined) return null
+
+  return (
+    (billableInputTokens / MILLION) * inputRate +
+    (cachedInputTokens / MILLION) * (cachedRate ?? inputRate) +
+    (tokens.outputTokens / MILLION) * outputRate
+  )
+}
+
 export function estimateUsageCostUsd(
   tokens: UsageTokenBreakdown,
   price: UsagePricingEntry | null,
   options: { codexServiceTier?: 'priority' | null } = {},
 ): number | null {
-  if (!price || !hasAnyRate(price)) return 0
+  if (!price || !hasAnyRate(price)) return null
 
   let cost = 0
   let pricedAny = false
@@ -839,6 +954,7 @@ export function estimateUsageCostUsd(
 
   const isAnthropic = price.provider === 'anthropic' || price.model.startsWith('claude')
   const override = rateOverrideForPrice(price)
+  const threshold = thresholdTokens(price, override)
   const cachedInputTokens = isAnthropic
     ? tokens.cachedInputTokens
     : Math.min(tokens.cachedInputTokens, tokens.inputTokens)
@@ -846,13 +962,13 @@ export function estimateUsageCostUsd(
     ? tokens.inputTokens
     : Math.max(0, tokens.inputTokens - cachedInputTokens)
 
-  if (isAnthropic && override?.thresholdTokens !== undefined) {
+  if (isAnthropic && threshold !== undefined) {
     const addTiered = (
       count: number,
       baseRate: number | null,
       aboveRate: number | null | undefined,
     ): void => {
-      const value = addTieredCost(count, baseRate, aboveRate, override.thresholdTokens)
+      const value = addTieredCost(count, baseRate, aboveRate, threshold)
       if (value === null) return
       cost += value
       pricedAny = true
@@ -860,46 +976,53 @@ export function estimateUsageCostUsd(
     addTiered(
       billableInputTokens,
       price.inputUsdPerMillion,
-      override.inputUsdPerMillionAboveThreshold,
+      aboveThresholdRate(price, override, 'input'),
     )
     addTiered(
       cachedInputTokens,
       price.cachedInputUsdPerMillion,
-      override.cachedInputUsdPerMillionAboveThreshold,
+      aboveThresholdRate(price, override, 'cached'),
     )
     addTiered(
       tokens.cacheCreationInputTokens,
       price.cacheCreationInputUsdPerMillion,
-      override.cacheCreationInputUsdPerMillionAboveThreshold,
+      aboveThresholdRate(price, override, 'cacheCreation'),
     )
     addTiered(
       tokens.outputTokens,
       price.outputUsdPerMillion,
-      override.outputUsdPerMillionAboveThreshold,
+      aboveThresholdRate(price, override, 'output'),
     )
   } else {
     add(
       billableInputTokens,
-      isAnthropic
-        ? price.inputUsdPerMillion
-        : codexRate(price, override, tokens, 'input', options.codexServiceTier),
+      isAnthropic ? price.inputUsdPerMillion : codexRate(price, override, tokens, 'input'),
     )
     add(
       cachedInputTokens,
-      isAnthropic
-        ? price.cachedInputUsdPerMillion
-        : codexRate(price, override, tokens, 'cached', options.codexServiceTier),
+      isAnthropic ? price.cachedInputUsdPerMillion : codexRate(price, override, tokens, 'cached'),
     )
     add(tokens.cacheCreationInputTokens, price.cacheCreationInputUsdPerMillion)
     add(
       tokens.outputTokens,
-      isAnthropic
-        ? price.outputUsdPerMillion
-        : codexRate(price, override, tokens, 'output', options.codexServiceTier),
+      isAnthropic ? price.outputUsdPerMillion : codexRate(price, override, tokens, 'output'),
     )
   }
 
-  return pricedAny ? cost : 0
+  if (
+    !isAnthropic &&
+    options.codexServiceTier === 'priority' &&
+    override &&
+    tokens.inputTokens <= CODEX_PRIORITY_INPUT_TOKEN_LIMIT
+  ) {
+    const priorityCost = codexPriorityCostUsd(tokens, override)
+    if (priorityCost !== null) {
+      cost = pricedAny ? Math.max(cost, priorityCost) : priorityCost
+      pricedAny = true
+    }
+  }
+
+  return pricedAny ? cost : null
 }
 
 export function pricingStatusFromCache(

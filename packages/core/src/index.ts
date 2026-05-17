@@ -55,7 +55,7 @@ export {
   createUsagePriceResolver,
   estimateUsageCostUsd,
   lookupUsagePrice,
-  normalizeLiteLlmPricingPayload,
+  normalizeModelsDevPricingPayload,
   pricingStatusFromCache,
   resolveUsagePrice,
 } from './usage/pricing.js'

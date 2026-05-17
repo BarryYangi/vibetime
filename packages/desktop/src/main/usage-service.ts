@@ -17,7 +17,7 @@ import { Worker } from 'node:worker_threads'
 import {
   buildUsagePeriodCompare,
   buildUsageSummary,
-  normalizeLiteLlmPricingPayload,
+  normalizeModelsDevPricingPayload,
   pricingStatusFromCache,
   reconcileUsageWithHookEvents,
   resolveProject,
@@ -45,12 +45,9 @@ import SqliteDatabase from 'better-sqlite3'
 import type { IpcPushEvent } from '../shared/ipc-types.js'
 import { openDesktopDb } from './desktop-db.js'
 
-const LITELLM_PRICING_URL =
-  'https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json'
+const MODELS_DEV_PRICING_URL = 'https://models.dev/api.json'
 const DEFAULT_REFRESH_FREQUENCY: UsageRefreshFrequency = '15m'
 const NO_USAGE_ROW_KEY = '__vibetime_no_usage__'
-const CLAUDE_SCAN_STATE_PREFIX = 'claude-usage-v7:'
-const CODEX_SCAN_STATE_PREFIX = 'codex-codexbar-v7:'
 const BACKGROUND_INITIAL_REFRESH_DELAY_MS = 60_000
 const CODEX_GLOBAL_CONTEXT_PREFIX_BYTES = 256 * 1024
 const USAGE_SCAN_WORKER_TIMEOUT_MS = 10 * 60_000
@@ -201,6 +198,12 @@ type UsagePricingRow = {
   cache_creation_input_usd_per_million: number | null
   output_usd_per_million: number | null
   reasoning_output_usd_per_million: number | null
+  threshold_tokens: number | null
+  input_usd_per_million_above_threshold: number | null
+  cached_input_usd_per_million_above_threshold: number | null
+  cache_creation_input_usd_per_million_above_threshold: number | null
+  output_usd_per_million_above_threshold: number | null
+  long_context_applies_to_whole_row: number | null
   source: string
   fetched_at: string
   raw_version: string
@@ -599,6 +602,12 @@ export function upsertUsagePricingCache(
       cache_creation_input_usd_per_million,
       output_usd_per_million,
       reasoning_output_usd_per_million,
+      threshold_tokens,
+      input_usd_per_million_above_threshold,
+      cached_input_usd_per_million_above_threshold,
+      cache_creation_input_usd_per_million_above_threshold,
+      output_usd_per_million_above_threshold,
+      long_context_applies_to_whole_row,
       source,
       fetched_at,
       raw_version
@@ -611,52 +620,77 @@ export function upsertUsagePricingCache(
       $cache_creation_input_usd_per_million,
       $output_usd_per_million,
       $reasoning_output_usd_per_million,
+      $threshold_tokens,
+      $input_usd_per_million_above_threshold,
+      $cached_input_usd_per_million_above_threshold,
+      $cache_creation_input_usd_per_million_above_threshold,
+      $output_usd_per_million_above_threshold,
+      $long_context_applies_to_whole_row,
       $source,
       $fetched_at,
       $raw_version
     )
-    ON CONFLICT(model) DO UPDATE SET
-      provider = excluded.provider,
+    ON CONFLICT(provider, model) DO UPDATE SET
       input_usd_per_million = excluded.input_usd_per_million,
       cached_input_usd_per_million = excluded.cached_input_usd_per_million,
       cache_creation_input_usd_per_million = excluded.cache_creation_input_usd_per_million,
       output_usd_per_million = excluded.output_usd_per_million,
       reasoning_output_usd_per_million = excluded.reasoning_output_usd_per_million,
+      threshold_tokens = excluded.threshold_tokens,
+      input_usd_per_million_above_threshold = excluded.input_usd_per_million_above_threshold,
+      cached_input_usd_per_million_above_threshold = excluded.cached_input_usd_per_million_above_threshold,
+      cache_creation_input_usd_per_million_above_threshold = excluded.cache_creation_input_usd_per_million_above_threshold,
+      output_usd_per_million_above_threshold = excluded.output_usd_per_million_above_threshold,
+      long_context_applies_to_whole_row = excluded.long_context_applies_to_whole_row,
       source = excluded.source,
       fetched_at = excluded.fetched_at,
       raw_version = excluded.raw_version
   `)
 
+  const runEntry = (entry: UsagePricingEntry): number =>
+    statement.run({
+      model: entry.model,
+      provider: entry.provider,
+      input_usd_per_million: entry.inputUsdPerMillion,
+      cached_input_usd_per_million: entry.cachedInputUsdPerMillion,
+      cache_creation_input_usd_per_million: entry.cacheCreationInputUsdPerMillion,
+      output_usd_per_million: entry.outputUsdPerMillion,
+      reasoning_output_usd_per_million: entry.reasoningOutputUsdPerMillion,
+      threshold_tokens: entry.thresholdTokens ?? null,
+      input_usd_per_million_above_threshold: entry.inputUsdPerMillionAboveThreshold ?? null,
+      cached_input_usd_per_million_above_threshold:
+        entry.cachedInputUsdPerMillionAboveThreshold ?? null,
+      cache_creation_input_usd_per_million_above_threshold:
+        entry.cacheCreationInputUsdPerMillionAboveThreshold ?? null,
+      output_usd_per_million_above_threshold: entry.outputUsdPerMillionAboveThreshold ?? null,
+      long_context_applies_to_whole_row:
+        entry.longContextAppliesToWholeRow === true
+          ? 1
+          : entry.longContextAppliesToWholeRow === false
+            ? 0
+            : null,
+      source: entry.source,
+      fetched_at: entry.fetchedAt,
+      raw_version: entry.rawVersion,
+    }).changes
+
   return db.transaction((items: readonly UsagePricingEntry[]) => {
     let changed = 0
     for (const entry of items) {
-      changed += statement.run({
-        model: entry.model,
-        provider: entry.provider,
-        input_usd_per_million: entry.inputUsdPerMillion,
-        cached_input_usd_per_million: entry.cachedInputUsdPerMillion,
-        cache_creation_input_usd_per_million: entry.cacheCreationInputUsdPerMillion,
-        output_usd_per_million: entry.outputUsdPerMillion,
-        reasoning_output_usd_per_million: entry.reasoningOutputUsdPerMillion,
-        source: entry.source,
-        fetched_at: entry.fetchedAt,
-        raw_version: entry.rawVersion,
-      }).changes
+      changed += runEntry(entry)
     }
     return changed
   })(entries)
 }
 
-async function upsertUsagePricingCacheChunked(
+async function replaceUsagePricingCache(
   db: Database.Database,
   entries: readonly UsagePricingEntry[],
 ): Promise<number> {
-  let changed = 0
-  for (let index = 0; index < entries.length; index += USAGE_DB_WRITE_CHUNK_SIZE) {
-    changed += upsertUsagePricingCache(db, entries.slice(index, index + USAGE_DB_WRITE_CHUNK_SIZE))
-    await yieldToEventLoop()
-  }
-  return changed
+  return db.transaction((items: readonly UsagePricingEntry[]) => {
+    db.prepare('DELETE FROM usage_pricing_cache').run()
+    return upsertUsagePricingCache(db, items)
+  })(entries)
 }
 
 function pricingRowToEntry(row: UsagePricingRow): UsagePricingEntry {
@@ -668,6 +702,16 @@ function pricingRowToEntry(row: UsagePricingRow): UsagePricingEntry {
     cacheCreationInputUsdPerMillion: row.cache_creation_input_usd_per_million,
     outputUsdPerMillion: row.output_usd_per_million,
     reasoningOutputUsdPerMillion: row.reasoning_output_usd_per_million,
+    thresholdTokens: row.threshold_tokens,
+    inputUsdPerMillionAboveThreshold: row.input_usd_per_million_above_threshold,
+    cachedInputUsdPerMillionAboveThreshold: row.cached_input_usd_per_million_above_threshold,
+    cacheCreationInputUsdPerMillionAboveThreshold:
+      row.cache_creation_input_usd_per_million_above_threshold,
+    outputUsdPerMillionAboveThreshold: row.output_usd_per_million_above_threshold,
+    longContextAppliesToWholeRow:
+      row.long_context_applies_to_whole_row === null
+        ? null
+        : row.long_context_applies_to_whole_row === 1,
     source: row.source,
     fetchedAt: row.fetched_at,
     rawVersion: row.raw_version,
@@ -686,11 +730,17 @@ export function readUsagePricingCache(db: Database.Database): UsagePricingEntry[
           cache_creation_input_usd_per_million,
           output_usd_per_million,
           reasoning_output_usd_per_million,
+          threshold_tokens,
+          input_usd_per_million_above_threshold,
+          cached_input_usd_per_million_above_threshold,
+          cache_creation_input_usd_per_million_above_threshold,
+          output_usd_per_million_above_threshold,
+          long_context_applies_to_whole_row,
           source,
           fetched_at,
           raw_version
         FROM usage_pricing_cache
-        ORDER BY model ASC
+        ORDER BY provider ASC, model ASC
       `)
       .all() as UsagePricingRow[]
   ).map(pricingRowToEntry)
@@ -832,20 +882,6 @@ function changedSourceFiles(
 ): SourceFile[] {
   return files.filter((file) => {
     const previous = scanState.get(`${file.agent}:${file.sourceFileKey}`)
-    if (
-      file.agent === 'claude-code' &&
-      (previous?.last_row_key === null ||
-        (previous?.last_row_key && !previous.last_row_key.startsWith(CLAUDE_SCAN_STATE_PREFIX)))
-    ) {
-      return true
-    }
-    if (
-      file.agent === 'codex' &&
-      (previous?.last_row_key === null ||
-        (previous?.last_row_key && !previous.last_row_key.startsWith(CODEX_SCAN_STATE_PREFIX)))
-    ) {
-      return true
-    }
     return !previous || previous.mtime_ms !== file.mtimeMs || previous.size_bytes !== file.sizeBytes
   })
 }
@@ -1060,15 +1096,6 @@ function previousScanContext(row: UsageScanStateRow | undefined): UsageScannerCo
 function shouldAppendScan(file: SourceFile, previous: UsageScanStateRow | undefined): boolean {
   if (!previous?.parsed_bytes || previous.parsed_bytes <= 0) return false
   if (previous.parsed_bytes > file.sizeBytes) return false
-  if (
-    file.agent === 'claude-code' &&
-    !previous.last_row_key?.startsWith(CLAUDE_SCAN_STATE_PREFIX)
-  ) {
-    return false
-  }
-  if (file.agent === 'codex' && !previous.last_row_key?.startsWith(CODEX_SCAN_STATE_PREFIX)) {
-    return false
-  }
   if (file.agent === 'codex' && !previousScanContext(previous)?.codex) return false
   return true
 }
@@ -1092,12 +1119,7 @@ function buildUsageScanStates(
     mtimeMs: file.mtimeMs,
     sizeBytes: file.sizeBytes,
     lastScannedAt: scannedAt,
-    lastRowKey:
-      file.agent === 'codex'
-        ? `${CODEX_SCAN_STATE_PREFIX}${lastRowByFile.get(file.sourceFileKey) ?? NO_USAGE_ROW_KEY}`
-        : file.agent === 'claude-code'
-          ? `${CLAUDE_SCAN_STATE_PREFIX}${lastRowByFile.get(file.sourceFileKey) ?? NO_USAGE_ROW_KEY}`
-          : (lastRowByFile.get(file.sourceFileKey) ?? NO_USAGE_ROW_KEY),
+    lastRowKey: lastRowByFile.get(file.sourceFileKey) ?? NO_USAGE_ROW_KEY,
     parsedBytes,
     scanContext,
   }))
@@ -1183,8 +1205,6 @@ import { StringDecoder } from 'node:string_decoder';
 import { parentPort, workerData } from 'node:worker_threads';
 
 const NO_USAGE_ROW_KEY = ${JSON.stringify(NO_USAGE_ROW_KEY)};
-const CLAUDE_SCAN_STATE_PREFIX = ${JSON.stringify(CLAUDE_SCAN_STATE_PREFIX)};
-const CODEX_SCAN_STATE_PREFIX = ${JSON.stringify(CODEX_SCAN_STATE_PREFIX)};
 const CODEX_GLOBAL_CONTEXT_PREFIX_BYTES = ${CODEX_GLOBAL_CONTEXT_PREFIX_BYTES};
 const CODEX_GLOBAL_CONTEXT_MARKERS = ${JSON.stringify(CODEX_GLOBAL_CONTEXT_MARKERS)};
 const FILE_YIELD_INTERVAL = ${USAGE_SCAN_WORKER_FILE_YIELD_INTERVAL};
@@ -1238,18 +1258,6 @@ function previousScanContext(row) {
 function shouldAppendScan(file, previous) {
   if (!previous || !previous.parsed_bytes || previous.parsed_bytes <= 0) return false;
   if (previous.parsed_bytes > file.sizeBytes) return false;
-  if (
-    file.agent === 'claude-code' &&
-    (!previous.last_row_key || !previous.last_row_key.startsWith(CLAUDE_SCAN_STATE_PREFIX))
-  ) {
-    return false;
-  }
-  if (
-    file.agent === 'codex' &&
-    (!previous.last_row_key || !previous.last_row_key.startsWith(CODEX_SCAN_STATE_PREFIX))
-  ) {
-    return false;
-  }
   if (file.agent === 'codex' && !(previousScanContext(previous) || {}).codex) return false;
   return true;
 }
@@ -1355,12 +1363,7 @@ function buildUsageScanStates(scannedAt, scannedFiles, records) {
     mtimeMs: file.mtimeMs,
     sizeBytes: file.sizeBytes,
     lastScannedAt: scannedAt,
-    lastRowKey:
-      file.agent === 'codex'
-        ? CODEX_SCAN_STATE_PREFIX + (lastRowByFile.get(file.sourceFileKey) || NO_USAGE_ROW_KEY)
-        : file.agent === 'claude-code'
-          ? CLAUDE_SCAN_STATE_PREFIX + (lastRowByFile.get(file.sourceFileKey) || NO_USAGE_ROW_KEY)
-          : (lastRowByFile.get(file.sourceFileKey) || NO_USAGE_ROW_KEY),
+    lastRowKey: lastRowByFile.get(file.sourceFileKey) || NO_USAGE_ROW_KEY,
     parsedBytes,
     scanContext,
   }));
@@ -2157,6 +2160,13 @@ function pricingEntrySignature(entry: UsagePricingEntry): string {
     cacheCreationInputUsdPerMillion: entry.cacheCreationInputUsdPerMillion,
     outputUsdPerMillion: entry.outputUsdPerMillion,
     reasoningOutputUsdPerMillion: entry.reasoningOutputUsdPerMillion,
+    thresholdTokens: entry.thresholdTokens ?? null,
+    inputUsdPerMillionAboveThreshold: entry.inputUsdPerMillionAboveThreshold ?? null,
+    cachedInputUsdPerMillionAboveThreshold: entry.cachedInputUsdPerMillionAboveThreshold ?? null,
+    cacheCreationInputUsdPerMillionAboveThreshold:
+      entry.cacheCreationInputUsdPerMillionAboveThreshold ?? null,
+    outputUsdPerMillionAboveThreshold: entry.outputUsdPerMillionAboveThreshold ?? null,
+    longContextAppliesToWholeRow: entry.longContextAppliesToWholeRow ?? null,
     source: entry.source,
     rawVersion: entry.rawVersion,
   })
@@ -2167,33 +2177,56 @@ function pricingEntriesChanged(
   nextEntries: readonly UsagePricingEntry[],
 ): boolean {
   const previous = new Map(
-    previousEntries.map((entry) => [entry.model, pricingEntrySignature(entry)]),
+    previousEntries.map((entry) => [
+      `${entry.provider}\0${entry.model}`,
+      pricingEntrySignature(entry),
+    ]),
   )
   if (previous.size !== nextEntries.length) return true
-  return nextEntries.some((entry) => previous.get(entry.model) !== pricingEntrySignature(entry))
+  return nextEntries.some(
+    (entry) => previous.get(`${entry.provider}\0${entry.model}`) !== pricingEntrySignature(entry),
+  )
+}
+
+function pricingCatalogCoversPrevious(
+  previousEntries: readonly UsagePricingEntry[],
+  nextEntries: readonly UsagePricingEntry[],
+): boolean {
+  if (previousEntries.length === 0) return true
+
+  const nextKeys = new Set(nextEntries.map((entry) => `${entry.provider}\0${entry.model}`))
+  return previousEntries.every((entry) => nextKeys.has(`${entry.provider}\0${entry.model}`))
 }
 
 async function refreshPricingCache(db: Database.Database): Promise<RefreshPricingCacheResult> {
+  const previousEntries = readUsagePricingCache(db)
+  const cacheStatus = pricingStatusFromCache(previousEntries, new Date())
+  if (cacheStatus === 'fresh') return { status: 'fresh', changed: false }
+
   try {
-    const pricingHttpResult = await fetch(LITELLM_PRICING_URL, {
+    const pricingHttpResult = await fetch(MODELS_DEV_PRICING_URL, {
       headers: {
         Accept: 'application/json',
         'User-Agent': 'VibeTime',
       },
     })
     if (!pricingHttpResult.ok) {
-      throw new Error(`LiteLLM pricing refresh failed: ${pricingHttpResult.status}`)
+      throw new Error(`models.dev pricing refresh failed: ${pricingHttpResult.status}`)
     }
 
     const fetchedAt = new Date().toISOString()
-    const entries = normalizeLiteLlmPricingPayload(await pricingHttpResult.json(), fetchedAt)
-    if (entries.length === 0) throw new Error('LiteLLM pricing payload had no usable rows')
-    const changed = pricingEntriesChanged(readUsagePricingCache(db), entries)
-    await upsertUsagePricingCacheChunked(db, entries)
+    const entries = normalizeModelsDevPricingPayload(await pricingHttpResult.json(), fetchedAt)
+    if (entries.length === 0) throw new Error('models.dev pricing payload had no usable rows')
+    if (!pricingCatalogCoversPrevious(previousEntries, entries)) {
+      return { status: previousEntries.length > 0 ? 'cached' : 'unavailable', changed: false }
+    }
+
+    const changed = pricingEntriesChanged(previousEntries, entries)
+    await replaceUsagePricingCache(db, entries)
     return { status: 'fresh', changed }
   } catch {
     return {
-      status: readUsagePricingCache(db).length > 0 ? 'cached' : 'unavailable',
+      status: previousEntries.length > 0 ? 'cached' : 'unavailable',
       changed: false,
     }
   }

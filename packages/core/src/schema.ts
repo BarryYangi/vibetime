@@ -76,16 +76,23 @@ export const DDL_USAGE_SCAN_STATE = `CREATE TABLE usage_scan_state (
 );` as const
 
 export const DDL_USAGE_PRICING_CACHE = `CREATE TABLE usage_pricing_cache (
-    model                                TEXT PRIMARY KEY,
     provider                             TEXT    NOT NULL,
+    model                                TEXT    NOT NULL,
     input_usd_per_million                REAL,
     cached_input_usd_per_million         REAL,
     cache_creation_input_usd_per_million REAL,
     output_usd_per_million               REAL,
     reasoning_output_usd_per_million     REAL,
+    threshold_tokens                     INTEGER,
+    input_usd_per_million_above_threshold                REAL,
+    cached_input_usd_per_million_above_threshold         REAL,
+    cache_creation_input_usd_per_million_above_threshold REAL,
+    output_usd_per_million_above_threshold               REAL,
+    long_context_applies_to_whole_row                    INTEGER,
     source                               TEXT    NOT NULL,
     fetched_at                           TEXT    NOT NULL,
-    raw_version                          TEXT    NOT NULL
+    raw_version                          TEXT    NOT NULL,
+    PRIMARY KEY(provider, model)
 );` as const
 
 export const DDL_INDICES = [

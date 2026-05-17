@@ -35,7 +35,6 @@ export interface UsagePersistableMeta {
   attributionReason?: string
   sourceKind?: string
   codexServiceTier?: 'priority'
-  modelProvider?: string
   projectResolutionKind?: 'git' | 'local' | 'wrapper_workspace' | 'generated_parent'
   projectResolutionSource?: string
   wrapperName?: string
@@ -87,7 +86,6 @@ export interface UsageScannerContext {
 
 export interface UsageCodexScannerContext {
   model?: string | null
-  modelProvider?: string | null
   sessionId?: string | null
   turnId?: string | null
   project?: string | null
@@ -104,19 +102,18 @@ export interface UsagePricingEntry {
   cacheCreationInputUsdPerMillion: number | null
   outputUsdPerMillion: number | null
   reasoningOutputUsdPerMillion: number | null
+  thresholdTokens?: number | null
+  inputUsdPerMillionAboveThreshold?: number | null
+  cachedInputUsdPerMillionAboveThreshold?: number | null
+  cacheCreationInputUsdPerMillionAboveThreshold?: number | null
+  outputUsdPerMillionAboveThreshold?: number | null
+  longContextAppliesToWholeRow?: boolean | null
   source: string
   fetchedAt: string
   rawVersion: string
 }
 
-export type UsagePriceMatchKind =
-  | 'exact'
-  | 'provider-prefix'
-  | 'alias'
-  | 'suffix'
-  | 'normalized'
-  | 'contains'
-  | 'unknown'
+export type UsagePriceMatchKind = 'exact' | 'provider-prefix' | 'alias' | 'normalized' | 'unknown'
 
 export interface UsagePriceResolution {
   requestedModel: string
@@ -133,7 +130,6 @@ export type UsagePricingStatus =
   | 'cached'
   | 'refresh_failed_with_cache'
   | 'refresh_failed_without_cache'
-  | 'unknown_model'
 
 export interface UsageSummaryArgs {
   periodDays: 7 | 30 | 90 | 365
@@ -284,7 +280,6 @@ export function sanitizeUsageMeta(meta: unknown): UsagePersistableMeta {
   }
   if (typeof input.sourceKind === 'string') sanitized.sourceKind = input.sourceKind
   if (input.codexServiceTier === 'priority') sanitized.codexServiceTier = 'priority'
-  if (typeof input.modelProvider === 'string') sanitized.modelProvider = input.modelProvider
   if (
     input.projectResolutionKind === 'git' ||
     input.projectResolutionKind === 'local' ||

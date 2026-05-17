@@ -33,21 +33,7 @@ export function initializeDesktopDbSchema(handle: Database.Database): void {
   handle.exec(DDL_USAGE_RECORDS.replace('CREATE TABLE', 'CREATE TABLE IF NOT EXISTS'))
   handle.exec(DDL_USAGE_SCAN_STATE.replace('CREATE TABLE', 'CREATE TABLE IF NOT EXISTS'))
   handle.exec(DDL_USAGE_PRICING_CACHE.replace('CREATE TABLE', 'CREATE TABLE IF NOT EXISTS'))
-  ensureUsageScanStateColumns(handle)
   for (const idx of [...DDL_INDICES, ...DDL_USAGE_INDICES]) {
     handle.exec(idx.replace('CREATE INDEX', 'CREATE INDEX IF NOT EXISTS'))
-  }
-}
-
-function ensureUsageScanStateColumns(handle: Database.Database): void {
-  const rows = handle.prepare('PRAGMA table_info(usage_scan_state)').all() as Array<{
-    name: string
-  }>
-  const columns = new Set(rows.map((row) => row.name))
-  if (!columns.has('parsed_bytes')) {
-    handle.exec('ALTER TABLE usage_scan_state ADD COLUMN parsed_bytes INTEGER')
-  }
-  if (!columns.has('scan_context')) {
-    handle.exec('ALTER TABLE usage_scan_state ADD COLUMN scan_context TEXT')
   }
 }

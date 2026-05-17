@@ -109,7 +109,7 @@ describe('usage persistence privacy', () => {
       cacheCreationInputUsdPerMillion: 3.75,
       outputUsdPerMillion: 15,
       reasoningOutputUsdPerMillion: null,
-      source: 'litellm-model-prices-and-context-window',
+      source: 'models.dev',
       fetchedAt: '2026-05-15T00:00:00.000Z',
       rawVersion: '2026-05-15-fixture',
     }

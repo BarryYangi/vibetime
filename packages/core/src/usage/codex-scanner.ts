@@ -11,7 +11,6 @@ type JsonRecord = Record<string, unknown>
 
 interface ScannerState {
   model: string | null
-  modelProvider: string | null
   sessionId: string | null
   turnId: string | null
   project: string | null
@@ -120,28 +119,6 @@ function normalizeCodexModel(model: string): string {
   const withoutProvider = trimmed.startsWith('openai/') ? trimmed.slice('openai/'.length) : trimmed
   const dated = withoutProvider.match(/^(gpt-[\w.-]+)-\d{4}-\d{2}-\d{2}$/)
   return dated?.[1] ?? withoutProvider
-}
-
-function normalizeProvider(provider: string): string {
-  return provider.trim().toLowerCase()
-}
-
-function modelProviderFromRecord(
-  record: JsonRecord,
-  payload: JsonRecord | null,
-  info: JsonRecord | null,
-): string | null {
-  const provider =
-    asString(record.model_provider) ??
-    asString(record.modelProvider) ??
-    asString(record.provider) ??
-    asString(payload?.model_provider) ??
-    asString(payload?.modelProvider) ??
-    asString(payload?.provider) ??
-    asString(info?.model_provider) ??
-    asString(info?.modelProvider) ??
-    asString(info?.provider)
-  return provider ? normalizeProvider(provider) : null
 }
 
 function projectFromRecord(
@@ -358,7 +335,6 @@ function scanRecord(
   const metadata = sessionMetadataFromRecord(record)
   if (metadata) {
     if (metadata.sessionId) state.sessionId = metadata.sessionId
-    state.modelProvider = modelProviderFromRecord(record, payload, info) ?? state.modelProvider
     setStateProject(state, projectFromRecord(record, payload, info))
     return null
   }
@@ -366,7 +342,6 @@ function scanRecord(
   if (type === 'turn_context') {
     const rowModel = asString(payload?.model) ?? asString(asObject(payload?.info)?.model)
     if (rowModel) state.model = rowModel
-    state.modelProvider = modelProviderFromRecord(record, payload, info) ?? state.modelProvider
     const turnId =
       asString(payload?.turn_id) ?? asString(payload?.turnId) ?? asString(record.turn_id)
     if (turnId) state.turnId = turnId
@@ -401,8 +376,6 @@ function scanRecord(
   if (rowTurnId) state.turnId = rowTurnId
   const rowProject = projectFromRecord(record, payload, info)
   setStateProject(state, rowProject)
-  const rowModelProvider = modelProviderFromRecord(record, payload, info)
-  if (rowModelProvider) state.modelProvider = rowModelProvider
   if (!isTokenRow(record, payload)) return null
 
   const totalUsage = tokenObject(record, payload, info, 'total_token_usage')
@@ -436,7 +409,6 @@ function scanRecord(
     asString(payload?.model) ??
     asString(record.model) ??
     LEGACY_FALLBACK_MODEL
-  const modelProvider = rowModelProvider ?? state.modelProvider
 
   return {
     agent: 'codex',
@@ -451,9 +423,7 @@ function scanRecord(
     tokens,
     attributionMethod: 'unmatched',
     attributionConfidence: 0,
-    meta: modelProvider
-      ? { sourceKind: 'codex-token-count', modelProvider }
-      : { sourceKind: 'codex-token-count' },
+    meta: { sourceKind: 'codex-token-count' },
   }
 }
 
@@ -465,7 +435,6 @@ function scanCandidate(
   const records: UsageRecordFact[] = []
   const state: ScannerState = {
     model: initial?.model ?? null,
-    modelProvider: initial?.modelProvider ?? null,
     sessionId: initial?.sessionId ?? null,
     turnId: initial?.turnId ?? null,
     project: initial?.project ?? null,
@@ -496,7 +465,6 @@ function scanCandidate(
 function scannerStateContext(state: ScannerState): UsageCodexScannerContext {
   return {
     model: state.model,
-    modelProvider: state.modelProvider,
     sessionId: state.sessionId,
     turnId: state.turnId,
     project: state.project,

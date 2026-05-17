@@ -163,7 +163,6 @@ function scanRecord(
   const meta: UsageRecordFact['meta'] = {
     sourceKind: 'claude-assistant-usage',
     claudePathRole: claudePathRole(candidate),
-    modelProvider: 'anthropic',
   }
   if (typeof record.isSidechain === 'boolean') meta.isSidechain = record.isSidechain
   if (typeof record.subagentType === 'string') meta.subagentType = record.subagentType

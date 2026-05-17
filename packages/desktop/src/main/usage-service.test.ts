@@ -10,6 +10,7 @@ import { initializeDesktopDbSchema } from './db.js'
 import {
   __usageServiceTestInternals,
   queryUsageSummary,
+  readUsagePricingCache,
   readUsageRows,
   runUsageRefresh,
   startUsageBackgroundRefresh,
@@ -78,7 +79,7 @@ function pricingEntry(overrides: Partial<UsagePricingEntry> = {}): UsagePricingE
     cacheCreationInputUsdPerMillion: 1.25,
     outputUsdPerMillion: 10,
     reasoningOutputUsdPerMillion: 10,
-    source: 'litellm',
+    source: 'models.dev',
     fetchedAt: '2026-05-15T00:00:00.000Z',
     rawVersion: 'fixture',
     ...overrides,
@@ -120,6 +121,17 @@ describe('desktop usage storage', () => {
     expect(tableNames).toContain('usage_pricing_cache')
     expect(tableNames).not.toContain(`usage_${'summaries'}`)
     expect(tableNames).not.toContain(`usage_derived_${'summaries'}`)
+
+    const pricingColumns = db.prepare('PRAGMA table_info(usage_pricing_cache)').all() as Array<{
+      name: string
+      pk: number
+    }>
+    expect(
+      pricingColumns
+        .filter((column) => column.pk > 0)
+        .sort((a, b) => a.pk - b.pk)
+        .map((column) => column.name),
+    ).toEqual(['provider', 'model'])
   })
 
   it('upserts duplicate usage facts by source identity', () => {
@@ -482,197 +494,6 @@ describe('runUsageRefresh', () => {
       attributionMethod: 'session_time_window',
       attributionConfidence: 0.8,
     })
-  })
-
-  it('rescans old Codex files that were marked scanned before token rows were recognized', async () => {
-    const db = createDb()
-    initializeDesktopDbSchema(db)
-
-    const homeDir = createTempDir()
-    const codexHome = join(homeDir, '.codex')
-    const codexSessionDir = join(codexHome, 'sessions', '2026', '05', '15')
-    mkdirSync(codexSessionDir, { recursive: true })
-    const sessionPath = join(codexSessionDir, 'current-codex-shape.jsonl')
-    writeFileSync(
-      sessionPath,
-      [
-        JSON.stringify({
-          timestamp: '2026-05-15T03:59:00.000Z',
-          type: 'session_meta',
-          payload: { id: 'old-null-scan-session' },
-        }),
-        JSON.stringify({
-          timestamp: '2026-05-15T04:00:00.000Z',
-          type: 'turn_context',
-          payload: { turn_id: 'old-null-scan-turn', model: 'gpt-5.5' },
-        }),
-        JSON.stringify({
-          timestamp: '2026-05-15T04:00:12.000Z',
-          type: 'event_msg',
-          payload: {
-            type: 'token_count',
-            info: {
-              last_token_usage: {
-                input_tokens: 100,
-                cached_input_tokens: 20,
-                output_tokens: 30,
-                reasoning_output_tokens: 5,
-                total_tokens: 155,
-              },
-            },
-          },
-        }),
-      ].join('\n'),
-    )
-
-    const stat = statSync(sessionPath)
-    const sourceKey = testSourceFileKey('codex', sessionPath)
-    db.prepare(`
-      INSERT INTO usage_scan_state (
-        agent, source_file_key, source_file_basename, mtime_ms, size_bytes, last_scanned_at, last_row_key
-      )
-      VALUES ('codex', ?, ?, ?, ?, 1778840000, NULL)
-    `).run(sourceKey, basename(sessionPath), stat.mtimeMs, stat.size)
-
-    const first = await runUsageRefresh({
-      db,
-      homeDir,
-      env: { CODEX_HOME: codexHome },
-      refreshPricing: false,
-    })
-    const second = await runUsageRefresh({
-      db,
-      homeDir,
-      env: { CODEX_HOME: codexHome },
-      refreshPricing: false,
-    })
-    const [row] = readUsageRows(db, {
-      periodDays: 7,
-      now: new Date('2026-05-15T12:00:00.000Z'),
-    })
-    const state = db
-      .prepare('SELECT last_row_key FROM usage_scan_state WHERE agent = ? AND source_file_key = ?')
-      .get('codex', sourceKey) as { last_row_key: string | null }
-
-    expect(first.recordsFound).toBe(1)
-    expect(second.recordsFound).toBe(0)
-    expect(row).toMatchObject({
-      sessionId: 'old-null-scan-session',
-      turnId: 'old-null-scan-turn',
-      model: 'gpt-5.5',
-      tokens: expect.objectContaining({ totalTokens: 130 }),
-    })
-    expect(state.last_row_key).not.toBeNull()
-  })
-
-  it('rescans old Claude files, drops synthetic rows, and resolves cwd projects', async () => {
-    const db = createDb()
-    initializeDesktopDbSchema(db)
-
-    const homeDir = createTempDir()
-    const claudeConfigDir = join(homeDir, '.claude')
-    const claudeProjectsDir = join(claudeConfigDir, 'projects', 'vibetime')
-    const projectDir = join(homeDir, 'workspace', 'real-project')
-    const subagentWorktreeDir = join(projectDir, '.claude', 'worktrees', 'agent-a6e43753')
-    mkdirSync(claudeProjectsDir, { recursive: true })
-    mkdirSync(subagentWorktreeDir, { recursive: true })
-    const sessionPath = join(claudeProjectsDir, 'claude-session.jsonl')
-    writeFileSync(
-      sessionPath,
-      [
-        JSON.stringify({
-          timestamp: '2026-05-15T10:00:00.000Z',
-          cwd: subagentWorktreeDir,
-          sessionId: 'claude-session',
-          requestId: 'request-synthetic',
-          type: 'assistant',
-          message: {
-            id: 'message-synthetic',
-            model: '<synthetic>',
-            usage: { input_tokens: 0, output_tokens: 0 },
-          },
-        }),
-        JSON.stringify({
-          timestamp: '2026-05-15T10:01:00.000Z',
-          cwd: subagentWorktreeDir,
-          sessionId: 'claude-session',
-          requestId: 'request-real',
-          type: 'assistant',
-          message: {
-            id: 'message-real',
-            model: 'claude-sonnet-4-5',
-            usage: {
-              input_tokens: 100,
-              cache_read_input_tokens: 25,
-              output_tokens: 40,
-            },
-          },
-        }),
-      ].join('\n'),
-    )
-
-    const stat = statSync(sessionPath)
-    const sourceKey = testSourceFileKey('claude-code', sessionPath)
-    db.prepare(`
-      INSERT INTO usage_scan_state (
-        agent, source_file_key, source_file_basename, mtime_ms, size_bytes, last_scanned_at, last_row_key
-      )
-      VALUES ('claude-code', ?, ?, ?, ?, 1778840000, NULL)
-    `).run(sourceKey, basename(sessionPath), stat.mtimeMs, stat.size)
-    upsertUsageRecords(db, [
-      usageRecord({
-        agent: 'claude-code',
-        sourceFileKey: sourceKey,
-        sourceFileBasename: basename(sessionPath),
-        sourceRowKey: 'claude-session:message-synthetic:request-synthetic',
-        sessionId: 'claude-session',
-        turnId: null,
-        project: null,
-        ts: 1778839200,
-        model: '<synthetic>',
-        tokens: {
-          inputTokens: 0,
-          cachedInputTokens: 0,
-          cacheCreationInputTokens: 0,
-          outputTokens: 0,
-          reasoningOutputTokens: 0,
-          totalTokens: 0,
-        },
-      }),
-    ])
-
-    const first = await runUsageRefresh({
-      db,
-      homeDir,
-      env: { CLAUDE_CONFIG_DIR: claudeConfigDir },
-      refreshPricing: false,
-    })
-    const second = await runUsageRefresh({
-      db,
-      homeDir,
-      env: { CLAUDE_CONFIG_DIR: claudeConfigDir },
-      refreshPricing: false,
-    })
-    const rows = readUsageRows(db, {
-      periodDays: 7,
-      now: new Date('2026-05-15T12:00:00.000Z'),
-    })
-    const state = db
-      .prepare('SELECT last_row_key FROM usage_scan_state WHERE agent = ? AND source_file_key = ?')
-      .get('claude-code', sourceKey) as { last_row_key: string | null }
-
-    expect(first.recordsFound).toBe(1)
-    expect(second.recordsFound).toBe(0)
-    expect(rows).toHaveLength(1)
-    expect(rows[0]).toMatchObject({
-      agent: 'claude-code',
-      sessionId: 'claude-session',
-      project: 'real-project',
-      model: 'claude-sonnet-4-5',
-      attributionMethod: 'unmatched',
-      tokens: expect.objectContaining({ totalTokens: 165 }),
-    })
-    expect(state.last_row_key).toContain('claude-usage-v7:')
   })
 
   it('accepts CLAUDE_CONFIG_DIR values that already point at projects directories', async () => {
@@ -1049,17 +870,26 @@ describe('runUsageRefresh', () => {
     })
   })
 
-  it('refreshes LiteLLM pricing and falls back to cached or unavailable status on failure', async () => {
+  it('refreshes models.dev pricing and falls back to cached or unavailable status on failure', async () => {
     const successDb = createDb()
     initializeDesktopDbSchema(successDb)
     vi.stubGlobal('fetch', fetchMock)
     fetchMock.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
-        'gpt-5-codex': {
-          litellm_provider: 'openai',
-          input_cost_per_token: 0.000001,
-          output_cost_per_token: 0.00001,
+        providers: {
+          openai: {
+            id: 'openai',
+            models: {
+              'gpt-5-codex': {
+                id: 'gpt-5-codex',
+                cost: {
+                  input: 1,
+                  output: 10,
+                },
+              },
+            },
+          },
         },
       }),
     })
@@ -1072,7 +902,7 @@ describe('runUsageRefresh', () => {
     })
     const cachedDb = createDb()
     initializeDesktopDbSchema(cachedDb)
-    upsertUsagePricingCache(cachedDb, [pricingEntry()])
+    upsertUsagePricingCache(cachedDb, [pricingEntry({ fetchedAt: '2000-01-01T00:00:00.000Z' })])
     fetchMock.mockRejectedValueOnce(new Error('offline'))
     const cached = await runUsageRefresh({
       db: cachedDb,
@@ -1091,12 +921,77 @@ describe('runUsageRefresh', () => {
     })
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json',
+      'https://models.dev/api.json',
       expect.objectContaining({ headers: expect.any(Object) }),
     )
     expect(success.pricingStatus).toBe('fresh')
     expect(cached.pricingStatus).toBe('cached')
     expect(unavailable.pricingStatus).toBe('unavailable')
+  })
+
+  it('uses fresh cached models.dev pricing without network refresh', async () => {
+    const db = createDb()
+    initializeDesktopDbSchema(db)
+    vi.stubGlobal('fetch', fetchMock)
+    upsertUsagePricingCache(db, [pricingEntry({ fetchedAt: new Date().toISOString() })])
+
+    const result = await runUsageRefresh({
+      db,
+      homeDir: createTempDir(),
+      env: {},
+      refreshPricing: true,
+    })
+
+    expect(result.pricingStatus).toBe('fresh')
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('keeps stale pricing cache when a models.dev refresh returns a partial catalog', async () => {
+    const db = createDb()
+    initializeDesktopDbSchema(db)
+    vi.stubGlobal('fetch', fetchMock)
+    upsertUsagePricingCache(db, [
+      pricingEntry({ model: 'gpt-5-codex', fetchedAt: '2026-01-01T00:00:00.000Z' }),
+      pricingEntry({
+        model: 'claude-sonnet-4-5',
+        provider: 'anthropic',
+        inputUsdPerMillion: 3,
+        outputUsdPerMillion: 15,
+        fetchedAt: '2026-01-01T00:00:00.000Z',
+      }),
+    ])
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        providers: {
+          openai: {
+            id: 'openai',
+            models: {
+              'gpt-5-codex': {
+                id: 'gpt-5-codex',
+                cost: {
+                  input: 1,
+                  output: 10,
+                },
+              },
+            },
+          },
+        },
+      }),
+    })
+
+    const result = await runUsageRefresh({
+      db,
+      homeDir: createTempDir(),
+      env: {},
+      refreshPricing: true,
+    })
+
+    expect(result.pricingStatus).toBe('cached')
+    expect(readUsagePricingCache(db).map((entry) => `${entry.provider}/${entry.model}`)).toEqual([
+      'anthropic/claude-sonnet-4-5',
+      'openai/gpt-5-codex',
+    ])
   })
 })
 
@@ -1137,7 +1032,7 @@ describe('queryUsageSummary', () => {
 
     expect(summary.totals.totalTokens).toBe(285)
     expect(summary.totals.estimatedCostUsd).toBeGreaterThan(0)
-    expect(summary.totals.unknownCostTokens).toBe(0)
+    expect(summary.totals.unknownCostTokens).toBe(110)
     expect(summary.auditRows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ label: 'Cost unknown for this model' }),
