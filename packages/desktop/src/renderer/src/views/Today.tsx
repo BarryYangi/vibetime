@@ -1,5 +1,6 @@
 import NumberFlow, { NumberFlowGroup } from '@number-flow/react'
 import { getAgentColorHex } from '@vibetime/core'
+import { ActivityIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { PageShell } from '@/components/PageShell'
 import { getAgentTheme, StackedProgress } from '@/components/StackedProgress'
@@ -286,16 +287,29 @@ export default function Today() {
 
   if (projects.length === 0) {
     return (
-      <PageShell className="py-7 sm:py-8" fluid>
+      <PageShell
+        className="flex h-full min-h-[calc(100vh-2rem)] flex-col gap-8 py-7 sm:px-7 sm:py-8"
+        fluid
+      >
         <header className="space-y-1">
           <p className="text-[13px] text-muted-foreground leading-snug">{displayDate}</p>
           <h1 className="font-heading font-semibold text-2xl tracking-[-0.02em]">
             {t('today.title')}
           </h1>
         </header>
-        <p className="mt-5 text-[13px] text-muted-foreground leading-relaxed">
-          {t('today.noActivity')}
-        </p>
+        <div className="flex min-h-0 flex-1 items-center justify-center">
+          <div className="flex w-full max-w-xl flex-col items-center px-8 pb-20 text-center">
+            <div className="flex size-11 items-center justify-center rounded-full border border-border bg-muted/40 shadow-sm shadow-black/[0.02]">
+              <ActivityIcon aria-hidden className="size-5 text-muted-foreground" />
+            </div>
+            <h2 className="mt-5 font-heading text-3xl font-semibold leading-none text-foreground">
+              {t('today.noActivity')}
+            </h2>
+            <p className="mt-3 max-w-sm text-[13px] text-muted-foreground leading-relaxed">
+              {t('today.noActivityDescription')}
+            </p>
+          </div>
+        </div>
       </PageShell>
     )
   }
