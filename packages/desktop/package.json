@@ -1,7 +1,7 @@
 {
   "name": "@vibetime/desktop",
   "productName": "VibeTime",
-  "version": "2026.5.13",
+  "version": "2026.5.17",
   "private": true,
   "description": "Local-first macOS time tracker for AI coding agents.",
   "author": "Barry <barry@yct.ee>",
