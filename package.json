@@ -18,6 +18,11 @@
     "verify:core-zero-deps": "node -e \"const p=require('./packages/core/package.json');if(Object.keys(p.dependencies||{}).length){console.error('core must have empty dependencies');process.exit(1)}\"",
     "ci": "pnpm typecheck && pnpm lint && pnpm test && pnpm depcheck && pnpm verify:core-zero-deps"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
+  },
   "devDependencies": {
     "typescript": "^6.0.3",
     "@biomejs/biome": "^2.4.13",
