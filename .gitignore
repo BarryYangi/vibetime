@@ -1,12 +1,16 @@
 .DS_Store
 node_modules/
+.next/
 dist/
 packages/*/out/
 packages/*/release/
 packages/desktop/build/
 packages/hook/build/
+packages/hook/vibetime
+packages/hook/vibetime-hook
+packages/*/next-env.d.ts
 *.tsbuildinfo
 coverage/
 
-vibetime
-vibetime-hook
+/vibetime
+/vibetime-hook

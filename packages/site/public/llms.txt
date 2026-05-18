@@ -1,0 +1,23 @@
+# VibeTime
+
+VibeTime is a free, open-source, local-first desktop app for tracking AI coding sessions by project and agent.
+
+## Product
+
+- Website: https://vibetime.barry.ee
+- GitHub: https://github.com/BarryYangi/vibetime
+- Latest release: https://github.com/BarryYangi/vibetime/releases/latest
+- Creator: Barry, https://barry.ee
+- Platforms: macOS and Windows
+
+## Summary
+
+VibeTime tracks sessions, turns, and project activity across AI coding agents including Claude Code, Codex, Cursor, and Gemini CLI. It keeps data local, requires no account, uses no cloud sync or telemetry, and provides daily breakdowns, live activity, history trends, menu bar status, hook installation, CLI commands, diagnostics, and project detection.
+
+## Key Points
+
+- Local-first AI coding session tracking.
+- Built for developers who use coding agents across multiple projects.
+- Shows which agents worked on which projects, and for how long.
+- Shows live activity, daily totals, and longer-term trends.
+- Free and open source.
