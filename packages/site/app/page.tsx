@@ -24,7 +24,7 @@ const REPO_URL = 'https://github.com/BarryYangi/vibetime'
 const RELEASE_URL = `${REPO_URL}/releases/latest`
 
 export default function HomePage() {
-  const { getTextColorClass, isHydrated, shouldUseDarkText, getLinkColorClass } = useTheme()
+  const { getTextColorClass, shouldUseDarkText, getLinkColorClass } = useTheme()
 
   const [starCount, setStarCount] = useState<number | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -59,10 +59,6 @@ export default function HomePage() {
       return `${(count / 1000).toFixed(1).replace(/\.0$/, '')}k`
     }
     return count.toString()
-  }
-
-  if (!isHydrated) {
-    return <main className="min-h-screen"></main>
   }
 
   return (
