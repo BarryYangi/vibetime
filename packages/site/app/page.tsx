@@ -27,6 +27,7 @@ export default function HomePage() {
   const { getTextColorClass, shouldUseDarkText, getLinkColorClass } = useTheme()
 
   const [starCount, setStarCount] = useState<number | null>(null)
+  const [isVideoReady, setIsVideoReady] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
@@ -168,20 +169,35 @@ export default function HomePage() {
             />
             <div className="absolute inset-0 w-full h-full -z-10 bg-[linear-gradient(to_bottom,var(--theme-background)_0%,transparent_60%)]" />
             <div className="w-full max-w-[960px] mx-auto px-6 py-6 md:py-24 animate-fadeInNav opacity-0">
-              <video
-                ref={videoRef}
-                width={1620}
-                height={1080}
-                autoPlay
-                muted
-                loop
-                playsInline
-                preload="metadata"
-                poster="/images/vibetime/vibetime-demo-poster.png"
-                className="aspect-[3/2] h-auto w-full max-w-full rounded-2xl border border-neutral-950/5 object-cover shadow-2xl"
-              >
-                <source src="/images/vibetime/vibetime-demo.mp4" type="video/mp4" />
-              </video>
+              <div className="relative aspect-[3/2] w-full overflow-hidden rounded-2xl border border-neutral-950/5 shadow-2xl">
+                <Image
+                  src="/images/vibetime/vibetime-demo-poster.png"
+                  alt=""
+                  width={1620}
+                  height={1080}
+                  priority
+                  className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${
+                    isVideoReady ? 'opacity-0' : 'opacity-100'
+                  }`}
+                />
+                <video
+                  ref={videoRef}
+                  width={1620}
+                  height={1080}
+                  autoPlay
+                  muted
+                  loop
+                  playsInline
+                  preload="metadata"
+                  poster="/images/vibetime/vibetime-demo-poster.png"
+                  onLoadedData={() => setIsVideoReady(true)}
+                  className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${
+                    isVideoReady ? 'opacity-100' : 'opacity-0'
+                  }`}
+                >
+                  <source src="/images/vibetime/vibetime-demo.mp4" type="video/mp4" />
+                </video>
+              </div>
             </div>
           </div>
         </div>
