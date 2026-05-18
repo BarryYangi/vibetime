@@ -170,12 +170,15 @@ export default function HomePage() {
             <div className="w-full max-w-[960px] mx-auto px-6 py-6 md:py-24 animate-fadeInNav opacity-0">
               <video
                 ref={videoRef}
+                width={1620}
+                height={1080}
                 autoPlay
                 muted
                 loop
                 playsInline
+                preload="metadata"
                 poster="/images/vibetime/vibetime-demo-poster.png"
-                className="h-auto w-full max-w-full rounded-2xl border border-neutral-950/5 shadow-2xl"
+                className="aspect-[3/2] h-auto w-full max-w-full rounded-2xl border border-neutral-950/5 object-cover shadow-2xl"
               >
                 <source src="/images/vibetime/vibetime-demo.mp4" type="video/mp4" />
               </video>
