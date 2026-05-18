@@ -261,7 +261,6 @@ function CalendarHeatmap({
   const max = Math.max(1, ...values.map(([, total]) => Number(total)))
   const option = useMemo<EChartsCoreOption>(
     () => ({
-      stateAnimation: { duration: 0 },
       tooltip: {
         borderWidth: 0,
         confine: true,
@@ -482,7 +481,6 @@ function HourlyActivityHeatmap({
     const labels = axisLabelStyle(tokens)
     const dayLabels = weekdayLabels(locale)
     return {
-      stateAnimation: { duration: 0 },
       tooltip: {
         borderWidth: 0,
         confine: true,

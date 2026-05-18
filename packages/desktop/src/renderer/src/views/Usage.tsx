@@ -1,3 +1,4 @@
+import NumberFlow, { NumberFlowGroup } from '@number-flow/react'
 import type {
   UsageMetricPeriodComparison,
   UsageSummaryBreakdownRow,
@@ -65,6 +66,23 @@ const AGENT_FILTERS: Array<{ value: UsageAgentFilter; labelKey?: TranslationKey;
     { value: 'claude-code', label: 'Claude Code' },
     { value: 'codex', label: 'Codex' },
   ]
+
+const USD_NUMBER_FLOW_FORMAT = {
+  currency: 'USD',
+  maximumFractionDigits: 2,
+  minimumFractionDigits: 2,
+  style: 'currency',
+} as const satisfies Intl.NumberFormatOptions
+
+const COMPACT_NUMBER_FLOW_FORMAT = {
+  maximumFractionDigits: 1,
+  notation: 'compact',
+} as const satisfies Intl.NumberFormatOptions
+
+const PERCENT_NUMBER_FLOW_FORMAT = {
+  maximumFractionDigits: 0,
+  style: 'percent',
+} as const satisfies Intl.NumberFormatOptions
 
 function axisLabelStyle(tokens: ChartTokens) {
   return { color: tokens.axisLabel, fontFamily: 'SN Pro', fontSize: 11 }
@@ -184,6 +202,27 @@ function pricingStatusText(status: UsageSummary['pricingStatus'], t: TFunction):
     return t('usage.pricingCached')
   }
   return t('usage.pricingUnavailable')
+}
+
+function UsdNumberFlow({
+  locale,
+  unknownLabel,
+  value,
+}: {
+  locale: string
+  unknownLabel: string
+  value: number | null
+}) {
+  if (value === null) return unknownLabel
+  return <NumberFlow format={USD_NUMBER_FLOW_FORMAT} locales={locale} value={value} />
+}
+
+function CompactNumberFlow({ locale, value }: { locale: string; value: number }) {
+  return <NumberFlow format={COMPACT_NUMBER_FLOW_FORMAT} locales={locale} value={value} />
+}
+
+function PercentNumberFlow({ locale, value }: { locale: string; value: number }) {
+  return <NumberFlow format={PERCENT_NUMBER_FLOW_FORMAT} locales={locale} value={value} />
 }
 
 function usagePricingDetail(summary: UsageSummary, t: TFunction): string {
@@ -420,7 +459,6 @@ function CostTimeTrendChart({
     })
 
     return {
-      animation: false,
       color: [tokens.seriesPalette[0], tokens.seriesPalette[2]],
       dataset: {
         dimensions: ['date', 'cost', 'duration', 'hourlyCost', 'tokens', 'cache'],
@@ -534,7 +572,6 @@ function DailyTokenCompositionChart({
     ): EChartsCoreOption => {
       const labels = axisLabelStyle(tokens)
       return {
-        animation: false,
         color: rows.map(
           (row) => tokens.seriesPalette[row.colorIndex % tokens.seriesPalette.length],
         ),
@@ -687,7 +724,6 @@ function AgentContributionChart({
     }
 
     return {
-      animation: false,
       color: agents.map((_, index) => tokens.seriesPalette[index % tokens.seriesPalette.length]),
       legend: {
         top: 0,
@@ -904,7 +940,6 @@ function RankBarChart({
     const labels = axisLabelStyle(tokens)
     const metricName = metric === 'cost' ? t('usage.cost') : t('usage.tokens')
     return {
-      animation: false,
       color: [kind === 'project' ? tokens.seriesPalette[1] : tokens.seriesPalette[4]],
       dataset: {
         dimensions: ['name', 'cost', 'tokens', 'records', 'cache'],
@@ -1279,45 +1314,57 @@ export default function Usage() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-4 gap-2">
-            <StatTile
-              label={t('usage.estimatedCost')}
-              value={formatUsd(summary.totals.estimatedCostUsd, locale, t('usage.unknown'))}
-              detail={
-                formatEstimatedCostComparison(
-                  summary.periodCompare?.estimatedCostUsd,
-                  summary.periodDays,
-                  locale,
-                ) ?? usagePricingDetail(summary, t)
-              }
-            />
-            <StatTile
-              label={t('usage.totalTokens')}
-              value={formatTokens(summary.totals.totalTokens, locale)}
-              detail={`${summary.totals.recordCount} ${t('usage.usageRows')}`}
-            />
-            <StatTile
-              label={t('usage.cacheHitRate')}
-              value={formatPercent(cacheHitRate(summary.tokenBreakdown))}
-              detail={`${formatTokens(summary.tokenBreakdown.cachedInputTokens, locale)} ${t('usage.cachedTokens')}`}
-            />
-            <StatTile
-              label={t('usage.averageHourlyCost')}
-              value={formatNullableUsd(
-                summary.efficiency.totals.costPerHourUsd,
-                locale,
-                t('usage.unknown'),
-              )}
-              detail={
-                formatHourlyCostComparison(
-                  summary.periodCompare?.costPerHourUsd,
-                  summary.periodDays,
-                  locale,
-                  t,
-                ) ?? usagePricingDetail(summary, t)
-              }
-            />
-          </div>
+          <NumberFlowGroup>
+            <div className="grid grid-cols-4 gap-2">
+              <StatTile
+                label={t('usage.estimatedCost')}
+                value={
+                  <UsdNumberFlow
+                    locale={locale}
+                    unknownLabel={t('usage.unknown')}
+                    value={summary.totals.estimatedCostUsd}
+                  />
+                }
+                detail={
+                  formatEstimatedCostComparison(
+                    summary.periodCompare?.estimatedCostUsd,
+                    summary.periodDays,
+                    locale,
+                  ) ?? usagePricingDetail(summary, t)
+                }
+              />
+              <StatTile
+                label={t('usage.totalTokens')}
+                value={<CompactNumberFlow locale={locale} value={summary.totals.totalTokens} />}
+                detail={`${summary.totals.recordCount} ${t('usage.usageRows')}`}
+              />
+              <StatTile
+                label={t('usage.cacheHitRate')}
+                value={
+                  <PercentNumberFlow locale={locale} value={cacheHitRate(summary.tokenBreakdown)} />
+                }
+                detail={`${formatTokens(summary.tokenBreakdown.cachedInputTokens, locale)} ${t('usage.cachedTokens')}`}
+              />
+              <StatTile
+                label={t('usage.averageHourlyCost')}
+                value={
+                  <UsdNumberFlow
+                    locale={locale}
+                    unknownLabel={t('usage.unknown')}
+                    value={summary.efficiency.totals.costPerHourUsd}
+                  />
+                }
+                detail={
+                  formatHourlyCostComparison(
+                    summary.periodCompare?.costPerHourUsd,
+                    summary.periodDays,
+                    locale,
+                    t,
+                  ) ?? usagePricingDetail(summary, t)
+                }
+              />
+            </div>
+          </NumberFlowGroup>
 
           <UsageHighlights locale={locale} summary={summary} t={t} />
 

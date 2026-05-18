@@ -48,8 +48,14 @@ function flushChartUpdates(): void {
   }
 }
 
-function chartOptions(options: EChartsCoreOption): EChartsCoreOption {
-  return { ...options, animation: false }
+function chartOptions(options: EChartsCoreOption, animate: boolean): EChartsCoreOption {
+  if (!animate) return { ...options, animation: false }
+  return {
+    ...options,
+    animation: true,
+    animationDurationUpdate: 420,
+    animationEasingUpdate: 'cubicOut',
+  }
 }
 
 export function useChart(
@@ -75,7 +81,7 @@ export function useChart(
         resize = () => chart.resize()
         window.addEventListener('resize', resize)
         if (optionsRef.current) {
-          chart.setOption(chartOptions(optionsRef.current), true, true)
+          chart.setOption(chartOptions(optionsRef.current, false), true)
         }
       })
     })
@@ -95,7 +101,7 @@ export function useChart(
     if (!chart || !options) return
     return scheduleChartUpdate(() => {
       if (chartRef.current === chart) {
-        chart.setOption(chartOptions(options), true, true)
+        chart.setOption(chartOptions(options, true))
       }
     })
   }, [options])
